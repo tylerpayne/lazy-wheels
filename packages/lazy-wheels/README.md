@@ -16,6 +16,30 @@ Managing versions across multiple packages in a monorepo is painful. `lazy-wheel
 
 `lazy-wheels` always keeps your `main` branch one patch version ahead of the latest release (i.e. `main` represents _unreleased_ changes). This means HEAD is always releasable, version numbers are always increasing, and you never have to think about patch versions again. Change detection uses per-package git tags, so only packages with actual changes (or dependencies on changed packages) get rebuilt.
 
+### Triggering a Release
+
+**Option 1: GitHub CLI**
+
+```bash
+gh workflow run release.yml
+gh workflow run release.yml -f release=r1
+gh workflow run release.yml -f force_rebuild_all=true
+```
+
+**Option 2: lazy-wheels CLI**
+
+Just wraps the `gh` commands into a more compact CLI.
+
+```bash
+lazy-wheels release
+lazy-wheels release -r r1
+lazy-wheels release --force-all
+```
+
+**Option 3: GitHub.com**
+
+You can also manually launch the `release` workflow in the github.com UI.
+
 ### Workflow Inputs
 
 | Input | Description |
