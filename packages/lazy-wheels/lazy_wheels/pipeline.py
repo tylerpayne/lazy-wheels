@@ -527,6 +527,7 @@ def run_release(*, release: str | None = None, force_all: bool = False) -> None:
     commit_bumps(changed, bumped)
     publish_release(changed, unchanged, release)
     step("Pushing commits and tags.")
+    git("push")
     git("push", "--tags")
 
     print(f"\n{'=' * 60}\nDone!\n{'=' * 60}")
