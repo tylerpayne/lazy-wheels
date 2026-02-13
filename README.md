@@ -1,69 +1,61 @@
 # lazy-wheels
 
-Lazy monorepo wheel builder — only rebuilds what changed.
+CI release workflow for your multi-package uv monorepo that only rebuilds changed packages.
 
-Designed for [uv](https://github.com/astral-sh/uv) workspaces. Detects
-which packages changed since the last release, propagates through the
-dependency DAG, builds only what's needed, and creates a GitHub release
-with the full set of wheels.
+## Why lazy-wheels?
+
+Managing versions across multiple packages in a monorepo is painful. lazy-wheels makes it simple: **you own major.minor, CI owns patch**. When you're ready for a breaking change or new feature, bump the major or minor version yourself. For everything else, CI automatically increments patch versions after each release.
+
+Your `main` branch always stays one patch version ahead of the latest release. This means HEAD is always releasable, version numbers are always increasing, and you never have to think about patch versions again. Change detection uses per-package git tags, so only packages with actual changes (or dependencies on changed packages) get rebuilt.
+
+## Repository Structure
+
+This repo is itself a uv workspace monorepo with dummy packages for testing:
+
+```
+lazy-wheels/
+├── packages/
+│   ├── lazy-wheels/     # The actual CLI tool (published to PyPI)
+│   ├── pkg-alpha/       # Dummy: no dependencies
+│   ├── pkg-beta/        # Dummy: depends on alpha
+│   ├── pkg-delta/       # Dummy: depends on alpha (sibling of beta)
+│   └── pkg-gamma/       # Dummy: depends on beta
+└── pyproject.toml       # Workspace root
+```
+
+### Dependency Graph
+
+```mermaid
+flowchart BT
+    alpha[pkg-alpha]
+    beta[pkg-beta] --> alpha
+    delta[pkg-delta] --> alpha
+    gamma[pkg-gamma] --> beta
+```
+
+This structure tests:
+- **Leaf changes** — Changing `pkg-gamma` rebuilds only gamma
+- **Root changes** — Changing `pkg-alpha` cascades to alpha, beta, delta, gamma
+- **Sibling isolation** — Changing `pkg-delta` doesn't affect gamma (different branch)
+- **Middle changes** — Changing `pkg-beta` rebuilds beta and gamma
 
 ## Install
 
 ```bash
 pip install lazy-wheels
 # or
-uv tool install lazy-wheels
+uv add --group dev lazy-wheels
 ```
 
-## Quick start
+## Quick Start
 
 ```bash
 cd your-monorepo
 lazy-wheels init      # scaffolds .github/workflows/release.yml
 git add .github && git commit -m "add release workflow" && git push
-gh workflow run release.yml
+lazy-wheels release   # triggers the workflow
 ```
 
-## What it does
+## Documentation
 
-```
-discover packages  →  find last tag  →  diff + propagate DAG
-    →  fetch unchanged wheels from previous release
-    →  uv build changed packages
-    →  git tag (on the built commit)
-    →  bump patch versions + commit
-    →  gh release create (on the pre-bump tag)
-```
-
-## CLI
-
-```
-lazy-wheels init [--workflow-dir DIR]    Scaffold the GitHub Actions workflow
-lazy-wheels release [--force-all]       Run the release pipeline
-```
-
-## Versioning policy
-
-Humans own `major.minor` in each package's `pyproject.toml`. CI
-auto-increments `patch` after each release. Internal workspace
-dependencies are exact-pinned (`==x.y.z`).
-
-## Requirements
-
-- A uv workspace with `[tool.uv.workspace] members` in the root `pyproject.toml`
-- `uv` and `gh` (GitHub CLI) available on PATH (both are pre-installed on GitHub Actions runners)
-
-## Dependency graph
-
-The DAG is built from `[project].dependencies`,
-`[project.optional-dependencies]`, and `[dependency-groups]` (PEP 735).
-Extras on dependency specifiers (e.g. `my-utils[full]==1.0.0`) are
-preserved through version bumps.
-
-## How TOML rewriting works
-
-Uses [tomlkit](https://github.com/sdispater/tomlkit) for
-format-preserving edits — comments, ordering, and whitespace are
-untouched. Dependency specifiers are parsed with
-[packaging](https://packaging.pypa.io/), so extras, markers, and
-complex specifiers are handled correctly.
+See [packages/lazy-wheels/README.md](packages/lazy-wheels/README.md) for full documentation.
