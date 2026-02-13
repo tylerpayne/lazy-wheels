@@ -52,7 +52,7 @@ def init(workflow_dir: str) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "release.yml"
 
-    template = Path(__file__).parent / "templates" / "release.yml"
+    template = Path(__file__).parent / "release.yml"
     dest.write_text(template.read_text())
 
     click.echo(f"✓ Wrote workflow to {dest.relative_to(root)}")
@@ -61,11 +61,18 @@ def init(workflow_dir: str) -> None:
     click.echo("  1. Commit and push the workflow file")
     click.echo("  2. Trigger a release:")
     click.echo("       gh workflow run release.yml")
+    click.echo("       gh workflow run release.yml -f release=r1")
     click.echo("       gh workflow run release.yml -f force_rebuild_all=true")
 
 
 @cli.command()
+@click.option(
+    "--release",
+    "-r",
+    default=None,
+    help="Release tag (e.g., r1, r2). Auto-generates if not provided.",
+)
 @click.option("--force-all", is_flag=True, help="Rebuild all packages.")
-def release(force_all: bool) -> None:
+def release(release: str | None, force_all: bool) -> None:
     """Run the release pipeline (usually called from CI)."""
-    run_release(force_all=force_all)
+    run_release(release=release, force_all=force_all)

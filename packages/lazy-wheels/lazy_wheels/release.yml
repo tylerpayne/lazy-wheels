@@ -3,6 +3,10 @@ name: Release Wheels
 on:
   workflow_dispatch:
     inputs:
+      release:
+        description: "Release tag (e.g., r1, r2). Leave empty to auto-generate."
+        type: string
+        required: false
       force_rebuild_all:
         description: "Force rebuild all packages"
         type: boolean
@@ -34,4 +38,4 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: lazy-wheels release ${{ inputs.force_rebuild_all && '--force-all' || '' }}
+        run: lazy-wheels release ${{ inputs.release && format('--release {0}', inputs.release) || '' }} ${{ inputs.force_rebuild_all && '--force-all' || '' }}

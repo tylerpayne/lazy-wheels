@@ -2,6 +2,16 @@ version = 1
 revision = 3
 requires-python = ">=3.11"
 
+[manifest]
+members = [
+    "lazy-wheels",
+    "lazy-wheels-workspace",
+    "pkg-alpha",
+    "pkg-beta",
+    "pkg-delta",
+    "pkg-gamma",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -43,22 +53,14 @@ wheels = [
 
 [[package]]
 name = "lazy-wheels"
-version = "0.1.0"
-source = { editable = "." }
+version = "0.1.1"
+source = { editable = "packages/lazy-wheels" }
 dependencies = [
     { name = "click" },
     { name = "packaging" },
     { name = "pydantic" },
     { name = "semver" },
     { name = "tomlkit" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "poethepoet" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "ty" },
 ]
 
 [package.metadata]
@@ -70,8 +72,25 @@ requires-dist = [
     { name = "tomlkit", specifier = ">=0.12" },
 ]
 
+[[package]]
+name = "lazy-wheels-workspace"
+version = "0.0.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "lazy-wheels" },
+    { name = "poethepoet" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+
 [package.metadata.requires-dev]
 dev = [
+    { name = "lazy-wheels", editable = "packages/lazy-wheels" },
     { name = "poethepoet", specifier = ">=0.32" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.9" },
@@ -95,6 +114,44 @@ sdist = { url = "https://files.pythonhosted.org/packages/76/f1/4594f5e0fcddb6953
 wheels = [
     { url = "https://files.pythonhosted.org/packages/aa/18/a8444036c6dd65ba3624c63b734d3ba95ba63ace513078e1580590075d21/pastel-0.2.1-py2.py3-none-any.whl", hash = "sha256:4349225fcdf6c2bb34d483e523475de5bb04a5c10ef711263452cb37d7dd4364", size = 5955, upload-time = "2020-09-16T19:21:11.409Z" },
 ]
+
+[[package]]
+name = "pkg-alpha"
+version = "0.1.0"
+source = { editable = "packages/pkg-alpha" }
+
+[[package]]
+name = "pkg-beta"
+version = "0.1.0"
+source = { editable = "packages/pkg-beta" }
+dependencies = [
+    { name = "pkg-alpha" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
+
+[[package]]
+name = "pkg-delta"
+version = "0.1.0"
+source = { editable = "packages/pkg-delta" }
+dependencies = [
+    { name = "pkg-alpha" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
+
+[[package]]
+name = "pkg-gamma"
+version = "0.1.0"
+source = { editable = "packages/pkg-gamma" }
+dependencies = [
+    { name = "pkg-beta" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pkg-beta", editable = "packages/pkg-beta" }]
 
 [[package]]
 name = "pluggy"

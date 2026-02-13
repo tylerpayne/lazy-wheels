@@ -1,27 +1,23 @@
 [project]
-name = "lazy-wheels"
-version = "0.1.0"
-description = "Lazy monorepo wheel builder — only rebuilds what changed."
-readme = "README.md"
+name = "lazy-wheels-workspace"
+version = "0.0.0"
+description = "Lazy wheels monorepo workspace"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = [
-    "click>=8.0",
-    "packaging>=23.0",
-    "pydantic>=2.0",
-    "semver>=3.0",
-    "tomlkit>=0.12",
-]
 
-[project.scripts]
-lazy-wheels = "lazy_wheels.cli:cli"
+[tool.uv.workspace]
+members = ["packages/*"]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv.sources]
+pkg-alpha = { workspace = true }
+pkg-beta = { workspace = true }
+pkg-gamma = { workspace = true }
+pkg-delta = { workspace = true }
+lazy-wheels = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "lazy-wheels",
     "ruff>=0.9",
     "ty>=0.0.1a6",
     "poethepoet>=0.32",
@@ -32,12 +28,8 @@ dev = [
 format = "ruff format ."
 lint = "ruff check ."
 lintfix = "ruff check --fix ."
-typecheck = "ty check ."
+typecheck = "ty check packages/lazy-wheels"
 check = ["lint", "typecheck"]
 fix = ["lintfix", "format"]
-test = "pytest tests/ -v"
+test = "pytest packages/lazy-wheels/tests/ -v"
 all = ["fix", "check", "test"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["lazy_wheels"]
-include = ["lazy_wheels/release.yml"]

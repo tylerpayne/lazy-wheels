@@ -25,6 +25,21 @@ def git(*args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
+def gh(*args: str, check: bool = True) -> str:
+    """Run a GitHub CLI command and return stdout.
+
+    Args:
+        *args: Arguments to pass to gh (e.g., "release", "list").
+        check: If True (default), raise on non-zero exit. Set to False
+               for commands that may legitimately fail.
+
+    Returns:
+        Stripped stdout from the gh command.
+    """
+    result = subprocess.run(["gh", *args], capture_output=True, text=True, check=check)
+    return result.stdout.strip()
+
+
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
     """Run an arbitrary shell command.
 
