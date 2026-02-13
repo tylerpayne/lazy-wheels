@@ -4,9 +4,9 @@ CI release workflow for your multi-package uv monorepo that only rebuilds change
 
 ## Why lazy-wheels?
 
-Managing versions across multiple packages in a monorepo is painful. lazy-wheels makes it simple: **you own major.minor, CI owns patch**. When you're ready for a breaking change or new feature, bump the major or minor version yourself. For everything else, CI automatically increments patch versions after each release.
+Managing versions across multiple packages in a monorepo is painful. `lazy-wheels` makes it simple: **you own major.minor, CI owns patch**. When you're ready for a breaking change or new feature in any package, bump the major or minor version yourself (e.g. `uv version --project packages/your-project --bump minor`). For everything else, CI automatically increments patch versions after each release.
 
-Your `main` branch always stays one patch version ahead of the latest release. This means HEAD is always releasable, version numbers are always increasing, and you never have to think about patch versions again. Change detection uses per-package git tags, so only packages with actual changes (or dependencies on changed packages) get rebuilt.
+`lazy-wheels` always keeps your `main` branch one patch version ahead of the latest release (i.e. `main` represents _unreleased_ changes). This means HEAD is always releasable, version numbers are always increasing, and you never have to think about patch versions again. Change detection uses per-package git tags, so only packages with actual changes (or dependencies on changed packages) get rebuilt.
 
 ## Installation
 
@@ -18,6 +18,12 @@ Or with uv:
 
 ```bash
 uv add --group dev lazy-wheels
+```
+
+Or scaffold just once with uvx:
+
+```bash
+uvx lazy-wheels init
 ```
 
 ## Usage
@@ -38,7 +44,7 @@ This creates `.github/workflows/release.yml` configured for your uv workspace.
 
 ### Triggering a Release
 
-**Option 1: GitHub CLI (direct)**
+**Option 1: GitHub CLI**
 
 ```bash
 gh workflow run release.yml
@@ -46,7 +52,9 @@ gh workflow run release.yml -f release=r1
 gh workflow run release.yml -f force_rebuild_all=true
 ```
 
-**Option 2: lazy-wheels CLI (shorthand)**
+**Option 2: lazy-wheels CLI**
+
+Just wraps the `gh` commands into a more compact CLI.
 
 ```bash
 lazy-wheels release
@@ -54,7 +62,9 @@ lazy-wheels release -r r1
 lazy-wheels release --force-all
 ```
 
-Both methods trigger the same GitHub Actions workflow.
+**Option 3: GitHub.com**
+
+You can also manually launch the `release` workflow in the github.com UI.
 
 ### Workflow Inputs
 
@@ -74,14 +84,3 @@ Both methods trigger the same GitHub Actions workflow.
 7. **Bump versions** — Increments patch version in each built package's `pyproject.toml`
 8. **Publish** — Creates a GitHub Release with all wheels (changed + unchanged)
 9. **Push** — Commits version bumps and pushes tags
-
-### Version Flow
-
-```mermaid
-flowchart LR
-    A["HEAD: my-pkg 1.2.3"] -->|release| B["tag: my-pkg/v1.2.3"]
-    B --> C["build wheel"]
-    C --> D["bump to 1.2.4"]
-    D --> E["HEAD: my-pkg 1.2.4"]
-    E -->|"next release (if changed)"| F["tag: my-pkg/v1.2.4"]
-```
