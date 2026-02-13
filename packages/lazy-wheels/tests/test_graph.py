@@ -65,3 +65,17 @@ class TestTopoSort:
         }
         with pytest.raises(RuntimeError, match="cycle"):
             topo_sort(packages)
+
+    def test_external_deps_ignored(self) -> None:
+        """Dependencies outside the packages dict are ignored.
+
+        This happens when sorting only changed packages - they may depend on
+        unchanged packages that aren't in the dict.
+        """
+        packages = {
+            "a": PackageInfo(path="a", version="1.0.0", deps=["external"]),
+            "b": PackageInfo(path="b", version="1.0.0", deps=["a"]),
+        }
+        # Should not raise KeyError for "external"
+        result = topo_sort(packages)
+        assert result.index("a") < result.index("b")

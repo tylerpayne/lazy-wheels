@@ -37,8 +37,11 @@ def topo_sort(packages: dict[str, PackageInfo]) -> list[str]:
 
     for name, info in packages.items():
         for dep in info.deps:
-            in_degree[name] += 1
-            reverse_deps[dep].append(name)
+            # Only count dependencies that are within the packages we're sorting
+            # (external deps or unchanged packages are already built)
+            if dep in packages:
+                in_degree[name] += 1
+                reverse_deps[dep].append(name)
 
     # Start with packages that have no dependencies (in_degree == 0)
     # Sort alphabetically for deterministic ordering
