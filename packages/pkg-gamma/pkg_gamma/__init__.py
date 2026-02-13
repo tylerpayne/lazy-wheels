@@ -2,7 +2,7 @@
 
 from pkg_beta import greet as beta_greet
 
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 
 
 def greet() -> str:
