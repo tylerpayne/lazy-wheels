@@ -1,0 +1,173 @@
+name: Release Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Release tag (e.g., r1, r2). Leave empty to auto-generate."
+        type: string
+        required: false
+      force_rebuild_all:
+        description: "Force rebuild all packages"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+      unchanged: ${{ steps.plan.outputs.unchanged }}
+      last_tags: ${{ steps.plan.outputs.last_tags }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install lazy-wheels --break-system-packages
+      - name: Plan release
+        id: plan
+        env:
+          INPUT_RELEASE: ${{ inputs.release }}
+          FORCE_ALL: ${{ inputs.force_rebuild_all }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from lazy_wheels.pipeline import detect_changes, discover_packages, find_last_tags, find_next_release_tag
+
+          release = os.environ.get("INPUT_RELEASE") or find_next_release_tag()
+          force_all = os.environ.get("FORCE_ALL", "").lower() == "true"
+          packages = discover_packages()
+          last_tags = find_last_tags(packages)
+          changed = sorted(detect_changes(packages, last_tags, force_all))
+          if not changed:
+            raise SystemExit("Nothing changed since last release.")
+          unchanged = sorted([name for name in packages if name not in changed])
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+            fh.write(f"changed={json.dumps(changed)}\n")
+            fh.write(f"unchanged={json.dumps(unchanged)}\n")
+            fh.write(f"last_tags={json.dumps(last_tags)}\n")
+            fh.write(f"release={release}\n")
+          PY
+
+  build:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+__MATRIX_INCLUDE__
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install lazy-wheels --break-system-packages
+      - name: Build package
+        env:
+          CHANGED: ${{ needs.discover.outputs.changed }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from lazy_wheels.pipeline import build_packages, discover_packages
+
+          package = os.environ["PACKAGE"]
+          changed = set(json.loads(os.environ["CHANGED"]))
+          if package not in changed:
+            raise SystemExit(0)
+          packages = discover_packages()
+          build_packages({package: packages[package]})
+          PY
+      - name: Upload built wheels
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.package }}-${{ matrix.runner }}
+          path: dist/*.whl
+          if-no-files-found: ignore
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [discover, build]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install lazy-wheels --break-system-packages
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Fetch unchanged wheels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UNCHANGED: ${{ needs.discover.outputs.unchanged }}
+          LAST_TAGS: ${{ needs.discover.outputs.last_tags }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from lazy_wheels.pipeline import discover_packages, fetch_unchanged_wheels
+
+          packages = discover_packages()
+          unchanged_names = json.loads(os.environ["UNCHANGED"])
+          last_tags = json.loads(os.environ["LAST_TAGS"])
+          unchanged = {name: packages[name] for name in unchanged_names}
+          fetch_unchanged_wheels(unchanged, last_tags)
+          PY
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGED: ${{ needs.discover.outputs.changed }}
+          UNCHANGED: ${{ needs.discover.outputs.unchanged }}
+          RELEASE_TAG: ${{ needs.discover.outputs.release }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from lazy_wheels.pipeline import (
+              bump_versions,
+              commit_bumps,
+              discover_packages,
+              publish_release,
+              tag_changed_packages,
+          )
+
+          packages = discover_packages()
+          changed_names = json.loads(os.environ["CHANGED"])
+          unchanged_names = json.loads(os.environ["UNCHANGED"])
+          changed = {name: packages[name] for name in changed_names}
+          unchanged = {name: packages[name] for name in unchanged_names}
+          tag_changed_packages(changed)
+          bumped = bump_versions(changed, unchanged)
+          commit_bumps(changed, bumped)
+          publish_release(changed, unchanged, os.environ["RELEASE_TAG"])
+          PY
+      - name: Push commits and tags
+        run: |
+          git push
+          git push --tags

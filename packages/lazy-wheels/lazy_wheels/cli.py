@@ -6,7 +6,16 @@ from pathlib import Path
 
 import click
 
-from lazy_wheels.pipeline import run_release
+from lazy_wheels.pipeline import discover_packages, run_release
+
+
+def _matrix_include_lines(package_runners: dict[str, list[str]]) -> str:
+    lines: list[str] = []
+    for package, runners in package_runners.items():
+        for runner in runners:
+            lines.append(f'          - package: "{package}"')
+            lines.append(f'            runner: "{runner}"')
+    return "\n".join(lines)
 
 
 @click.group()
@@ -23,7 +32,12 @@ def cli() -> None:
     show_default=True,
     help="Directory to write the workflow file.",
 )
-def init(workflow_dir: str) -> None:
+@click.option(
+    "--matrix-builder",
+    is_flag=True,
+    help="Interactively build a multi-job workflow with per-package runners.",
+)
+def init(workflow_dir: str, matrix_builder: bool) -> None:
     """Scaffold the GitHub Actions workflow into your repo."""
     root = Path.cwd()
 
@@ -52,8 +66,25 @@ def init(workflow_dir: str) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "release.yml"
 
-    template = Path(__file__).parent / "release.yml"
-    dest.write_text(template.read_text())
+    if matrix_builder:
+        package_runners: dict[str, list[str]] = {}
+        click.echo("Configure build runners for each package:")
+        for package in sorted(discover_packages()):
+            runners = click.prompt(
+                f"  {package} runners (comma-separated)",
+                default="ubuntu-latest",
+                show_default=True,
+            )
+            package_runners[package] = [r.strip() for r in runners.split(",") if r.strip()]
+
+        template = Path(__file__).parent / "release-matrix.yml"
+        rendered = template.read_text().replace(
+            "__MATRIX_INCLUDE__", _matrix_include_lines(package_runners)
+        )
+        dest.write_text(rendered)
+    else:
+        template = Path(__file__).parent / "release.yml"
+        dest.write_text(template.read_text())
 
     click.echo(f"✓ Wrote workflow to {dest.relative_to(root)}")
     click.echo()

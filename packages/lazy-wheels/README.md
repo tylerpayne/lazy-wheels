@@ -38,6 +38,15 @@ lazy-wheels init
 
 This creates `.github/workflows/release.yml` configured for your uv workspace.
 
+For mixed-architecture builds, use the interactive matrix builder:
+
+```bash
+lazy-wheels init --matrix-builder
+```
+
+This discovers workspace packages, prompts for per-package runner(s), and writes a
+multi-job workflow that passes release state between jobs via outputs.
+
 **Requirements:**
 - A git repository
 - A `pyproject.toml` with `[tool.uv.workspace]` members defined
