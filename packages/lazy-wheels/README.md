@@ -1,6 +1,6 @@
 # lazy-wheels
 
-CI release workflow that only rebuilds changed packages in your multi-package uv monorepo.
+CI release workflow for your multi-package uv monorepo that only rebuilds changed packages.
 
 ## Why lazy-wheels?
 
@@ -17,7 +17,7 @@ pip install lazy-wheels
 Or with uv:
 
 ```bash
-uv add lazy-wheels
+uv add --group dev lazy-wheels
 ```
 
 ## Usage
@@ -75,14 +75,13 @@ Both methods trigger the same GitHub Actions workflow.
 8. **Publish** — Creates a GitHub Release with all wheels (changed + unchanged)
 9. **Push** — Commits version bumps and pushes tags
 
-### Version Flow Example
+### Version Flow
 
-```
-Before release:  my-pkg 1.2.3  (in pyproject.toml)
-                      ↓
-     Release r5:  my-pkg/v1.2.3 tag created, wheel built
-                      ↓
- After release:  my-pkg 1.2.4  (bumped, committed, pushed)
-                      ↓
-   Next release:  my-pkg/v1.2.4 tag created (if changed)
+```mermaid
+flowchart LR
+    A["HEAD: my-pkg 1.2.3"] -->|release| B["tag: my-pkg/v1.2.3"]
+    B --> C["build wheel"]
+    C --> D["bump to 1.2.4"]
+    D --> E["HEAD: my-pkg 1.2.4"]
+    E -->|"next release (if changed)"| F["tag: my-pkg/v1.2.4"]
 ```
