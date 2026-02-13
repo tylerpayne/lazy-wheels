@@ -39,23 +39,6 @@ This structure tests:
 - **Sibling isolation** — Changing `pkg-delta` doesn't affect gamma (different branch)
 - **Middle changes** — Changing `pkg-beta` rebuilds beta and gamma
 
-## Install
-
-```bash
-pip install lazy-wheels
-# or
-uv add --group dev lazy-wheels
-```
-
-## Quick Start
-
-```bash
-cd your-monorepo
-lazy-wheels init      # scaffolds .github/workflows/release.yml
-git add .github && git commit -m "add release workflow" && git push
-lazy-wheels release   # triggers the workflow
-```
-
 ## Documentation
 
-See [packages/lazy-wheels/README.md](packages/lazy-wheels/README.md) for full documentation.
+See [packages/lazy-wheels/README.md](packages/lazy-wheels/README.md) for documentation.
