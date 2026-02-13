@@ -119,6 +119,43 @@ def find_last_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
     return last_tags
 
 
+def _is_only_version_bump(tag: str, pyproject_path: str) -> bool:
+    """Check if pyproject.toml changes are only version/dep version bumps.
+
+    Returns True if the diff only contains changes to version fields,
+    which are mechanical changes from the release process, not real code changes.
+    """
+    diff = git("diff", tag, "HEAD", "--", pyproject_path, check=False)
+    if not diff:
+        return True  # No changes
+
+    # Check each changed line - if any line is not a version change, return False
+    for line in diff.splitlines():
+        # Skip diff metadata lines
+        if line.startswith(("diff ", "index ", "--- ", "+++ ", "@@ ")):
+            continue
+        # Skip context lines (no + or -)
+        if not line.startswith(("+", "-")):
+            continue
+        # Skip empty add/remove lines
+        if line in ("+", "-"):
+            continue
+
+        content = line[1:].strip()  # Remove +/- prefix and whitespace
+
+        # Allow version field changes
+        if content.startswith("version = "):
+            continue
+        # Allow dependency version pin changes (e.g., "pkg-alpha==0.1.1",)
+        if "==" in content and (content.endswith('",') or content.endswith('"')):
+            continue
+
+        # Any other change means this is a real change
+        return False
+
+    return True
+
+
 def detect_changes(
     packages: dict[str, PackageInfo],
     last_tags: Mapping[str, str | None],
@@ -130,6 +167,7 @@ def detect_changes(
     1. force_all is True (rebuild everything)
     2. No previous tag exists for the package (first release)
     3. Any file in the package directory changed since its last tag
+       (excluding version-only bumps in pyproject.toml)
     4. Root pyproject.toml or uv.lock changed since its last tag
     5. Any of its dependencies are dirty (transitive dirtiness)
 
@@ -162,11 +200,25 @@ def detect_changes(
                 git("diff", "--name-only", last_tag, "HEAD").splitlines()
             )
 
-            # Check if package directory changed
+            # Filter to files in this package's directory
             prefix = info.path.rstrip("/") + "/"
-            if any(f.startswith(prefix) for f in changed_files):
-                dirty.add(name)
-                print(f"  {name}: changed since {last_tag}")
+            pkg_changed_files = {f for f in changed_files if f.startswith(prefix)}
+
+            if pkg_changed_files:
+                # Check if it's only version bumps in pyproject.toml
+                pyproject_path = f"{info.path}/pyproject.toml"
+                non_pyproject_changes = pkg_changed_files - {pyproject_path}
+
+                if non_pyproject_changes:
+                    # Real code changes (not just pyproject.toml)
+                    dirty.add(name)
+                    print(f"  {name}: changed since {last_tag}")
+                elif not _is_only_version_bump(last_tag, pyproject_path):
+                    # pyproject.toml changed with more than just version bump
+                    dirty.add(name)
+                    print(f"  {name}: changed since {last_tag}")
+                # else: only version bump, skip
+
             # Root config changes affect this package
             elif changed_files & {"pyproject.toml", "uv.lock"}:
                 dirty.add(name)
