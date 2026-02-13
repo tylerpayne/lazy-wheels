@@ -28,7 +28,7 @@ jobs:
       - name: Set up
         run: |
           uv python install 3.12
-          pip install lazy-wheels --break-system-packages
+          uv sync
 
       - name: Configure git
         run: |
