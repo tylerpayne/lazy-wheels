@@ -11,3 +11,8 @@ def greet() -> str:
 def alpha_feature() -> str:
     """A new feature in alpha."""
     return "New alpha feature!"
+
+
+def test2_alpha_change() -> str:
+    """Test 2: change alpha root node."""
+    return "alpha changed - should cascade to all"
