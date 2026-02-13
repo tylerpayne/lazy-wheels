@@ -515,6 +515,10 @@ def commit_bumps(
     if not staged:
         fatal("No changes to commit")
 
+    # Need to commit new uv.lock too
+    run("uv", "sync", "--all-groups", "--all-extras")
+    git("add", "uv.lock")
+
     # Create commit with summary of version bumps
     summary = "\n".join(f"  {n}: {b.old} → {b.new}" for n, b in bumped.items())
     git("commit", "-m", "chore: prepare next release", "-m", summary)
