@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
+import pytest
 
 from lazy_wheels.cli import cli
 
@@ -26,7 +27,7 @@ class TestInit:
     """Tests for init command."""
 
     def test_writes_default_release_workflow(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """init writes the default workflow template."""
         _write_workspace_repo(tmp_path, [])
@@ -41,7 +42,7 @@ class TestInit:
         assert "jobs:\n  release:" in workflow.read_text()
 
     def test_matrix_builder_writes_split_jobs_workflow(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """init --matrix-builder creates matrix workflow with selected runners."""
         _write_workspace_repo(tmp_path, ["pkg-alpha", "pkg-beta"])

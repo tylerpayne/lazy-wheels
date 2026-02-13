@@ -8,6 +8,8 @@ import click
 
 from lazy_wheels.pipeline import discover_packages, run_release
 
+DEFAULT_RUNNER = "ubuntu-latest"
+
 
 def _matrix_include_lines(package_runners: dict[str, list[str]]) -> str:
     lines: list[str] = []
@@ -72,10 +74,11 @@ def init(workflow_dir: str, matrix_builder: bool) -> None:
         for package in sorted(discover_packages()):
             runners = click.prompt(
                 f"  {package} runners (comma-separated)",
-                default="ubuntu-latest",
+                default=DEFAULT_RUNNER,
                 show_default=True,
             )
-            package_runners[package] = [r.strip() for r in runners.split(",") if r.strip()]
+            selected_runners = [r.strip() for r in runners.split(",") if r.strip()]
+            package_runners[package] = selected_runners or [DEFAULT_RUNNER]
 
         template = Path(__file__).parent / "release-matrix.yml"
         rendered = template.read_text().replace(
