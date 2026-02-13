@@ -326,11 +326,18 @@ def check_for_existing_wheels(changed: dict[str, PackageInfo]) -> None:
     print("  No duplicates found")
 
 
-def fetch_unchanged_wheels(unchanged: dict[str, PackageInfo]) -> None:
+def fetch_unchanged_wheels(
+    unchanged: dict[str, PackageInfo],
+    last_tags: Mapping[str, str | None],
+) -> None:
     """Download wheels for unchanged packages from GitHub releases.
 
     This avoids rebuilding packages that haven't changed - we just reuse
     the previously-built wheels. Searches all releases to find matching wheels.
+
+    Args:
+        unchanged: Map of unchanged package names to PackageInfo.
+        last_tags: Map of package name to last release tag (to get released version).
     """
     if not unchanged:
         return
@@ -339,10 +346,20 @@ def fetch_unchanged_wheels(unchanged: dict[str, PackageInfo]) -> None:
 
     # Build map of expected wheel prefix → package name
     # Wheel filenames use underscores, not hyphens
+    # Use the VERSION FROM THE TAG, not the current (bumped) version
     expected: dict[str, str] = {}
-    for name, info in unchanged.items():
+    for name in unchanged:
+        tag = last_tags.get(name)
+        if not tag:
+            print(f"  Warning: no tag found for {name}")
+            continue
+        # Extract version from tag: "pkg-name/v1.2.3" → "1.2.3"
+        released_version = tag.split("/v")[-1] if "/v" in tag else None
+        if not released_version:
+            print(f"  Warning: could not parse version from tag {tag}")
+            continue
         wheel_name = canonicalize_name(name).replace("-", "_")
-        wheel_prefix = f"{wheel_name}-{info.version}-"
+        wheel_prefix = f"{wheel_name}-{released_version}-"
         expected[wheel_prefix] = name
 
     # Get list of releases
@@ -570,7 +587,7 @@ def run_release(*, release: str | None = None, force_all: bool = False) -> None:
     check_for_existing_wheels(changed)
 
     # Phase 2: Build
-    fetch_unchanged_wheels(unchanged)
+    fetch_unchanged_wheels(unchanged, last_tags)
     build_packages(changed)
 
     # Phase 3: Release
