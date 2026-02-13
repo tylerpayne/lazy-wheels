@@ -13,3 +13,8 @@ def greet() -> str:
 def gamma_only() -> str:
     """A gamma-specific function."""
     return "This is gamma-only functionality"
+
+
+def test1_gamma_change() -> str:
+    """Test 1: change gamma leaf node."""
+    return "gamma changed"
