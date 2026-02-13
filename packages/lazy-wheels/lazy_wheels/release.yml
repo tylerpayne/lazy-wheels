@@ -38,4 +38,4 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: lazy-wheels release ${{ inputs.release && format('--release {0}', inputs.release) || '' }} ${{ inputs.force_rebuild_all && '--force-all' || '' }}
+        run: lazy-wheels run ${{ inputs.release && format('--release {0}', inputs.release) || '' }} ${{ inputs.force_rebuild_all && '--force-all' || '' }}

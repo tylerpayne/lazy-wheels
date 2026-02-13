@@ -60,9 +60,9 @@ def init(workflow_dir: str) -> None:
     click.echo("Next steps:")
     click.echo("  1. Commit and push the workflow file")
     click.echo("  2. Trigger a release:")
-    click.echo("       gh workflow run release.yml")
-    click.echo("       gh workflow run release.yml -f release=r1")
-    click.echo("       gh workflow run release.yml -f force_rebuild_all=true")
+    click.echo("       lazy-wheels release")
+    click.echo("       lazy-wheels release -r r1")
+    click.echo("       lazy-wheels release --force-all")
 
 
 @cli.command()
@@ -73,6 +73,30 @@ def init(workflow_dir: str) -> None:
     help="Release tag (e.g., r1, r2). Auto-generates if not provided.",
 )
 @click.option("--force-all", is_flag=True, help="Rebuild all packages.")
-def release(release: str | None, force_all: bool) -> None:
-    """Run the release pipeline (usually called from CI)."""
+def run(release: str | None, force_all: bool) -> None:
+    """Run the release pipeline locally (usually called from CI)."""
     run_release(release=release, force_all=force_all)
+
+
+@cli.command()
+@click.option(
+    "--release",
+    "-r",
+    default=None,
+    help="Release tag (e.g., r1, r2). Auto-generates if not provided.",
+)
+@click.option("--force-all", is_flag=True, help="Force rebuild all packages.")
+def release(release: str | None, force_all: bool) -> None:
+    """Trigger a release via GitHub Actions workflow."""
+    import subprocess
+
+    cmd = ["gh", "workflow", "run", "release.yml"]
+    if release:
+        cmd.extend(["-f", f"release={release}"])
+    if force_all:
+        cmd.extend(["-f", "force_rebuild_all=true"])
+
+    click.echo(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        raise click.ClickException("Failed to trigger workflow")
