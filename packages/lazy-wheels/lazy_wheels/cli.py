@@ -88,7 +88,9 @@ def run(release: str | None, force_all: bool) -> None:
 @click.option("--force-all", is_flag=True, help="Force rebuild all packages.")
 def release(release: str | None, force_all: bool) -> None:
     """Trigger a release via GitHub Actions workflow."""
+    import json
     import subprocess
+    import time
 
     cmd = ["gh", "workflow", "run", "release.yml"]
     if release:
@@ -96,7 +98,27 @@ def release(release: str | None, force_all: bool) -> None:
     if force_all:
         cmd.extend(["-f", "force_rebuild_all=true"])
 
-    click.echo(f"Running: {' '.join(cmd)}")
+    click.echo(f"Triggering: {' '.join(cmd)}")
     result = subprocess.run(cmd)
     if result.returncode != 0:
         raise click.ClickException("Failed to trigger workflow")
+
+    # Wait for the run to be created and fetch its URL
+    click.echo("Waiting for workflow run...")
+    time.sleep(2)
+
+    result = subprocess.run(
+        ["gh", "run", "list", "--workflow=release.yml", "--limit=1", "--json=url,status"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout:
+        try:
+            runs = json.loads(result.stdout)
+            if runs:
+                url = runs[0].get("url", "")
+                status = runs[0].get("status", "")
+                click.echo(f"Status: {status}")
+                click.echo(f"Watch:  {url}")
+        except json.JSONDecodeError:
+            pass
