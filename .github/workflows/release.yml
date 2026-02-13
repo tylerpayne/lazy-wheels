@@ -1,0 +1,41 @@
+name: Release Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Release tag (e.g., r1, r2). Leave empty to auto-generate."
+        type: string
+        required: false
+      force_rebuild_all:
+        description: "Force rebuild all packages"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install lazy-wheels --break-system-packages
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: lazy-wheels release ${{ inputs.release && format('--release {0}', inputs.release) || '' }} ${{ inputs.force_rebuild_all && '--force-all' || '' }}
