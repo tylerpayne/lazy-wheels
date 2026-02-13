@@ -1,0 +1,42 @@
+[project]
+name = "lazy-wheels"
+version = "0.1.0"
+description = "Lazy monorepo wheel builder — only rebuilds what changed."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "click>=8.0",
+    "packaging>=23.0",
+    "pydantic>=2.0",
+    "semver>=3.0",
+    "tomlkit>=0.12",
+]
+
+[project.scripts]
+lazy-wheels = "lazy_wheels.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "ty>=0.0.1a6",
+    "poethepoet>=0.32",
+    "pytest>=8.0",
+]
+
+[tool.poe.tasks]
+format = "ruff format ."
+lint = "ruff check ."
+lintfix = "ruff check --fix ."
+check = "ty check ."
+fix = ["lintfix", "format"]
+test = "pytest tests/ -v"
+all = ["fix", "check", "test"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["lazy_wheels"]
+include = ["lazy_wheels/release.yml"]
