@@ -24,8 +24,20 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Build lazy-wheels
-        run: uv build packages/lazy-wheels --out-dir dist/
+      - name: Build lazy-wheels only
+        run: |
+          # Only build the lazy-wheels package, NOT the dummy test packages
+          uv build packages/lazy-wheels --out-dir dist/
+
+      - name: Verify only lazy-wheels is being published
+        run: |
+          echo "Wheels to publish:"
+          ls -la dist/
+          # Fail if any non-lazy-wheels packages are present
+          if ls dist/*.whl | grep -v "lazy_wheels"; then
+            echo "ERROR: Found non-lazy-wheels packages in dist/"
+            exit 1
+          fi
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
