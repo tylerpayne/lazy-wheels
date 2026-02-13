@@ -429,8 +429,9 @@ class TestFetchUnchangedWheels:
             else Path(p)
         )
 
-        unchanged = {"pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[])}
-        fetch_unchanged_wheels(unchanged)
+        unchanged = {"pkg-a": PackageInfo(path="packages/a", version="1.0.1", deps=[])}
+        last_tags = {"pkg-a": "pkg-a/v1.0.0"}  # Released version
+        fetch_unchanged_wheels(unchanged, last_tags)
 
         # Verify gh release download was called
         mock_run.assert_called()
@@ -469,9 +470,10 @@ class TestFetchUnchangedWheels:
             )
 
             unchanged = {
-                "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[])
+                "pkg-a": PackageInfo(path="packages/a", version="1.0.1", deps=[])
             }
-            fetch_unchanged_wheels(unchanged)
+            last_tags = {"pkg-a": "pkg-a/v1.0.0"}
+            fetch_unchanged_wheels(unchanged, last_tags)
 
         # dist should be empty - no wheel was copied
         assert list(dist_dir.glob("*.whl")) == []
@@ -484,7 +486,7 @@ class TestFetchUnchangedWheels:
         mock_gh: MagicMock,
     ) -> None:
         """When unchanged dict is empty, does nothing."""
-        fetch_unchanged_wheels({})
+        fetch_unchanged_wheels({}, {})
 
         mock_gh.assert_not_called()
         mock_step.assert_not_called()
