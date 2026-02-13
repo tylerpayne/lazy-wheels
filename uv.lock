@@ -5,11 +5,19 @@ requires-python = ">=3.11"
 [manifest]
 members = [
     "lazy-wheels",
-    "lazy-wheels-workspace",
     "pkg-alpha",
     "pkg-beta",
     "pkg-delta",
     "pkg-gamma",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "lazy-wheels", editable = "packages/lazy-wheels" },
+    { name = "poethepoet", specifier = ">=0.32" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "ruff", specifier = ">=0.9" },
+    { name = "ty", specifier = ">=0.0.1a6" },
 ]
 
 [[package]]
@@ -53,7 +61,7 @@ wheels = [
 
 [[package]]
 name = "lazy-wheels"
-version = "0.1.1"
+version = "0.1.8"
 source = { editable = "packages/lazy-wheels" }
 dependencies = [
     { name = "click" },
@@ -70,31 +78,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0" },
     { name = "semver", specifier = ">=3.0" },
     { name = "tomlkit", specifier = ">=0.12" },
-]
-
-[[package]]
-name = "lazy-wheels-workspace"
-version = "0.0.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "lazy-wheels" },
-    { name = "poethepoet" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "lazy-wheels", editable = "packages/lazy-wheels" },
-    { name = "poethepoet", specifier = ">=0.32" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "ruff", specifier = ">=0.9" },
-    { name = "ty", specifier = ">=0.0.1a6" },
 ]
 
 [[package]]
@@ -117,12 +100,12 @@ wheels = [
 
 [[package]]
 name = "pkg-alpha"
-version = "0.1.0"
+version = "0.1.4"
 source = { editable = "packages/pkg-alpha" }
 
 [[package]]
 name = "pkg-beta"
-version = "0.1.0"
+version = "0.1.5"
 source = { editable = "packages/pkg-beta" }
 dependencies = [
     { name = "pkg-alpha" },
@@ -133,7 +116,7 @@ requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
 
 [[package]]
 name = "pkg-delta"
-version = "0.1.0"
+version = "0.1.5"
 source = { editable = "packages/pkg-delta" }
 dependencies = [
     { name = "pkg-alpha" },
@@ -144,7 +127,7 @@ requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
 
 [[package]]
 name = "pkg-gamma"
-version = "0.1.0"
+version = "0.1.7"
 source = { editable = "packages/pkg-gamma" }
 dependencies = [
     { name = "pkg-beta" },
