@@ -6,7 +6,8 @@ from pathlib import Path
 
 import click
 
-from lazy_wheels.pipeline import discover_packages, run_release
+from lazy_wheels.pipeline import discover_packages
+from lazy_wheels.workflow_steps import run_pipeline
 
 DEFAULT_RUNNER = "ubuntu-latest"
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -110,7 +111,7 @@ def init(workflow_dir: str, matrix_builder: bool) -> None:
 @click.option("--force-all", is_flag=True, help="Rebuild all packages.")
 def run(release: str | None, force_all: bool) -> None:
     """Run the release pipeline locally (usually called from CI)."""
-    run_release(release=release, force_all=force_all)
+    run_pipeline(release=release, force_all=force_all)
 
 
 @cli.command()

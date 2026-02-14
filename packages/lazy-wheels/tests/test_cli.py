@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 import pytest
@@ -62,3 +63,16 @@ class TestInit:
         assert "outputs:\n      changed: ${{ steps.discover.outputs.changed }}" in workflow
         assert '- package: "pkg-beta"' in workflow
         assert 'runner: "ubuntu-24.04-arm"' in workflow
+
+
+@patch("lazy_wheels.cli.run_pipeline")
+def test_run_command_uses_workflow_steps_runner(mock_run_pipeline: MagicMock) -> None:
+    """run command dispatches through workflow_steps.run_pipeline."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli, ["run", "--release", "r9", "--force-all"], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0
+    mock_run_pipeline.assert_called_once_with(release="r9", force_all=True)

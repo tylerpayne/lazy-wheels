@@ -16,8 +16,14 @@ from lazy_wheels.pipeline import (
     find_last_tags,
     find_next_release_tag,
     publish_release,
+    run_release,
     tag_changed_packages,
 )
+
+
+def run_pipeline(release: str | None, force_all: bool) -> None:
+    """Run the full release pipeline."""
+    run_release(release=release, force_all=force_all)
 
 
 def _parse_json(value: str, *, arg_name: str):
