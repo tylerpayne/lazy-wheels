@@ -1,5 +1,5 @@
 # Generated with lazy-wheels: https://github.com/tylerpayne/lazy-wheels
-# To regenerate this workflow:
+# From your repository root, regenerate with:
 #   uv tool install lazy-wheels
 #   lazy-wheels init
 #
