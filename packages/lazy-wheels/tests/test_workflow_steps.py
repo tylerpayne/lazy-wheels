@@ -58,6 +58,12 @@ def test_build_skips_unchanged_package(
     mock_build.assert_not_called()
 
 
+def test_build_rejects_invalid_changed_json() -> None:
+    """build returns clear error for malformed JSON input."""
+    with pytest.raises(SystemExit, match="Invalid JSON for --changed"):
+        build("pkg-a", "{not-json")
+
+
 @patch("lazy_wheels.workflow_steps.discover")
 def test_main_dispatches_discover_from_cli_arg(mock_discover: MagicMock) -> None:
     """main dispatches discover handler from CLI args."""
@@ -74,15 +80,17 @@ def test_main_dispatches_build(mock_build: MagicMock) -> None:
     mock_build.assert_called_once_with("pkg-a", '["pkg-a"]')
 
 
-def test_main_requires_step_arg() -> None:
+def test_main_requires_step_arg(capsys: pytest.CaptureFixture[str]) -> None:
     """main errors when no step arg is provided."""
     with pytest.raises(SystemExit) as excinfo:
         main([])
     assert excinfo.value.code == 2
+    assert "required: command" in capsys.readouterr().err
 
 
-def test_main_rejects_unknown_step() -> None:
+def test_main_rejects_unknown_step(capsys: pytest.CaptureFixture[str]) -> None:
     """main errors on unknown step arg."""
     with pytest.raises(SystemExit) as excinfo:
         main(["not-a-step"])
     assert excinfo.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err

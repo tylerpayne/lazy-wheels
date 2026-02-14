@@ -20,6 +20,13 @@ from lazy_wheels.pipeline import (
 )
 
 
+def _parse_json(value: str, *, arg_name: str):
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid JSON for {arg_name}: {exc}") from exc
+
+
 def _write_output(output_path: str, name: str, value: str) -> None:
     with open(output_path, "a") as fh:
         fh.write(f"{name}={value}\n")
@@ -43,7 +50,7 @@ def discover(release: str | None, force_all: bool, github_output: str) -> None:
 
 def build(package: str, changed_json: str) -> None:
     """Build a single package from matrix inputs if it's changed."""
-    changed = set(json.loads(changed_json))
+    changed = set(_parse_json(changed_json, arg_name="--changed"))
     if package not in changed:
         return
     packages = discover_packages()
@@ -58,9 +65,9 @@ def release(
 ) -> None:
     """Fetch unchanged wheels, then tag, bump, commit, and publish."""
     packages = discover_packages()
-    changed_names = json.loads(changed_json)
-    unchanged_names = json.loads(unchanged_json)
-    last_tags = json.loads(last_tags_json)
+    changed_names = _parse_json(changed_json, arg_name="--changed")
+    unchanged_names = _parse_json(unchanged_json, arg_name="--unchanged")
+    last_tags = _parse_json(last_tags_json, arg_name="--last-tags")
 
     changed = {name: packages[name] for name in changed_names}
     unchanged = {name: packages[name] for name in unchanged_names}
@@ -117,7 +124,7 @@ def main(argv: list[str] | None = None) -> None:
         discover(parsed.release, parsed.force_all, parsed.github_output)
     elif parsed.command == "build":
         build(parsed.package, parsed.changed)
-    else:
+    elif parsed.command == "release":
         release(parsed.changed, parsed.unchanged, parsed.last_tags, parsed.release_tag)
 
 
