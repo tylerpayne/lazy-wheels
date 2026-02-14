@@ -37,8 +37,7 @@ jobs:
         env:
           INPUT_RELEASE: ${{ inputs.release }}
           FORCE_ALL: ${{ inputs.force_rebuild_all }}
-          LAZY_WHEELS_STEP: plan
-        run: python -m lazy_wheels.workflow_steps
+        run: python -m lazy_wheels.workflow_steps plan
 
   build:
     needs: discover
@@ -61,8 +60,7 @@ __MATRIX_INCLUDE__
         env:
           CHANGED: ${{ needs.discover.outputs.changed }}
           PACKAGE: ${{ matrix.package }}
-          LAZY_WHEELS_STEP: build-one
-        run: python -m lazy_wheels.workflow_steps
+        run: python -m lazy_wheels.workflow_steps build-one
       - name: Upload built wheels
         if: always()
         uses: actions/upload-artifact@v4
@@ -97,16 +95,14 @@ __MATRIX_INCLUDE__
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UNCHANGED: ${{ needs.discover.outputs.unchanged }}
           LAST_TAGS: ${{ needs.discover.outputs.last_tags }}
-          LAZY_WHEELS_STEP: fetch-unchanged
-        run: python -m lazy_wheels.workflow_steps
+        run: python -m lazy_wheels.workflow_steps fetch-unchanged
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHANGED: ${{ needs.discover.outputs.changed }}
           UNCHANGED: ${{ needs.discover.outputs.unchanged }}
           RELEASE_TAG: ${{ needs.discover.outputs.release }}
-          LAZY_WHEELS_STEP: finalize-release
-        run: python -m lazy_wheels.workflow_steps
+        run: python -m lazy_wheels.workflow_steps finalize-release
       - name: Push commits and tags
         run: |
           git push

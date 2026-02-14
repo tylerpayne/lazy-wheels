@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from lazy_wheels.models import PackageInfo
-from lazy_wheels.workflow_steps import build_one, plan
+from lazy_wheels.workflow_steps import build_one, main, plan
 
 
 @patch("lazy_wheels.workflow_steps.find_next_release_tag")
@@ -63,3 +63,11 @@ def test_build_one_skips_unchanged_package(
     build_one()
 
     mock_build.assert_not_called()
+
+
+@patch("lazy_wheels.workflow_steps.plan")
+def test_main_dispatches_from_cli_arg(mock_plan: MagicMock) -> None:
+    """main dispatches handlers from CLI args."""
+    main(["plan"])
+
+    mock_plan.assert_called_once()

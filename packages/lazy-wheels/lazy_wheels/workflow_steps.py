@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 
 from lazy_wheels.pipeline import (
     build_packages,
@@ -76,9 +77,13 @@ def finalize_release() -> None:
     publish_release(changed, unchanged, os.environ["RELEASE_TAG"])
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Run a workflow step command."""
-    command = os.environ.get("LAZY_WHEELS_STEP")
+    args = argv if argv is not None else sys.argv[1:]
+    if not args:
+        raise SystemExit("Usage: python -m lazy_wheels.workflow_steps <step>")
+
+    command = args[0]
     if command == "plan":
         plan()
     elif command == "build-one":
@@ -88,7 +93,7 @@ def main() -> None:
     elif command == "finalize-release":
         finalize_release()
     else:
-        raise SystemExit(f"Unknown LAZY_WHEELS_STEP: {command!r}")
+        raise SystemExit(f"Unknown step: {command!r}")
 
 
 if __name__ == "__main__":
