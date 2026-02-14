@@ -9,6 +9,7 @@ import click
 from lazy_wheels.pipeline import discover_packages, run_release
 
 DEFAULT_RUNNER = "ubuntu-latest"
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def _matrix_include_lines(package_runners: dict[str, list[str]]) -> str:
@@ -80,13 +81,13 @@ def init(workflow_dir: str, matrix_builder: bool) -> None:
             selected_runners = [r.strip() for r in runners.split(",") if r.strip()]
             package_runners[package] = selected_runners or [DEFAULT_RUNNER]
 
-        template = Path(__file__).parent / "release-matrix.yml"
+        template = TEMPLATES_DIR / "release-matrix.yml"
         rendered = template.read_text().replace(
             "__MATRIX_INCLUDE__", _matrix_include_lines(package_runners)
         )
         dest.write_text(rendered)
     else:
-        template = Path(__file__).parent / "release.yml"
+        template = TEMPLATES_DIR / "release.yml"
         dest.write_text(template.read_text())
 
     click.echo(f"✓ Wrote workflow to {dest.relative_to(root)}")

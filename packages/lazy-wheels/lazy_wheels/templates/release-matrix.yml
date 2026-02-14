@@ -37,27 +37,8 @@ jobs:
         env:
           INPUT_RELEASE: ${{ inputs.release }}
           FORCE_ALL: ${{ inputs.force_rebuild_all }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from lazy_wheels.pipeline import detect_changes, discover_packages, find_last_tags, find_next_release_tag
-
-          release = os.environ.get("INPUT_RELEASE") or find_next_release_tag()
-          force_all = os.environ.get("FORCE_ALL", "").lower() == "true"
-          packages = discover_packages()
-          last_tags = find_last_tags(packages)
-          changed = sorted(detect_changes(packages, last_tags, force_all))
-          if not changed:
-            raise SystemExit("Nothing changed since last release.")
-          unchanged = sorted([name for name in packages if name not in changed])
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-            fh.write(f"changed={json.dumps(changed)}\n")
-            fh.write(f"unchanged={json.dumps(unchanged)}\n")
-            fh.write(f"last_tags={json.dumps(last_tags)}\n")
-            fh.write(f"release={release}\n")
-          PY
+          LAZY_WHEELS_STEP: plan
+        run: python -m lazy_wheels.workflow_steps
 
   build:
     needs: discover
@@ -80,19 +61,8 @@ __MATRIX_INCLUDE__
         env:
           CHANGED: ${{ needs.discover.outputs.changed }}
           PACKAGE: ${{ matrix.package }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from lazy_wheels.pipeline import build_packages, discover_packages
-
-          package = os.environ["PACKAGE"]
-          changed = set(json.loads(os.environ["CHANGED"]))
-          if package not in changed:
-            raise SystemExit(0)
-          packages = discover_packages()
-          build_packages({package: packages[package]})
-          PY
+          LAZY_WHEELS_STEP: build-one
+        run: python -m lazy_wheels.workflow_steps
       - name: Upload built wheels
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,46 +97,16 @@ __MATRIX_INCLUDE__
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UNCHANGED: ${{ needs.discover.outputs.unchanged }}
           LAST_TAGS: ${{ needs.discover.outputs.last_tags }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from lazy_wheels.pipeline import discover_packages, fetch_unchanged_wheels
-
-          packages = discover_packages()
-          unchanged_names = json.loads(os.environ["UNCHANGED"])
-          last_tags = json.loads(os.environ["LAST_TAGS"])
-          unchanged = {name: packages[name] for name in unchanged_names}
-          fetch_unchanged_wheels(unchanged, last_tags)
-          PY
+          LAZY_WHEELS_STEP: fetch-unchanged
+        run: python -m lazy_wheels.workflow_steps
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHANGED: ${{ needs.discover.outputs.changed }}
           UNCHANGED: ${{ needs.discover.outputs.unchanged }}
           RELEASE_TAG: ${{ needs.discover.outputs.release }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from lazy_wheels.pipeline import (
-              bump_versions,
-              commit_bumps,
-              discover_packages,
-              publish_release,
-              tag_changed_packages,
-          )
-
-          packages = discover_packages()
-          changed_names = json.loads(os.environ["CHANGED"])
-          unchanged_names = json.loads(os.environ["UNCHANGED"])
-          changed = {name: packages[name] for name in changed_names}
-          unchanged = {name: packages[name] for name in unchanged_names}
-          tag_changed_packages(changed)
-          bumped = bump_versions(changed, unchanged)
-          commit_bumps(changed, bumped)
-          publish_release(changed, unchanged, os.environ["RELEASE_TAG"])
-          PY
+          LAZY_WHEELS_STEP: finalize-release
+        run: python -m lazy_wheels.workflow_steps
       - name: Push commits and tags
         run: |
           git push

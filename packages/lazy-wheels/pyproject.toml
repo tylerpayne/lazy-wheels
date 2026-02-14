@@ -22,4 +22,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lazy_wheels"]
-include = ["lazy_wheels/release.yml", "lazy_wheels/release-matrix.yml"]
+include = [
+    "lazy_wheels/templates/release.yml",
+    "lazy_wheels/templates/release-matrix.yml",
+]
