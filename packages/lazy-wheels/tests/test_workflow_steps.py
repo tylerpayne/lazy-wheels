@@ -71,3 +71,25 @@ def test_main_dispatches_from_cli_arg(mock_plan: MagicMock) -> None:
     main(["plan"])
 
     mock_plan.assert_called_once()
+
+
+@patch("lazy_wheels.workflow_steps.build_one")
+def test_main_dispatches_build_one(mock_build_one: MagicMock) -> None:
+    """main dispatches build-one handler from CLI args."""
+    main(["build-one"])
+
+    mock_build_one.assert_called_once()
+
+
+def test_main_requires_step_arg() -> None:
+    """main errors when no step arg is provided."""
+    with pytest.raises(SystemExit) as excinfo:
+        main([])
+    assert "Usage:" in str(excinfo.value)
+
+
+def test_main_rejects_unknown_step() -> None:
+    """main errors on unknown step arg."""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["not-a-step"])
+    assert "Unknown step" in str(excinfo.value)
