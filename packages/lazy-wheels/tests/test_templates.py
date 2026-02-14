@@ -13,3 +13,4 @@ def test_release_template_has_lazy_wheels_preamble() -> None:
     assert "Generated with lazy-wheels" in template
     assert "https://github.com/tylerpayne/lazy-wheels" in template
     assert "uv tool install lazy-wheels" in template
+    assert "lazy-wheels release" in template

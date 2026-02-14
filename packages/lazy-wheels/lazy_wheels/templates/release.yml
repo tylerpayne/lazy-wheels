@@ -2,6 +2,10 @@
 # From your repository root, regenerate with:
 #   uv tool install lazy-wheels
 #   lazy-wheels init
+# Trigger releases with:
+#   lazy-wheels release
+#   lazy-wheels release -r r1
+#   lazy-wheels release --force-all
 #
 name: Release Wheels
 
