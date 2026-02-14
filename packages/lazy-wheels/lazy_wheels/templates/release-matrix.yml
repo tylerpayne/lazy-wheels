@@ -36,14 +36,7 @@ jobs:
         id: discover
         shell: bash
         run: |
-          cmd=(python -m lazy_wheels.workflow_steps discover --github-output "$GITHUB_OUTPUT")
-          if [[ -n "${{ inputs.release }}" ]]; then
-            cmd+=(--release "${{ inputs.release }}")
-          fi
-          if [[ "${{ inputs.force_rebuild_all }}" == "true" ]]; then
-            cmd+=(--force-all)
-          fi
-          "${cmd[@]}"
+          python -m lazy_wheels.workflow_steps discover --github-output "$GITHUB_OUTPUT" ${{ inputs.release && format('--release "{0}"', inputs.release) || '' }} ${{ inputs.force_rebuild_all == 'true' && '--force-all' || '' }}
 
   build:
     needs: discover
