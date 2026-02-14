@@ -59,6 +59,6 @@ class TestInit:
         assert result.exit_code == 0
         workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
         assert "jobs:\n  discover:" in workflow
-        assert "outputs:\n      changed: ${{ steps.plan.outputs.changed }}" in workflow
+        assert "outputs:\n      changed: ${{ steps.discover.outputs.changed }}" in workflow
         assert '- package: "pkg-beta"' in workflow
         assert 'runner: "ubuntu-24.04-arm"' in workflow

@@ -9,22 +9,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from lazy_wheels.models import PackageInfo
-from lazy_wheels.workflow_steps import build_one, main, plan
+from lazy_wheels.workflow_steps import build, discover, main
 
 
 @patch("lazy_wheels.workflow_steps.find_next_release_tag")
 @patch("lazy_wheels.workflow_steps.find_last_tags")
 @patch("lazy_wheels.workflow_steps.detect_changes")
 @patch("lazy_wheels.workflow_steps.discover_packages")
-def test_plan_writes_expected_outputs(
+def test_discover_writes_expected_outputs(
     mock_discover: MagicMock,
     mock_detect: MagicMock,
     mock_find_last: MagicMock,
     mock_find_next: MagicMock,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """plan writes changed/unchanged/last_tags/release to GITHUB_OUTPUT."""
+    """discover writes changed/unchanged/last_tags/release to output file."""
     mock_discover.return_value = {
         "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
         "pkg-b": PackageInfo(path="packages/b", version="1.0.0", deps=[]),
@@ -33,11 +32,8 @@ def test_plan_writes_expected_outputs(
     mock_detect.return_value = ["pkg-a"]
     mock_find_next.return_value = "r7"
     output_file = tmp_path / "github_output.txt"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
-    monkeypatch.delenv("INPUT_RELEASE", raising=False)
-    monkeypatch.setenv("FORCE_ALL", "false")
 
-    plan()
+    discover(None, force_all=False, github_output=str(output_file))
 
     raw = output_file.read_text()
     assert 'changed=["pkg-a"]' in raw
@@ -48,48 +44,45 @@ def test_plan_writes_expected_outputs(
 
 @patch("lazy_wheels.workflow_steps.build_packages")
 @patch("lazy_wheels.workflow_steps.discover_packages")
-def test_build_one_skips_unchanged_package(
+def test_build_skips_unchanged_package(
     mock_discover: MagicMock,
     mock_build: MagicMock,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """build_one is a no-op when PACKAGE is not in CHANGED list."""
+    """build is a no-op when package is not in changed list."""
     mock_discover.return_value = {
         "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[])
     }
-    monkeypatch.setenv("PACKAGE", "pkg-a")
-    monkeypatch.setenv("CHANGED", json.dumps(["pkg-b"]))
 
-    build_one()
+    build("pkg-a", json.dumps(["pkg-b"]))
 
     mock_build.assert_not_called()
 
 
-@patch("lazy_wheels.workflow_steps.plan")
-def test_main_dispatches_from_cli_arg(mock_plan: MagicMock) -> None:
-    """main dispatches handlers from CLI args."""
-    main(["plan"])
+@patch("lazy_wheels.workflow_steps.discover")
+def test_main_dispatches_discover_from_cli_arg(mock_discover: MagicMock) -> None:
+    """main dispatches discover handler from CLI args."""
+    main(["discover", "--github-output", "/tmp/out"])
 
-    mock_plan.assert_called_once()
+    mock_discover.assert_called_once_with(None, False, "/tmp/out")
 
 
-@patch("lazy_wheels.workflow_steps.build_one")
-def test_main_dispatches_build_one(mock_build_one: MagicMock) -> None:
-    """main dispatches build-one handler from CLI args."""
-    main(["build-one"])
+@patch("lazy_wheels.workflow_steps.build")
+def test_main_dispatches_build(mock_build: MagicMock) -> None:
+    """main dispatches build handler from CLI args."""
+    main(["build", "--package", "pkg-a", "--changed", '["pkg-a"]'])
 
-    mock_build_one.assert_called_once()
+    mock_build.assert_called_once_with("pkg-a", '["pkg-a"]')
 
 
 def test_main_requires_step_arg() -> None:
     """main errors when no step arg is provided."""
     with pytest.raises(SystemExit) as excinfo:
         main([])
-    assert "Usage:" in str(excinfo.value)
+    assert excinfo.value.code == 2
 
 
 def test_main_rejects_unknown_step() -> None:
     """main errors on unknown step arg."""
     with pytest.raises(SystemExit) as excinfo:
         main(["not-a-step"])
-    assert "Unknown step" in str(excinfo.value)
+    assert excinfo.value.code == 2

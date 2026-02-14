@@ -19,10 +19,10 @@ jobs:
   discover:
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.plan.outputs.changed }}
-      unchanged: ${{ steps.plan.outputs.unchanged }}
-      last_tags: ${{ steps.plan.outputs.last_tags }}
-      release: ${{ steps.plan.outputs.release }}
+      changed: ${{ steps.discover.outputs.changed }}
+      unchanged: ${{ steps.discover.outputs.unchanged }}
+      last_tags: ${{ steps.discover.outputs.last_tags }}
+      release: ${{ steps.discover.outputs.release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,11 +33,17 @@ jobs:
           uv python install 3.12
           pip install lazy-wheels --break-system-packages
       - name: Plan release
-        id: plan
-        env:
-          INPUT_RELEASE: ${{ inputs.release }}
-          FORCE_ALL: ${{ inputs.force_rebuild_all }}
-        run: python -m lazy_wheels.workflow_steps plan
+        id: discover
+        shell: bash
+        run: |
+          cmd=(python -m lazy_wheels.workflow_steps discover --github-output "$GITHUB_OUTPUT")
+          if [[ -n "${{ inputs.release }}" ]]; then
+            cmd+=(--release "${{ inputs.release }}")
+          fi
+          if [[ "${{ inputs.force_rebuild_all }}" == "true" ]]; then
+            cmd+=(--force-all)
+          fi
+          "${cmd[@]}"
 
   build:
     needs: discover
@@ -57,10 +63,7 @@ __MATRIX_INCLUDE__
           uv python install 3.12
           pip install lazy-wheels --break-system-packages
       - name: Build package
-        env:
-          CHANGED: ${{ needs.discover.outputs.changed }}
-          PACKAGE: ${{ matrix.package }}
-        run: python -m lazy_wheels.workflow_steps build-one
+        run: python -m lazy_wheels.workflow_steps build --package '${{ matrix.package }}' --changed '${{ needs.discover.outputs.changed }}'
       - name: Upload built wheels
         if: always()
         uses: actions/upload-artifact@v4
@@ -90,19 +93,10 @@ __MATRIX_INCLUDE__
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Fetch unchanged wheels
+      - name: Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UNCHANGED: ${{ needs.discover.outputs.unchanged }}
-          LAST_TAGS: ${{ needs.discover.outputs.last_tags }}
-        run: python -m lazy_wheels.workflow_steps fetch-unchanged
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CHANGED: ${{ needs.discover.outputs.changed }}
-          UNCHANGED: ${{ needs.discover.outputs.unchanged }}
-          RELEASE_TAG: ${{ needs.discover.outputs.release }}
-        run: python -m lazy_wheels.workflow_steps finalize-release
+        run: python -m lazy_wheels.workflow_steps release --changed '${{ needs.discover.outputs.changed }}' --unchanged '${{ needs.discover.outputs.unchanged }}' --last-tags '${{ needs.discover.outputs.last_tags }}' --release-tag '${{ needs.discover.outputs.release }}'
       - name: Push commits and tags
         run: |
           git push

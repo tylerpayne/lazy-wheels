@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
 import json
-import os
 import sys
 
 from lazy_wheels.pipeline import (
@@ -20,18 +20,14 @@ from lazy_wheels.pipeline import (
 )
 
 
-def _write_output(name: str, value: str) -> None:
-    output_path = os.environ.get("GITHUB_OUTPUT")
-    if not output_path:
-        return
+def _write_output(output_path: str, name: str, value: str) -> None:
     with open(output_path, "a") as fh:
         fh.write(f"{name}={value}\n")
 
 
-def plan() -> None:
+def discover(release: str | None, force_all: bool, github_output: str) -> None:
     """Compute release plan and emit GitHub step outputs."""
-    release = os.environ.get("INPUT_RELEASE") or find_next_release_tag()
-    force_all = os.environ.get("FORCE_ALL", "").lower() == "true"
+    resolved_release = release or find_next_release_tag()
     packages = discover_packages()
     last_tags = find_last_tags(packages)
     changed = sorted(detect_changes(packages, last_tags, force_all))
@@ -39,61 +35,90 @@ def plan() -> None:
         raise SystemExit("Nothing changed since last release.")
     unchanged = sorted(name for name in packages if name not in changed)
 
-    _write_output("changed", json.dumps(changed))
-    _write_output("unchanged", json.dumps(unchanged))
-    _write_output("last_tags", json.dumps(last_tags))
-    _write_output("release", release)
+    _write_output(github_output, "changed", json.dumps(changed))
+    _write_output(github_output, "unchanged", json.dumps(unchanged))
+    _write_output(github_output, "last_tags", json.dumps(last_tags))
+    _write_output(github_output, "release", resolved_release)
 
 
-def build_one() -> None:
+def build(package: str, changed_json: str) -> None:
     """Build a single package from matrix inputs if it's changed."""
-    package = os.environ["PACKAGE"]
-    changed = set(json.loads(os.environ["CHANGED"]))
+    changed = set(json.loads(changed_json))
     if package not in changed:
         return
     packages = discover_packages()
     build_packages({package: packages[package]})
 
 
-def fetch_unchanged() -> None:
-    """Fetch unchanged package wheels based on serialized state."""
+def release(
+    changed_json: str,
+    unchanged_json: str,
+    last_tags_json: str,
+    release_tag: str,
+) -> None:
+    """Fetch unchanged wheels, then tag, bump, commit, and publish."""
     packages = discover_packages()
-    unchanged_names = json.loads(os.environ["UNCHANGED"])
-    last_tags = json.loads(os.environ["LAST_TAGS"])
-    unchanged = {name: packages[name] for name in unchanged_names}
-    fetch_unchanged_wheels(unchanged, last_tags)
+    changed_names = json.loads(changed_json)
+    unchanged_names = json.loads(unchanged_json)
+    last_tags = json.loads(last_tags_json)
 
-
-def finalize_release() -> None:
-    """Tag, bump, commit, and publish using serialized state."""
-    packages = discover_packages()
-    changed_names = json.loads(os.environ["CHANGED"])
-    unchanged_names = json.loads(os.environ["UNCHANGED"])
     changed = {name: packages[name] for name in changed_names}
     unchanged = {name: packages[name] for name in unchanged_names}
+    fetch_unchanged_wheels(unchanged, last_tags)
     tag_changed_packages(changed)
     bumped = bump_versions(changed, unchanged)
     commit_bumps(changed, bumped)
-    publish_release(changed, unchanged, os.environ["RELEASE_TAG"])
+    publish_release(changed, unchanged, release_tag)
 
 
 def main(argv: list[str] | None = None) -> None:
     """Run a workflow step command."""
     args = argv if argv is not None else sys.argv[1:]
-    if not args:
-        raise SystemExit("Usage: python -m lazy_wheels.workflow_steps <step>")
+    parser = argparse.ArgumentParser(prog="python -m lazy_wheels.workflow_steps")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    command = args[0]
-    if command == "plan":
-        plan()
-    elif command == "build-one":
-        build_one()
-    elif command == "fetch-unchanged":
-        fetch_unchanged()
-    elif command == "finalize-release":
-        finalize_release()
+    discover_parser = subparsers.add_parser("discover")
+    discover_parser.add_argument(
+        "--release", default=None, help="Release tag to use; auto-generated if omitted."
+    )
+    discover_parser.add_argument(
+        "--force-all",
+        action="store_true",
+        help="Force rebuild of all packages regardless of detected changes.",
+    )
+    discover_parser.add_argument(
+        "--github-output", required=True, help="Path to GitHub step output file."
+    )
+
+    build_parser = subparsers.add_parser("build")
+    build_parser.add_argument("--package", required=True, help="Package name to build.")
+    build_parser.add_argument(
+        "--changed", required=True, help="JSON array of changed package names."
+    )
+
+    release_parser = subparsers.add_parser("release")
+    release_parser.add_argument(
+        "--changed", required=True, help="JSON array of changed package names."
+    )
+    release_parser.add_argument(
+        "--unchanged", required=True, help="JSON array of unchanged package names."
+    )
+    release_parser.add_argument(
+        "--last-tags",
+        required=True,
+        help="JSON object mapping package name to its previous release tag.",
+    )
+    release_parser.add_argument(
+        "--release-tag", required=True, help="Release tag to publish."
+    )
+
+    parsed = parser.parse_args(args)
+    if parsed.command == "discover":
+        discover(parsed.release, parsed.force_all, parsed.github_output)
+    elif parsed.command == "build":
+        build(parsed.package, parsed.changed)
     else:
-        raise SystemExit(f"Unknown step: {command!r}")
+        release(parsed.changed, parsed.unchanged, parsed.last_tags, parsed.release_tag)
 
 
 if __name__ == "__main__":
