@@ -1,3 +1,8 @@
+# Generated with lazy-wheels: https://github.com/tylerpayne/lazy-wheels
+# To regenerate this workflow:
+#   uv tool install lazy-wheels
+#   lazy-wheels init
+#
 name: Release Wheels
 
 on:
