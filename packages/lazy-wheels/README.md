@@ -14,7 +14,18 @@ lazy-wheels release
 
 Managing versions across multiple packages in a monorepo is painful. `lazy-wheels` makes it simple: **you own major.minor, CI owns patch**. When you're ready for a breaking change or new feature in any package, bump the major or minor version yourself (e.g. `uv version --project packages/your-project --bump minor`). For everything else, CI automatically increments patch versions after each release.
 
-`lazy-wheels` always keeps your `main` branch one patch version ahead of the latest release (i.e. `main` represents _unreleased_ changes). This means HEAD is always releasable, version numbers are always increasing, and you never have to think about patch versions again. Change detection uses per-package git tags, so only packages with actual changes (or dependencies on changed packages) get rebuilt.
+For mixed-architecture builds, specify per-package runners with `-m`:
+
+```bash
+lazy-wheels init -m pkg-alpha ubuntu-latest -m pkg-beta ubuntu-latest macos-14
+```
+
+Each `-m` takes a package name followed by one or more runners. This writes a
+multi-job workflow that builds each package on its specified runner(s).
+
+**Requirements:**
+- A git repository
+- A `pyproject.toml` with `[tool.uv.workspace]` members defined
 
 ### Triggering a Release
 
