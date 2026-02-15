@@ -1,3 +1,12 @@
+# Generated with lazy-wheels: https://github.com/tylerpayne/lazy-wheels
+# From your repository root, regenerate with:
+#   uv tool install lazy-wheels
+#   lazy-wheels init -m PKG runner1 runner2 ...
+# Trigger releases with:
+#   lazy-wheels release
+#   lazy-wheels release -r r1
+#   lazy-wheels release --force-all
+#
 name: Release Wheels
 
 on:
