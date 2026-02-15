@@ -2,41 +2,17 @@
 
 CI release workflow for your multi-package uv monorepo that only rebuilds changed packages.
 
+## Installation + Usage
+
+```bash
+uv tool install lazy-wheels
+lazy-wheels init
+lazy-wheels release
+```
+
 ## Why lazy-wheels?
 
 Managing versions across multiple packages in a monorepo is painful. `lazy-wheels` makes it simple: **you own major.minor, CI owns patch**. When you're ready for a breaking change or new feature in any package, bump the major or minor version yourself (e.g. `uv version --project packages/your-project --bump minor`). For everything else, CI automatically increments patch versions after each release.
-
-`lazy-wheels` always keeps your `main` branch one patch version ahead of the latest release (i.e. `main` represents _unreleased_ changes). This means HEAD is always releasable, version numbers are always increasing, and you never have to think about patch versions again. Change detection uses per-package git tags, so only packages with actual changes (or dependencies on changed packages) get rebuilt.
-
-## Installation
-
-```bash
-pip install lazy-wheels
-```
-
-Or with uv:
-
-```bash
-uv add --group dev lazy-wheels
-```
-
-Or scaffold just once with uvx:
-
-```bash
-uvx lazy-wheels init
-```
-
-## Usage
-
-### Initialize
-
-Scaffold the GitHub Actions workflow into your repo:
-
-```bash
-lazy-wheels init
-```
-
-This creates `.github/workflows/release.yml` configured for your uv workspace.
 
 For mixed-architecture builds, specify per-package runners with `-m`:
 
