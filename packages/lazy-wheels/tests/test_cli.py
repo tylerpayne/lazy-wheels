@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from click.testing import CliRunner
 import pytest
 
-from lazy_wheels.cli import cli
+from lazy_wheels.cli import cli, cmd_init, cmd_run
 
 
 def _write_workspace_repo(root: Path, package_names: list[str]) -> None:
@@ -33,34 +34,38 @@ class TestInit:
         """init writes the default workflow template."""
         _write_workspace_repo(tmp_path, [])
         monkeypatch.chdir(tmp_path)
-        runner = CliRunner()
 
-        result = runner.invoke(cli, ["init"], catch_exceptions=False)
+        args = argparse.Namespace(
+            workflow_dir=".github/workflows",
+            matrix=None,
+        )
+        cmd_init(args)
 
-        assert result.exit_code == 0
         workflow = tmp_path / ".github" / "workflows" / "release.yml"
         assert workflow.exists()
         assert "jobs:\n  release:" in workflow.read_text()
 
-    def test_matrix_builder_writes_split_jobs_workflow(
+    def test_matrix_writes_split_jobs_workflow(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """init --matrix-builder creates matrix workflow with selected runners."""
+        """init with matrix args creates matrix workflow with specified runners."""
         _write_workspace_repo(tmp_path, ["pkg-alpha", "pkg-beta"])
         monkeypatch.chdir(tmp_path)
-        runner = CliRunner()
 
-        result = runner.invoke(
-            cli,
-            ["init", "--matrix-builder"],
-            input="ubuntu-latest\nubuntu-latest,ubuntu-24.04-arm\n",
-            catch_exceptions=False,
+        args = argparse.Namespace(
+            workflow_dir=".github/workflows",
+            matrix=[
+                ["pkg-alpha", "ubuntu-latest"],
+                ["pkg-beta", "ubuntu-latest", "ubuntu-24.04-arm"],
+            ],
         )
+        cmd_init(args)
 
-        assert result.exit_code == 0
         workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
         assert "jobs:\n  discover:" in workflow
-        assert "outputs:\n      changed: ${{ steps.discover.outputs.changed }}" in workflow
+        assert (
+            "outputs:\n      changed: ${{ steps.discover.outputs.changed }}" in workflow
+        )
         assert '- package: "pkg-beta"' in workflow
         assert 'runner: "ubuntu-24.04-arm"' in workflow
 
@@ -68,11 +73,33 @@ class TestInit:
 @patch("lazy_wheels.cli.run_pipeline")
 def test_run_command_uses_workflow_steps_runner(mock_run_pipeline: MagicMock) -> None:
     """run command dispatches through workflow_steps.run_pipeline."""
-    runner = CliRunner()
+    args = argparse.Namespace(release="r9", force_all=True)
+    cmd_run(args)
 
-    result = runner.invoke(
-        cli, ["run", "--release", "r9", "--force-all"], catch_exceptions=False
-    )
-
-    assert result.exit_code == 0
     mock_run_pipeline.assert_called_once_with(release="r9", force_all=True)
+
+
+def test_cli_parses_matrix_args() -> None:
+    """CLI correctly parses -m arguments with nargs='+'."""
+    with patch.object(
+        sys,
+        "argv",
+        [
+            "lazy-wheels",
+            "init",
+            "-m",
+            "pkg-alpha",
+            "ubuntu-latest",
+            "-m",
+            "pkg-beta",
+            "ubuntu-latest",
+            "macos-14",
+        ],
+    ):
+        with patch("lazy_wheels.cli.cmd_init") as mock_init:
+            cli()
+            args = mock_init.call_args[0][0]
+            assert args.matrix == [
+                ["pkg-alpha", "ubuntu-latest"],
+                ["pkg-beta", "ubuntu-latest", "macos-14"],
+            ]

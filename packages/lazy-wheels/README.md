@@ -38,14 +38,14 @@ lazy-wheels init
 
 This creates `.github/workflows/release.yml` configured for your uv workspace.
 
-For mixed-architecture builds, use the interactive matrix builder:
+For mixed-architecture builds, specify per-package runners with `-m`:
 
 ```bash
-lazy-wheels init --matrix-builder
+lazy-wheels init -m pkg-alpha ubuntu-latest -m pkg-beta ubuntu-latest macos-14
 ```
 
-This discovers workspace packages, prompts for per-package runner(s), and writes a
-multi-job workflow that passes release state between jobs via outputs.
+Each `-m` takes a package name followed by one or more runners. This writes a
+multi-job workflow that builds each package on its specified runner(s).
 
 **Requirements:**
 - A git repository
