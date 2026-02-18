@@ -30,7 +30,7 @@ jobs:
     outputs:
       changed: ${{ steps.discover.outputs.changed }}
       unchanged: ${{ steps.discover.outputs.unchanged }}
-      last_tags: ${{ steps.discover.outputs.last_tags }}
+      release_tags: ${{ steps.discover.outputs.release_tags }}
       release: ${{ steps.discover.outputs.release }}
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ __MATRIX_INCLUDE__
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -m lazy_wheels.workflow_steps release --changed '${{ needs.discover.outputs.changed }}' --unchanged '${{ needs.discover.outputs.unchanged }}' --last-tags '${{ needs.discover.outputs.last_tags }}' --release-tag '${{ needs.discover.outputs.release }}'
+        run: python -m lazy_wheels.workflow_steps release --changed '${{ needs.discover.outputs.changed }}' --unchanged '${{ needs.discover.outputs.unchanged }}' --release-tags '${{ needs.discover.outputs.release_tags }}' --release-tag '${{ needs.discover.outputs.release }}'
       - name: Push commits and tags
         run: |
           git push

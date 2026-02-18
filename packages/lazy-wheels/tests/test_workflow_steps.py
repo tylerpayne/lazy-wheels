@@ -13,22 +13,28 @@ from lazy_wheels.workflow_steps import build, discover, main
 
 
 @patch("lazy_wheels.workflow_steps.find_next_release_tag")
-@patch("lazy_wheels.workflow_steps.find_last_tags")
+@patch("lazy_wheels.workflow_steps.find_dev_baselines")
+@patch("lazy_wheels.workflow_steps.find_release_tags")
 @patch("lazy_wheels.workflow_steps.detect_changes")
 @patch("lazy_wheels.workflow_steps.discover_packages")
 def test_discover_writes_expected_outputs(
     mock_discover: MagicMock,
     mock_detect: MagicMock,
-    mock_find_last: MagicMock,
+    mock_find_release: MagicMock,
+    mock_find_dev: MagicMock,
     mock_find_next: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """discover writes changed/unchanged/last_tags/release to output file."""
+    """discover writes changed/unchanged/release_tags/release to output file."""
     mock_discover.return_value = {
         "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
         "pkg-b": PackageInfo(path="packages/b", version="1.0.0", deps=[]),
     }
-    mock_find_last.return_value = {"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v1.0.0"}
+    mock_find_release.return_value = {"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v1.0.0"}
+    mock_find_dev.return_value = {
+        "pkg-a": "pkg-a/v1.0.0-dev",
+        "pkg-b": "pkg-b/v1.0.0-dev",
+    }
     mock_detect.return_value = ["pkg-a"]
     mock_find_next.return_value = "r7"
     output_file = tmp_path / "github_output.txt"
@@ -38,7 +44,7 @@ def test_discover_writes_expected_outputs(
     raw = output_file.read_text()
     assert 'changed=["pkg-a"]' in raw
     assert 'unchanged=["pkg-b"]' in raw
-    assert 'last_tags={"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v1.0.0"}' in raw
+    assert 'release_tags={"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v1.0.0"}' in raw
     assert "release=r7" in raw
 
 
