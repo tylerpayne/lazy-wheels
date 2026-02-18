@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import argparse
 import sys
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from lazy_wheels.workflow_steps import run_pipeline
 
-__version__ = "0.1.9"
+__version__ = pkg_version("lazy-wheels")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _version_range() -> str:
+    """Compute pip version range: >=current,<next_minor."""
+    v = __version__
+    major, minor, *_ = v.split(".")
+    return f'"lazy-wheels>={v},<{major}.{int(minor) + 1}.0"'
 
 
 def _matrix_include_lines(package_runners: dict[str, list[str]]) -> str:
@@ -72,10 +80,13 @@ def cmd_init(args: argparse.Namespace) -> None:
         rendered = template.read_text().replace(
             "__MATRIX_INCLUDE__", _matrix_include_lines(package_runners)
         )
-        dest.write_text(rendered)
     else:
         template = TEMPLATES_DIR / "release.yml"
-        dest.write_text(template.read_text())
+        rendered = template.read_text()
+
+    # Pin lazy-wheels version range
+    rendered = rendered.replace("__LAZY_WHEELS_VERSION__", _version_range())
+    dest.write_text(rendered)
 
     print(f"✓ Wrote workflow to {dest.relative_to(root)}")
     print()

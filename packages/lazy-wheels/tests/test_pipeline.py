@@ -18,7 +18,6 @@ from lazy_wheels.pipeline import (
     get_existing_wheels,
     run_release,
     tag_changed_packages,
-    tag_dev_baselines,
 )
 
 
@@ -242,7 +241,9 @@ class TestDetectChanges:
         """On first release (no tags), all packages are marked changed."""
         # No git diff called when tags are None
 
-        changed = detect_changes(sample_packages, dev_baselines=no_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=no_tags, force_all=False
+        )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -256,7 +257,9 @@ class TestDetectChanges:
         all_tags: dict[str, str],
     ) -> None:
         """force_all=True marks all packages as changed regardless of git diff."""
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=True)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=True
+        )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -277,7 +280,9 @@ class TestDetectChanges:
             "packages/c/src.py",  # pkg-c: changed
         ]
 
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=False
+        )
 
         assert set(changed) == {"pkg-c"}
 
@@ -297,7 +302,9 @@ class TestDetectChanges:
             "",  # pkg-c: no direct changes
         ]
 
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=False
+        )
 
         # pkg-a changed directly, pkg-b and pkg-c are dirty because they depend on it
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
@@ -318,7 +325,9 @@ class TestDetectChanges:
             "",  # pkg-c: no direct changes
         ]
 
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=False
+        )
 
         # pkg-b changed, pkg-c depends on it, pkg-a is unaffected
         assert set(changed) == {"pkg-b", "pkg-c"}
@@ -339,7 +348,9 @@ class TestDetectChanges:
             "pyproject.toml",  # pkg-c: root config changed
         ]
 
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=False
+        )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -359,7 +370,9 @@ class TestDetectChanges:
             "uv.lock",  # pkg-c: lock file changed
         ]
 
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=False
+        )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -379,7 +392,9 @@ class TestDetectChanges:
             "unrelated/file.txt",  # pkg-c: unrelated change
         ]
 
-        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
+        changed = detect_changes(
+            sample_packages, dev_baselines=all_tags, force_all=False
+        )
 
         assert changed == []
 

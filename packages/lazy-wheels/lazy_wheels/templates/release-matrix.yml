@@ -40,7 +40,7 @@ jobs:
       - name: Set up
         run: |
           uv python install 3.12
-          pip install lazy-wheels --break-system-packages
+          pip install __LAZY_WHEELS_VERSION__ --break-system-packages
       - name: Plan release
         id: discover
         shell: bash
@@ -63,7 +63,7 @@ __MATRIX_INCLUDE__
       - name: Set up
         run: |
           uv python install 3.12
-          pip install lazy-wheels --break-system-packages
+          pip install __LAZY_WHEELS_VERSION__ --break-system-packages
       - name: Build package
         run: python -m lazy_wheels.workflow_steps build --package '${{ matrix.package }}' --changed '${{ needs.discover.outputs.changed }}'
       - name: Upload built wheels
@@ -90,7 +90,7 @@ __MATRIX_INCLUDE__
       - name: Set up
         run: |
           uv python install 3.12
-          pip install lazy-wheels --break-system-packages
+          pip install __LAZY_WHEELS_VERSION__ --break-system-packages
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"

@@ -135,7 +135,9 @@ def main(argv: list[str] | None = None) -> None:
     elif parsed.command == "build":
         build(parsed.package, parsed.changed)
     elif parsed.command == "release":
-        release(parsed.changed, parsed.unchanged, parsed.release_tags, parsed.release_tag)
+        release(
+            parsed.changed, parsed.unchanged, parsed.release_tags, parsed.release_tag
+        )
 
 
 if __name__ == "__main__":

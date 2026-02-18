@@ -16,6 +16,12 @@ def test_release_template_has_lazy_wheels_preamble() -> None:
     assert "lazy-wheels release" in template
 
 
+def test_release_template_has_version_placeholder() -> None:
+    template = (TEMPLATES_DIR / "release.yml").read_text()
+
+    assert "__LAZY_WHEELS_VERSION__" in template
+
+
 def test_release_matrix_template_has_lazy_wheels_preamble() -> None:
     template = (TEMPLATES_DIR / "release-matrix.yml").read_text()
 
@@ -24,3 +30,10 @@ def test_release_matrix_template_has_lazy_wheels_preamble() -> None:
     assert "uv tool install lazy-wheels" in template
     assert "lazy-wheels init -m" in template
     assert "lazy-wheels release" in template
+
+
+def test_release_matrix_template_has_version_placeholder() -> None:
+    template = (TEMPLATES_DIR / "release-matrix.yml").read_text()
+
+    # Matrix template has 3 jobs that install lazy-wheels
+    assert template.count("__LAZY_WHEELS_VERSION__") == 3
