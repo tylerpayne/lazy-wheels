@@ -15,6 +15,7 @@ dev = [
     "ty>=0.0.1a6",
     "poethepoet>=0.32",
     "pytest>=8.0",
+    "pre-commit>=4.5.1",
 ]
 
 [tool.poe.tasks]
