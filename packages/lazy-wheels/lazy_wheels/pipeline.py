@@ -95,85 +95,94 @@ def discover_packages() -> dict[str, PackageInfo]:
     return packages
 
 
-def find_last_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
+def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
     """Find the most recent release tag for each package.
 
-    Tags follow the pattern {package-name}/v{version}.
+    Tags follow the pattern {package-name}/v{version}. Dev baseline tags
+    ({package-name}/v{version}-dev) are excluded.
 
     Args:
         packages: Map of package name → PackageInfo.
 
     Returns:
-        Map of package name to its last tag, or None if no tag exists.
+        Map of package name to its last release tag, or None if no tag exists.
     """
     step("Finding last release tags")
 
-    last_tags: dict[str, str | None] = {}
+    release_tags: dict[str, str | None] = {}
     for name in packages:
         # Get tags matching this package's pattern, sorted by version
         tags = git("tag", "--list", f"{name}/v*", "--sort=-v:refname", check=False)
-        tag = tags.splitlines()[0] if tags else None
-        last_tags[name] = tag
-        print(f"  {name}: {tag or '<none>'}")
+        # Find the first tag that is NOT a -dev baseline
+        found = None
+        for tag in tags.splitlines():
+            if not tag.endswith("-dev"):
+                found = tag
+                break
+        release_tags[name] = found
+        print(f"  {name}: {found or '<none>'}")
 
-    return last_tags
+    return release_tags
 
 
-def _is_only_version_bump(tag: str, pyproject_path: str) -> bool:
-    """Check if pyproject.toml changes are only version/dep version bumps.
+def find_dev_baselines(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
+    """Find the dev baseline tag for each package.
 
-    Returns True if the diff only contains changes to version fields,
-    which are mechanical changes from the release process, not real code changes.
+    After each release, a {package-name}/v{next_version}-dev tag is created
+    on the version bump commit. This tag serves as the diff baseline for the
+    next release — everything after it is "real work."
+
+    Falls back to the release tag if no -dev tag exists (backward compat).
+
+    Args:
+        packages: Map of package name → PackageInfo.
+
+    Returns:
+        Map of package name to its dev baseline tag, or None if no tag exists.
     """
-    diff = git("diff", tag, "HEAD", "--", pyproject_path, check=False)
-    if not diff:
-        return True  # No changes
+    step("Finding dev baselines")
 
-    # Check each changed line - if any line is not a version change, return False
-    for line in diff.splitlines():
-        # Skip diff metadata lines
-        if line.startswith(("diff ", "index ", "--- ", "+++ ", "@@ ")):
-            continue
-        # Skip context lines (no + or -)
-        if not line.startswith(("+", "-")):
-            continue
-        # Skip empty add/remove lines
-        if line in ("+", "-"):
-            continue
+    baselines: dict[str, str | None] = {}
+    for name in packages:
+        # First, look for -dev baseline tags
+        dev_tags = git(
+            "tag", "--list", f"{name}/v*-dev", "--sort=-v:refname", check=False
+        )
+        if dev_tags:
+            baselines[name] = dev_tags.splitlines()[0]
+        else:
+            # Fall back to release tag (backward compat with repos that
+            # don't have -dev tags yet)
+            release_tags = git(
+                "tag", "--list", f"{name}/v*", "--sort=-v:refname", check=False
+            )
+            baselines[name] = release_tags.splitlines()[0] if release_tags else None
+        print(f"  {name}: {baselines[name] or '<none>'}")
 
-        content = line[1:].strip()  # Remove +/- prefix and whitespace
-
-        # Allow version field changes
-        if content.startswith("version = "):
-            continue
-        # Allow dependency version pin changes (e.g., "pkg-alpha==0.1.1",)
-        if "==" in content and (content.endswith('",') or content.endswith('"')):
-            continue
-
-        # Any other change means this is a real change
-        return False
-
-    return True
+    return baselines
 
 
 def detect_changes(
     packages: dict[str, PackageInfo],
-    last_tags: Mapping[str, str | None],
+    dev_baselines: Mapping[str, str | None],
     force_all: bool,
 ) -> list[str]:
     """Determine which packages need to be rebuilt.
 
     A package is "dirty" and needs rebuilding if:
     1. force_all is True (rebuild everything)
-    2. No previous tag exists for the package (first release)
-    3. Any file in the package directory changed since its last tag
-       (excluding version-only bumps in pyproject.toml)
-    4. Root pyproject.toml or uv.lock changed since its last tag
+    2. No previous baseline tag exists for the package (first release)
+    3. Any file in the package directory changed since its dev baseline
+    4. Root pyproject.toml or uv.lock changed since its dev baseline
     5. Any of its dependencies are dirty (transitive dirtiness)
+
+    The dev baseline tag ({pkg}/v{version}-dev) is placed on the version
+    bump commit after each release, so only real work after the bump
+    shows up in the diff.
 
     Args:
         packages: Map of package name → PackageInfo.
-        last_tags: Map of package name → last release tag (or None).
+        dev_baselines: Map of package name → dev baseline tag (or None).
         force_all: If True, mark all packages as dirty.
 
     Returns:
@@ -186,18 +195,18 @@ def detect_changes(
         print("  Force rebuild: all packages marked dirty")
     else:
         dirty: set[str] = set()
-        # Check each package for direct changes since its own last tag
+        # Check each package for direct changes since its dev baseline
         for name, info in packages.items():
-            last_tag = last_tags.get(name)
-            if not last_tag:
+            baseline = dev_baselines.get(name)
+            if not baseline:
                 # First release for this package
                 dirty.add(name)
                 print(f"  {name}: new package")
                 continue
 
-            # Get files changed since this package's last tag
+            # Get files changed since this package's dev baseline
             changed_files = set(
-                git("diff", "--name-only", last_tag, "HEAD").splitlines()
+                git("diff", "--name-only", baseline, "HEAD").splitlines()
             )
 
             # Filter to files in this package's directory
@@ -205,24 +214,13 @@ def detect_changes(
             pkg_changed_files = {f for f in changed_files if f.startswith(prefix)}
 
             if pkg_changed_files:
-                # Check if it's only version bumps in pyproject.toml
-                pyproject_path = f"{info.path}/pyproject.toml"
-                non_pyproject_changes = pkg_changed_files - {pyproject_path}
-
-                if non_pyproject_changes:
-                    # Real code changes (not just pyproject.toml)
-                    dirty.add(name)
-                    print(f"  {name}: changed since {last_tag}")
-                elif not _is_only_version_bump(last_tag, pyproject_path):
-                    # pyproject.toml changed with more than just version bump
-                    dirty.add(name)
-                    print(f"  {name}: changed since {last_tag}")
-                # else: only version bump, skip
+                dirty.add(name)
+                print(f"  {name}: changed since {baseline}")
 
             # Root config changes affect this package
             elif changed_files & {"pyproject.toml", "uv.lock"}:
                 dirty.add(name)
-                print(f"  {name}: root config changed since {last_tag}")
+                print(f"  {name}: root config changed since {baseline}")
 
     # Build reverse dependency map
     reverse_deps: dict[str, list[str]] = {n: [] for n in packages}
@@ -328,7 +326,7 @@ def check_for_existing_wheels(changed: dict[str, PackageInfo]) -> None:
 
 def fetch_unchanged_wheels(
     unchanged: dict[str, PackageInfo],
-    last_tags: Mapping[str, str | None],
+    release_tags: Mapping[str, str | None],
 ) -> None:
     """Download wheels for unchanged packages from GitHub releases.
 
@@ -337,7 +335,7 @@ def fetch_unchanged_wheels(
 
     Args:
         unchanged: Map of unchanged package names to PackageInfo.
-        last_tags: Map of package name to last release tag (to get released version).
+        release_tags: Map of package name to last release tag (to get released version).
     """
     if not unchanged:
         return
@@ -349,7 +347,7 @@ def fetch_unchanged_wheels(
     # Use the VERSION FROM THE TAG, not the current (bumped) version
     expected: dict[str, str] = {}
     for name in unchanged:
-        tag = last_tags.get(name)
+        tag = release_tags.get(name)
         if not tag:
             print(f"  Warning: no tag found for {name}")
             continue
@@ -470,6 +468,23 @@ def tag_changed_packages(changed: dict[str, PackageInfo]) -> None:
         print(f"  {tag}")
 
 
+def tag_dev_baselines(bumped: dict[str, VersionBump]) -> None:
+    """Create dev baseline tags for each bumped package.
+
+    These tags mark the version bump commit as the diff baseline for the
+    next release. Format: {package-name}/v{new_version}-dev.
+
+    Args:
+        bumped: Map of package names to VersionBump (old → new versions).
+    """
+    step("Creating dev baseline tags")
+
+    for name, bump in bumped.items():
+        tag = f"{name}/v{bump.new}-dev"
+        git("tag", tag)
+        print(f"  {tag}")
+
+
 def bump_versions(changed: dict[str, PackageInfo], unchanged: dict[str, PackageInfo]):
     """Bump patch versions for built packages, preparing for next release.
 
@@ -577,8 +592,9 @@ def run_release(*, release: str | None = None, force_all: bool = False) -> None:
 
     # Phase 1: Discovery
     packages = discover_packages()
-    last_tags = find_last_tags(packages)
-    changed_names = detect_changes(packages, last_tags, force_all)
+    release_tags = find_release_tags(packages)
+    dev_baselines = find_dev_baselines(packages)
+    changed_names = detect_changes(packages, dev_baselines, force_all)
 
     if not changed_names:
         fatal("Nothing changed since last release.")
@@ -591,13 +607,14 @@ def run_release(*, release: str | None = None, force_all: bool = False) -> None:
     check_for_existing_wheels(changed)
 
     # Phase 2: Build
-    fetch_unchanged_wheels(unchanged, last_tags)
+    fetch_unchanged_wheels(unchanged, release_tags)
     build_packages(changed)
 
     # Phase 3: Release
     tag_changed_packages(changed)
     bumped = bump_versions(changed, unchanged)
     commit_bumps(changed, bumped)
+    tag_dev_baselines(bumped)
     publish_release(changed, unchanged, release)
     step("Pushing commits and tags.")
     git("push")

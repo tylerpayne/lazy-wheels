@@ -12,16 +12,18 @@ from lazy_wheels.pipeline import (
     check_for_existing_wheels,
     detect_changes,
     fetch_unchanged_wheels,
-    find_last_tags,
+    find_dev_baselines,
     find_next_release_tag,
+    find_release_tags,
     get_existing_wheels,
     run_release,
     tag_changed_packages,
+    tag_dev_baselines,
 )
 
 
-class TestFindLastTags:
-    """Tests for find_last_tags()."""
+class TestFindReleaseTags:
+    """Tests for find_release_tags()."""
 
     @pytest.fixture
     def sample_packages(self) -> dict[str, PackageInfo]:
@@ -39,13 +41,13 @@ class TestFindLastTags:
         mock_git: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
-        """Returns the most recent tag for each package."""
+        """Returns the most recent release tag for each package."""
         mock_git.side_effect = [
             "pkg-a/v1.0.0\npkg-a/v0.9.0",  # Tags for pkg-a
             "pkg-b/v2.0.0",  # Tags for pkg-b
         ]
 
-        result = find_last_tags(sample_packages)
+        result = find_release_tags(sample_packages)
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v2.0.0"}
 
@@ -63,7 +65,7 @@ class TestFindLastTags:
             "",  # pkg-b has no tags
         ]
 
-        result = find_last_tags(sample_packages)
+        result = find_release_tags(sample_packages)
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": None}
 
@@ -78,7 +80,95 @@ class TestFindLastTags:
         """When no packages have tags, all return None."""
         mock_git.return_value = ""
 
-        result = find_last_tags(sample_packages)
+        result = find_release_tags(sample_packages)
+
+        assert result == {"pkg-a": None, "pkg-b": None}
+
+    @patch("lazy_wheels.pipeline.git")
+    @patch("lazy_wheels.pipeline.step")
+    def test_skips_dev_tags(
+        self,
+        mock_step: MagicMock,
+        mock_git: MagicMock,
+        sample_packages: dict[str, PackageInfo],
+    ) -> None:
+        """Dev baseline tags are excluded from release tags."""
+        mock_git.side_effect = [
+            "pkg-a/v1.0.1-dev\npkg-a/v1.0.0",  # -dev tag is most recent
+            "pkg-b/v2.0.1-dev",  # Only a -dev tag
+        ]
+
+        result = find_release_tags(sample_packages)
+
+        assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": None}
+
+
+class TestFindDevBaselines:
+    """Tests for find_dev_baselines()."""
+
+    @pytest.fixture
+    def sample_packages(self) -> dict[str, PackageInfo]:
+        """Create sample packages for testing."""
+        return {
+            "pkg-a": PackageInfo(path="packages/a", version="1.0.1", deps=[]),
+            "pkg-b": PackageInfo(path="packages/b", version="1.0.1", deps=[]),
+        }
+
+    @patch("lazy_wheels.pipeline.git")
+    @patch("lazy_wheels.pipeline.step")
+    def test_returns_dev_tags(
+        self,
+        mock_step: MagicMock,
+        mock_git: MagicMock,
+        sample_packages: dict[str, PackageInfo],
+    ) -> None:
+        """Returns the most recent -dev tag for each package."""
+        mock_git.side_effect = [
+            "pkg-a/v1.0.1-dev",  # dev tag for pkg-a
+            "pkg-b/v1.0.1-dev",  # dev tag for pkg-b
+        ]
+
+        result = find_dev_baselines(sample_packages)
+
+        assert result == {
+            "pkg-a": "pkg-a/v1.0.1-dev",
+            "pkg-b": "pkg-b/v1.0.1-dev",
+        }
+
+    @patch("lazy_wheels.pipeline.git")
+    @patch("lazy_wheels.pipeline.step")
+    def test_falls_back_to_release_tag(
+        self,
+        mock_step: MagicMock,
+        mock_git: MagicMock,
+        sample_packages: dict[str, PackageInfo],
+    ) -> None:
+        """Falls back to release tag when no -dev tag exists."""
+        mock_git.side_effect = [
+            "",  # pkg-a: no -dev tags
+            "pkg-a/v1.0.0",  # pkg-a: fall back to release tag
+            "pkg-b/v1.0.1-dev",  # pkg-b: has -dev tag
+        ]
+
+        result = find_dev_baselines(sample_packages)
+
+        assert result == {
+            "pkg-a": "pkg-a/v1.0.0",
+            "pkg-b": "pkg-b/v1.0.1-dev",
+        }
+
+    @patch("lazy_wheels.pipeline.git")
+    @patch("lazy_wheels.pipeline.step")
+    def test_returns_none_for_new_packages(
+        self,
+        mock_step: MagicMock,
+        mock_git: MagicMock,
+        sample_packages: dict[str, PackageInfo],
+    ) -> None:
+        """Returns None for packages with no tags at all."""
+        mock_git.return_value = ""
+
+        result = find_dev_baselines(sample_packages)
 
         assert result == {"pkg-a": None, "pkg-b": None}
 
@@ -152,7 +242,7 @@ class TestDetectChanges:
         """On first release (no tags), all packages are marked changed."""
         # No git diff called when tags are None
 
-        changed = detect_changes(sample_packages, last_tags=no_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=no_tags, force_all=False)
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -166,7 +256,7 @@ class TestDetectChanges:
         all_tags: dict[str, str],
     ) -> None:
         """force_all=True marks all packages as changed regardless of git diff."""
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=True)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=True)
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -187,7 +277,7 @@ class TestDetectChanges:
             "packages/c/src.py",  # pkg-c: changed
         ]
 
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
 
         assert set(changed) == {"pkg-c"}
 
@@ -207,7 +297,7 @@ class TestDetectChanges:
             "",  # pkg-c: no direct changes
         ]
 
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
 
         # pkg-a changed directly, pkg-b and pkg-c are dirty because they depend on it
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
@@ -228,7 +318,7 @@ class TestDetectChanges:
             "",  # pkg-c: no direct changes
         ]
 
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
 
         # pkg-b changed, pkg-c depends on it, pkg-a is unaffected
         assert set(changed) == {"pkg-b", "pkg-c"}
@@ -249,7 +339,7 @@ class TestDetectChanges:
             "pyproject.toml",  # pkg-c: root config changed
         ]
 
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -269,7 +359,7 @@ class TestDetectChanges:
             "uv.lock",  # pkg-c: lock file changed
         ]
 
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
@@ -289,7 +379,7 @@ class TestDetectChanges:
             "unrelated/file.txt",  # pkg-c: unrelated change
         ]
 
-        changed = detect_changes(sample_packages, last_tags=all_tags, force_all=False)
+        changed = detect_changes(sample_packages, dev_baselines=all_tags, force_all=False)
 
         assert changed == []
 
@@ -339,7 +429,7 @@ class TestDetectChangesDiamondDeps:
         ]
 
         changed = detect_changes(
-            diamond_packages, last_tags=diamond_tags, force_all=False
+            diamond_packages, dev_baselines=diamond_tags, force_all=False
         )
 
         assert set(changed) == {"bottom", "left", "right", "top"}
@@ -362,7 +452,7 @@ class TestDetectChangesDiamondDeps:
         ]
 
         changed = detect_changes(
-            diamond_packages, last_tags=diamond_tags, force_all=False
+            diamond_packages, dev_baselines=diamond_tags, force_all=False
         )
 
         assert set(changed) == {"left", "top"}
@@ -385,7 +475,7 @@ class TestDetectChangesDiamondDeps:
         ]
 
         changed = detect_changes(
-            diamond_packages, last_tags=diamond_tags, force_all=False
+            diamond_packages, dev_baselines=diamond_tags, force_all=False
         )
 
         assert set(changed) == {"top"}
@@ -430,8 +520,8 @@ class TestFetchUnchangedWheels:
         )
 
         unchanged = {"pkg-a": PackageInfo(path="packages/a", version="1.0.1", deps=[])}
-        last_tags = {"pkg-a": "pkg-a/v1.0.0"}  # Released version
-        fetch_unchanged_wheels(unchanged, last_tags)
+        release_tags = {"pkg-a": "pkg-a/v1.0.0"}  # Released version
+        fetch_unchanged_wheels(unchanged, release_tags)
 
         # Verify gh release download was called
         mock_run.assert_called()
@@ -472,8 +562,8 @@ class TestFetchUnchangedWheels:
             unchanged = {
                 "pkg-a": PackageInfo(path="packages/a", version="1.0.1", deps=[])
             }
-            last_tags = {"pkg-a": "pkg-a/v1.0.0"}
-            fetch_unchanged_wheels(unchanged, last_tags)
+            release_tags = {"pkg-a": "pkg-a/v1.0.0"}
+            fetch_unchanged_wheels(unchanged, release_tags)
 
         # dist should be empty - no wheel was copied
         assert list(dist_dir.glob("*.whl")) == []
@@ -497,6 +587,7 @@ class TestRunRelease:
 
     @patch("lazy_wheels.pipeline.git")
     @patch("lazy_wheels.pipeline.publish_release")
+    @patch("lazy_wheels.pipeline.tag_dev_baselines")
     @patch("lazy_wheels.pipeline.commit_bumps")
     @patch("lazy_wheels.pipeline.bump_versions")
     @patch("lazy_wheels.pipeline.tag_changed_packages")
@@ -504,7 +595,8 @@ class TestRunRelease:
     @patch("lazy_wheels.pipeline.fetch_unchanged_wheels")
     @patch("lazy_wheels.pipeline.check_for_existing_wheels")
     @patch("lazy_wheels.pipeline.detect_changes")
-    @patch("lazy_wheels.pipeline.find_last_tags")
+    @patch("lazy_wheels.pipeline.find_dev_baselines")
+    @patch("lazy_wheels.pipeline.find_release_tags")
     @patch("lazy_wheels.pipeline.find_next_release_tag")
     @patch("lazy_wheels.pipeline.discover_packages")
     @patch("lazy_wheels.pipeline.Path")
@@ -513,7 +605,8 @@ class TestRunRelease:
         mock_path: MagicMock,
         mock_discover: MagicMock,
         mock_find_next_tag: MagicMock,
-        mock_find_tags: MagicMock,
+        mock_find_release_tags: MagicMock,
+        mock_find_dev_baselines: MagicMock,
         mock_detect: MagicMock,
         mock_check_existing: MagicMock,
         mock_fetch: MagicMock,
@@ -521,6 +614,7 @@ class TestRunRelease:
         mock_create_pkg_tags: MagicMock,
         mock_bump: MagicMock,
         mock_commit: MagicMock,
+        mock_tag_dev: MagicMock,
         mock_publish: MagicMock,
         mock_git: MagicMock,
     ) -> None:
@@ -531,23 +625,30 @@ class TestRunRelease:
             "pkg-b": PackageInfo(path="packages/b", version="1.0.0", deps=["pkg-a"]),
             "pkg-c": PackageInfo(path="packages/c", version="1.0.0", deps=["pkg-b"]),
         }
-        last_tags = {
+        release_tags = {
             "pkg-a": "pkg-a/v1.0.0",
             "pkg-b": "pkg-b/v1.0.0",
             "pkg-c": "pkg-c/v1.0.0",
+        }
+        dev_baselines = {
+            "pkg-a": "pkg-a/v1.0.0-dev",
+            "pkg-b": "pkg-b/v1.0.0-dev",
+            "pkg-c": "pkg-c/v1.0.0-dev",
         }
 
         # Mock return values
         mock_path.return_value.mkdir = MagicMock()
         mock_discover.return_value = packages
-        mock_find_tags.return_value = last_tags
+        mock_find_release_tags.return_value = release_tags
+        mock_find_dev_baselines.return_value = dev_baselines
         mock_find_next_tag.return_value = "r1"
         # pkg-b changed directly, pkg-c is dirty because it depends on pkg-b
         mock_detect.return_value = ["pkg-b", "pkg-c"]
-        mock_bump.return_value = {
+        bumped = {
             "pkg-b": MagicMock(old="1.0.0", new="1.0.1"),
             "pkg-c": MagicMock(old="1.0.0", new="1.0.1"),
         }
+        mock_bump.return_value = bumped
 
         # Execute
         run_release()
@@ -555,14 +656,13 @@ class TestRunRelease:
         # Verify discover was called
         mock_discover.assert_called_once()
 
-        # Verify detect_changes received correct args
-        mock_detect.assert_called_once_with(packages, last_tags, False)
+        # Verify detect_changes received dev baselines
+        mock_detect.assert_called_once_with(packages, dev_baselines, False)
 
-        # Verify check_for_existing_wheels was called with changed dict
-        mock_check_existing.assert_called_once()
-
-        # Verify fetch_unchanged_wheels called with unchanged dict
+        # Verify fetch_unchanged_wheels received release tags
         mock_fetch.assert_called_once()
+        fetch_args = mock_fetch.call_args
+        assert fetch_args[0][1] == release_tags
 
         # Verify build_packages called with changed dict
         mock_build.assert_called_once()
@@ -573,8 +673,9 @@ class TestRunRelease:
         # Verify bump_versions called with changed and unchanged dicts
         mock_bump.assert_called_once()
 
-        # Verify commit and publish were called
+        # Verify commit, dev baselines, and publish were called
         mock_commit.assert_called_once()
+        mock_tag_dev.assert_called_once_with(bumped)
         mock_publish.assert_called_once()
 
     @patch("lazy_wheels.pipeline.fatal")
@@ -582,14 +683,16 @@ class TestRunRelease:
     @patch("lazy_wheels.pipeline.build_packages")
     @patch("lazy_wheels.pipeline.fetch_unchanged_wheels")
     @patch("lazy_wheels.pipeline.detect_changes")
-    @patch("lazy_wheels.pipeline.find_last_tags")
+    @patch("lazy_wheels.pipeline.find_dev_baselines")
+    @patch("lazy_wheels.pipeline.find_release_tags")
     @patch("lazy_wheels.pipeline.discover_packages")
     @patch("lazy_wheels.pipeline.Path")
     def test_no_changes_exits_early(
         self,
         mock_path: MagicMock,
         mock_discover: MagicMock,
-        mock_find_tags: MagicMock,
+        mock_find_release_tags: MagicMock,
+        mock_find_dev_baselines: MagicMock,
         mock_detect: MagicMock,
         mock_fetch: MagicMock,
         mock_build: MagicMock,
@@ -598,11 +701,13 @@ class TestRunRelease:
     ) -> None:
         """When nothing changed, pipeline calls fatal."""
         packages = {"pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[])}
-        last_tags = {"pkg-a": "pkg-a/v1.0.0"}
+        release_tags = {"pkg-a": "pkg-a/v1.0.0"}
+        dev_baselines = {"pkg-a": "pkg-a/v1.0.0-dev"}
 
         mock_path.return_value.mkdir = MagicMock()
         mock_discover.return_value = packages
-        mock_find_tags.return_value = last_tags
+        mock_find_release_tags.return_value = release_tags
+        mock_find_dev_baselines.return_value = dev_baselines
         mock_detect.return_value = []  # Nothing changed
         # Make fatal actually stop execution
         mock_fatal.side_effect = SystemExit(1)

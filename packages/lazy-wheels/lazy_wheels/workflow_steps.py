@@ -13,11 +13,13 @@ from lazy_wheels.pipeline import (
     detect_changes,
     discover_packages,
     fetch_unchanged_wheels,
-    find_last_tags,
+    find_dev_baselines,
     find_next_release_tag,
+    find_release_tags,
     publish_release,
     run_release,
     tag_changed_packages,
+    tag_dev_baselines,
 )
 
 
@@ -42,15 +44,16 @@ def discover(release: str | None, force_all: bool, github_output: str) -> None:
     """Compute release plan and emit GitHub step outputs."""
     resolved_release = release or find_next_release_tag()
     packages = discover_packages()
-    last_tags = find_last_tags(packages)
-    changed = sorted(detect_changes(packages, last_tags, force_all))
+    release_tags = find_release_tags(packages)
+    dev_baselines = find_dev_baselines(packages)
+    changed = sorted(detect_changes(packages, dev_baselines, force_all))
     if not changed:
         raise SystemExit("Nothing changed since last release.")
     unchanged = sorted(name for name in packages if name not in changed)
 
     _write_output(github_output, "changed", json.dumps(changed))
     _write_output(github_output, "unchanged", json.dumps(unchanged))
-    _write_output(github_output, "last_tags", json.dumps(last_tags))
+    _write_output(github_output, "release_tags", json.dumps(release_tags))
     _write_output(github_output, "release", resolved_release)
 
 
@@ -66,21 +69,22 @@ def build(package: str, changed_json: str) -> None:
 def release(
     changed_json: str,
     unchanged_json: str,
-    last_tags_json: str,
+    release_tags_json: str,
     release_tag: str,
 ) -> None:
     """Fetch unchanged wheels, then tag, bump, commit, and publish."""
     packages = discover_packages()
     changed_names = _parse_json(changed_json, arg_name="--changed")
     unchanged_names = _parse_json(unchanged_json, arg_name="--unchanged")
-    last_tags = _parse_json(last_tags_json, arg_name="--last-tags")
+    release_tags = _parse_json(release_tags_json, arg_name="--release-tags")
 
     changed = {name: packages[name] for name in changed_names}
     unchanged = {name: packages[name] for name in unchanged_names}
-    fetch_unchanged_wheels(unchanged, last_tags)
+    fetch_unchanged_wheels(unchanged, release_tags)
     tag_changed_packages(changed)
     bumped = bump_versions(changed, unchanged)
     commit_bumps(changed, bumped)
+    tag_dev_baselines(bumped)
     publish_release(changed, unchanged, release_tag)
 
 
@@ -117,7 +121,7 @@ def main(argv: list[str] | None = None) -> None:
         "--unchanged", required=True, help="JSON array of unchanged package names."
     )
     release_parser.add_argument(
-        "--last-tags",
+        "--release-tags",
         required=True,
         help="JSON object mapping package name to its previous release tag.",
     )
@@ -131,7 +135,7 @@ def main(argv: list[str] | None = None) -> None:
     elif parsed.command == "build":
         build(parsed.package, parsed.changed)
     elif parsed.command == "release":
-        release(parsed.changed, parsed.unchanged, parsed.last_tags, parsed.release_tag)
+        release(parsed.changed, parsed.unchanged, parsed.release_tags, parsed.release_tag)
 
 
 if __name__ == "__main__":
