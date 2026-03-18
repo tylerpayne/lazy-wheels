@@ -1,0 +1,109 @@
+# Generated with uv-release-monorepo: https://github.com/tylerpayne/uv-release-monorepo
+# From your repository root, regenerate with:
+#   uv tool install uv-release-monorepo
+#   uvr init -m PKG runner1 runner2 ...
+# Trigger releases with:
+#   uvr release
+#   uvr release -r r1
+#   uvr release --force-all
+#
+name: Release Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Release tag (e.g., r1, r2). Leave empty to auto-generate."
+        type: string
+        required: false
+      force_rebuild_all:
+        description: "Force rebuild all packages"
+        type: boolean
+        default: false
+      uvr_version:
+        description: "uv-release-monorepo version to install (set automatically by `uvr release`)."
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.discover.outputs.changed }}
+      unchanged: ${{ steps.discover.outputs.unchanged }}
+      release_tags: ${{ steps.discover.outputs.release_tags }}
+      release: ${{ steps.discover.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }} --break-system-packages
+      - name: Plan release
+        id: discover
+        shell: bash
+        run: |
+          python -m uv_release_monorepo.workflow_steps discover --github-output "$GITHUB_OUTPUT" ${{ inputs.release && format('--release "{0}"', inputs.release) || '' }} ${{ inputs.force_rebuild_all == 'true' && '--force-all' || '' }}
+
+  build:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+__MATRIX_INCLUDE__
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }} --break-system-packages
+      - name: Build package
+        run: python -m uv_release_monorepo.workflow_steps build --package '${{ matrix.package }}' --changed '${{ needs.discover.outputs.changed }}'
+      - name: Upload built wheels
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.package }}-${{ matrix.runner }}
+          path: dist/*.whl
+          if-no-files-found: ignore
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [discover, build]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }} --break-system-packages
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m uv_release_monorepo.workflow_steps release --changed '${{ needs.discover.outputs.changed }}' --unchanged '${{ needs.discover.outputs.unchanged }}' --release-tags '${{ needs.discover.outputs.release_tags }}' --release-tag '${{ needs.discover.outputs.release }}'
+      - name: Push commits and tags
+        run: |
+          git push
+          git push --tags

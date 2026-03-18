@@ -1,0 +1,54 @@
+# Generated with uv-release-monorepo: https://github.com/tylerpayne/uv-release-monorepo
+# From your repository root, regenerate with:
+#   uv tool install uv-release-monorepo
+#   uvr init
+# Trigger releases with:
+#   uvr release
+#   uvr release -r r1
+#   uvr release --force-all
+#
+name: Release Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Release tag (e.g., r1, r2). Leave empty to auto-generate."
+        type: string
+        required: false
+      force_rebuild_all:
+        description: "Force rebuild all packages"
+        type: boolean
+        default: false
+      uvr_version:
+        description: "uv-release-monorepo version to install (set automatically by `uvr release`)."
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Set up
+        run: |
+          uv python install 3.12
+          pip install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }} --break-system-packages
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uvr run ${{ inputs.release && format('--release {0}', inputs.release) || '' }} ${{ inputs.force_rebuild_all && '--force-all' || '' }}

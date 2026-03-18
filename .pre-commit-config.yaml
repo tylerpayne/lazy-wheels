@@ -5,5 +5,5 @@ repos:
         name: Sync package README to root
         entry: ./scripts/sync-readme.sh
         language: script
-        files: ^packages/lazy-wheels/README\.md$
+        files: ^packages/uv-release-monorepo/README\.md$
         pass_filenames: false
