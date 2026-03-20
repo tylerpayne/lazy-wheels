@@ -6,11 +6,13 @@ pkg-alpha = { workspace = true }
 pkg-beta = { workspace = true }
 pkg-gamma = { workspace = true }
 pkg-delta = { workspace = true }
-lazy-wheels = { workspace = true }
+uv-release-monorepo = { workspace = true }
 
+
+[tool.uvr.matrix]
 [dependency-groups]
 dev = [
-    "lazy-wheels",
+    "uv-release-monorepo",
     "ruff>=0.9",
     "ty>=0.0.1a6",
     "poethepoet>=0.32",
@@ -22,8 +24,8 @@ dev = [
 format = "ruff format ."
 lint = "ruff check ."
 lintfix = "ruff check --fix ."
-typecheck = "ty check packages/lazy-wheels"
+typecheck = "ty check packages/uv-release-monorepo"
 check = ["lint", "typecheck"]
 fix = ["lintfix", "format"]
-test = "pytest packages/lazy-wheels/tests/ -v"
+test = "pytest packages/uv-release-monorepo/tests/ -v"
 all = ["fix", "check", "test"]

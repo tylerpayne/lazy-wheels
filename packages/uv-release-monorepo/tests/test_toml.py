@@ -10,9 +10,11 @@ from uv_release_monorepo.toml import (
     get_all_dependency_strings,
     get_project_name,
     get_project_version,
+    get_uvr_matrix,
     get_workspace_member_globs,
     load_pyproject,
     save_pyproject,
+    set_uvr_matrix,
 )
 
 
@@ -84,3 +86,38 @@ class TestGetWorkspaceMemberGlobs:
     def test_returns_members(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
         members = get_workspace_member_globs(sample_toml_doc)
         assert members == ["packages/*", "libs/*"]
+
+
+class TestUvrMatrix:
+    def test_get_uvr_matrix_returns_empty_when_missing(self) -> None:
+        """Returns {} when there is no [tool.uvr] section."""
+        doc = tomlkit.parse("[project]\nname = 'foo'\n")
+        assert get_uvr_matrix(doc) == {}
+
+    def test_get_uvr_matrix_returns_matrix(self) -> None:
+        """Parses a doc that has [tool.uvr.matrix]."""
+        content = """\
+[tool.uvr.matrix]
+pkg-alpha = ["ubuntu-latest", "macos-14"]
+pkg-beta = ["ubuntu-latest"]
+"""
+        doc = tomlkit.parse(content)
+        result = get_uvr_matrix(doc)
+        assert result == {
+            "pkg-alpha": ["ubuntu-latest", "macos-14"],
+            "pkg-beta": ["ubuntu-latest"],
+        }
+
+    def test_set_uvr_matrix_writes_matrix(self) -> None:
+        """set_uvr_matrix then get_uvr_matrix round-trips the data."""
+        doc = tomlkit.parse('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
+        matrix = {
+            "pkg-beta": ["ubuntu-latest", "macos-14"],
+            "pkg-alpha": ["ubuntu-latest"],
+        }
+        set_uvr_matrix(doc, matrix)
+        result = get_uvr_matrix(doc)
+        assert result == {
+            "pkg-alpha": ["ubuntu-latest"],
+            "pkg-beta": ["ubuntu-latest", "macos-14"],
+        }

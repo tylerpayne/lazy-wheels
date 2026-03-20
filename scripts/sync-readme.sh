@@ -1,12 +1,12 @@
 #!/bin/bash
 # Sync package README to root README
 # Replaces everything before "## Repository Structure" in root README
-# with the contents of packages/lazy-wheels/README.md
+# with the contents of packages/uv-release-monorepo/README.md
 
 set -e
 
 ROOT_README="README.md"
-PKG_README="packages/lazy-wheels/README.md"
+PKG_README="packages/uv-release-monorepo/README.md"
 MARKER="## Repository Structure"
 
 if [[ ! -f "$PKG_README" ]]; then

@@ -26,7 +26,7 @@ from packaging.utils import canonicalize_name
 
 from .deps import dep_canonical_name, rewrite_pyproject
 from .graph import topo_sort
-from .models import PackageInfo, VersionBump
+from .models import MatrixEntry, PackageInfo, PublishedPackage, ReleasePlan, VersionBump
 from .shell import fatal, gh, git, run, step
 from .toml import (
     get_all_dependency_strings,
@@ -336,91 +336,51 @@ def fetch_unchanged_wheels(
     unchanged: dict[str, PackageInfo],
     release_tags: Mapping[str, str | None],
 ) -> None:
-    """Download wheels for unchanged packages from GitHub releases.
+    """Download wheels for unchanged packages from their per-package GitHub releases.
 
-    This avoids rebuilding packages that haven't changed - we just reuse
-    the previously-built wheels. Searches all releases to find matching wheels.
+    Each package has its own GitHub release tagged {package}/v{version}. This
+    function downloads the wheel for each unchanged package directly from its
+    release, avoiding a full scan of all releases.
 
     Args:
         unchanged: Map of unchanged package names to PackageInfo.
-        release_tags: Map of package name to last release tag (to get released version).
+        release_tags: Map of package name to last release tag (e.g. "pkg/v1.2.3").
     """
     if not unchanged:
         return
 
     step("Fetching unchanged wheels from releases")
 
-    # Build map of expected wheel prefix → package name
-    # Wheel filenames use underscores, not hyphens
-    # Use the VERSION FROM THE TAG, not the current (bumped) version
-    expected: dict[str, str] = {}
     for name in unchanged:
         tag = release_tags.get(name)
         if not tag:
-            print(f"  Warning: no tag found for {name}")
+            print(f"  Warning: no release tag for {name}, skipping")
             continue
-        # Extract version from tag: "pkg-name/v1.2.3" → "1.2.3"
-        released_version = tag.split("/v")[-1] if "/v" in tag else None
-        if not released_version:
-            print(f"  Warning: could not parse version from tag {tag}")
-            continue
+
         wheel_name = canonicalize_name(name).replace("-", "_")
-        wheel_prefix = f"{wheel_name}-{released_version}-"
-        expected[wheel_prefix] = name
-
-    # Get list of releases
-    output = gh("release", "list", "--json", "tagName", "--limit", "100", check=False)
-    if not output:
-        print("  No releases found")
-        return
-
-    try:
-        releases = json.loads(output)
-    except json.JSONDecodeError:
-        print("  Failed to parse releases")
-        return
-
-    tmp_dir = Path("/tmp/prev-wheels")
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
-    found: set[str] = set()
-
-    # Search releases for matching wheels
-    for release in releases:
-        if len(found) == len(expected):
-            break  # Found all wheels we need
-
-        tag = release.get("tagName", "")
-        if not tag:
-            continue
-
-        # Download wheels from this release
-        run(
+        result = run(
             "gh",
             "release",
             "download",
             tag,
-            "--dir",
-            str(tmp_dir),
             "--pattern",
-            "*.whl",
+            f"{wheel_name}-*.whl",
+            "--dir",
+            "dist/",
             "--clobber",
             check=False,
         )
+        if result.returncode != 0:
+            print(f"  Warning: could not download wheel for {name} from {tag}")
+            continue
 
-        # Check for matching wheels
-        for whl in tmp_dir.glob("*.whl"):
-            for prefix, pkg_name in expected.items():
-                if whl.name.startswith(prefix) and pkg_name not in found:
-                    print(f"  Reusing: {whl.name}")
-                    (Path("dist") / whl.name).write_bytes(whl.read_bytes())
-                    found.add(pkg_name)
-                    break
-
-    # Report any missing wheels
-    missing = set(expected.values()) - found
-    for name in missing:
-        print(f"  Warning: no wheel found for {name}")
+        # Find what was downloaded and report it
+        released_version = tag.split("/v")[-1] if "/v" in tag else ""
+        found = list(Path("dist").glob(f"{wheel_name}-{released_version}-*.whl"))
+        if found:
+            print(f"  Reusing: {found[0].name}")
+        else:
+            print(f"  Warning: no wheel found for {name} after downloading {tag}")
 
 
 def build_packages(changed: dict[str, PackageInfo]) -> None:
@@ -439,27 +399,6 @@ def build_packages(changed: dict[str, PackageInfo]) -> None:
         result = run("uv", "build", info.path, "--out-dir", "dist/", check=False)
         if result.returncode != 0:
             fatal(f"Failed to build {pkg}. Check uv build output above for details.")
-
-
-def find_next_release_tag() -> str:
-    """Find the next release tag (r1, r2, r3, ...).
-
-    Looks for existing tags matching the r<N> pattern and returns
-    the next sequential number.
-
-    Returns:
-        The next release tag (e.g., "r1" if no releases exist, "r5" if r4 is latest).
-    """
-    tags = git("tag", "--list", "r*", "--sort=-creatordate", check=False)
-    if not tags:
-        return "r1"
-
-    # Find the highest numbered release tag
-    for tag in tags.splitlines():
-        if tag.startswith("r") and tag[1:].isdigit():
-            return f"r{int(tag[1:]) + 1}"
-
-    return "r1"
 
 
 def tag_changed_packages(changed: dict[str, PackageInfo]) -> None:
@@ -493,32 +432,70 @@ def tag_dev_baselines(bumped: dict[str, VersionBump]) -> None:
         print(f"  {tag}")
 
 
-def bump_versions(changed: dict[str, PackageInfo], unchanged: dict[str, PackageInfo]):
-    """Bump patch versions for built packages, preparing for next release.
+def collect_published_state(
+    changed: dict[str, PackageInfo],
+    unchanged: dict[str, PackageInfo],
+    release_tags: Mapping[str, str | None],
+) -> dict[str, PublishedPackage]:
+    """Record the published version of each package in this release cycle.
+
+    Creates a snapshot of what version is now available on PyPI for every
+    package — either just-built (changed) or fetched from a prior release
+    (unchanged). This snapshot is used by bump_versions() to write correct
+    minimum-version constraints into dependent packages' pyproject.toml files.
+
+    Args:
+        changed: Packages that were rebuilt in this cycle.
+        unchanged: Packages whose previous wheel was reused.
+        release_tags: Most recent release tag per package (e.g. "pkg/v0.1.5").
+    """
+    state: dict[str, PublishedPackage] = {}
+    for name, info in changed.items():
+        state[name] = PublishedPackage(
+            info=info, published_version=info.version, changed=True
+        )
+    for name, info in unchanged.items():
+        tag = release_tags.get(name)
+        published = tag.split("/v")[-1] if tag and "/v" in tag else info.version
+        state[name] = PublishedPackage(
+            info=info, published_version=published, changed=False
+        )
+    return state
+
+
+def bump_versions(
+    published_state: dict[str, PublishedPackage],
+) -> dict[str, VersionBump]:
+    """Bump patch versions for changed packages, preparing for next release.
 
     After releasing 1.2.3, bumps to 1.2.4 so the next release will have
-    a higher version. Also updates internal dep pins to match new versions.
+    a higher version. Pins internal dep constraints to the just-published
+    versions (not the bumped dev versions) so that published wheels remain
+    installable even when only a subset of packages change.
+
+    Args:
+        published_state: Per-package published state from collect_published_state().
     """
     step("Bumping versions for next release")
 
-    # Calculate new versions for all built packages
+    changed_pkgs = {name: pkg for name, pkg in published_state.items() if pkg.changed}
     bumped: dict[str, VersionBump] = {}
-    for name, info in changed.items():
-        bumped[name] = VersionBump(old=info.version, new=bump_patch(info.version))
-
-    # Build a complete version map (bumped packages get new version,
-    # unchanged packages keep current version)
-    all_versions: dict[str, str] = {name: bumped[name].new for name in changed} | {
-        name: info.version for name, info in unchanged.items()
-    }
-
-    # Rewrite pyproject.toml for each built package
-    for name, info in changed.items():
-        pkg_path = Path(info.path)
-        # Get versions of internal deps for pinning
-        internal_dep_versions = {dep: all_versions[dep] for dep in info.deps}
+    for name, pkg in changed_pkgs.items():
+        bumped[name] = VersionBump(
+            old=pkg.info.version, new=bump_patch(pkg.info.version)
+        )
+        # Pin internal deps to the version that was actually published this cycle,
+        # not the bumped dev version — so the wheel stays installable if only
+        # some packages change in the next cycle.
+        internal_dep_versions = {
+            dep: published_state[dep].published_version
+            for dep in pkg.info.deps
+            if dep in published_state
+        }
         rewrite_pyproject(
-            pkg_path / "pyproject.toml", bumped[name].new, internal_dep_versions
+            Path(pkg.info.path) / "pyproject.toml",
+            bumped[name].new,
+            internal_dep_versions,
         )
         print(f"  {name}: {bumped[name].old} → {bumped[name].new}")
 
@@ -553,60 +530,64 @@ def commit_bumps(
 
 def publish_release(
     changed: dict[str, PackageInfo],
-    unchanged: dict[str, PackageInfo],
-    tag: str,
     release_tags: Mapping[str, str | None],
 ) -> None:
-    """Create a GitHub release with all wheels attached."""
-    step("Creating GitHub release")
+    """Create one GitHub release per changed package with its wheels attached.
 
-    wheels = sorted(str(p) for p in Path("dist").glob("*.whl"))
-    if not wheels:
-        fatal(
-            "No wheels found in dist/. "
-            "Ensure build_packages ran successfully, or use --force-all."
+    Each package gets its own release tagged {package}/v{version}, containing
+    only that package's wheel(s). Release notes include per-package commit log
+    since the last release.
+
+    Args:
+        changed: Map of changed package names to PackageInfo.
+        release_tags: Most recent release tag per package (for changelog baseline).
+    """
+    step("Creating GitHub releases")
+
+    for name, info in changed.items():
+        release_tag = f"{name}/v{info.version}"
+        wheel_name = canonicalize_name(name).replace("-", "_")
+        wheels = sorted(
+            str(p) for p in Path("dist").glob(f"{wheel_name}-{info.version}-*.whl")
         )
+        if not wheels:
+            fatal(
+                f"No wheels found for {name} {info.version} in dist/. "
+                "Ensure build_packages ran successfully."
+            )
 
-    # Build release notes
-    lines: list[str] = []
-    if changed:
-        lines.append("**Released:**")
-        for pkg, info in changed.items():
-            lines.append(f"- {pkg} {info.version}")
-            baseline = release_tags.get(pkg)
-            if baseline:
-                log = git(
-                    "log",
-                    "--oneline",
-                    f"{baseline}..HEAD",
-                    "--",
-                    info.path,
-                    check=False,
-                )
-                if log:
-                    lines.append("  Commits:")
-                    for entry in log.splitlines()[:10]:
-                        lines.append(f"  - {entry}")
-    if unchanged:
-        lines.append("")
-        lines.append("**Unchanged:** " + ", ".join(unchanged.keys()))
+        # Per-package release notes
+        lines: list[str] = [f"**Released:** {name} {info.version}"]
+        baseline = release_tags.get(name)
+        if baseline:
+            log = git(
+                "log",
+                "--oneline",
+                f"{baseline}..HEAD",
+                "--",
+                info.path,
+                check=False,
+            )
+            if log:
+                lines += ["", "**Commits:**"]
+                for entry in log.splitlines()[:10]:
+                    lines.append(f"- {entry}")
 
-    print(f"  {tag} with {len(wheels)} wheels")
-    gh(
-        "release",
-        "create",
-        tag,
-        *wheels,
-        "--title",
-        f"Release {tag}",
-        "--notes",
-        "\n".join(lines),
-    )
+        gh(
+            "release",
+            "create",
+            release_tag,
+            *wheels,
+            "--title",
+            f"{name} {info.version}",
+            "--notes",
+            "\n".join(lines),
+        )
+        print(f"  {release_tag} ({len(wheels)} wheels)")
 
 
 def run_release(
     *,
-    release: str | None = None,
     force_all: bool = False,
     push: bool = True,
     dry_run: bool = False,
@@ -614,18 +595,11 @@ def run_release(
     """Execute the full release pipeline.
 
     Args:
-        release: Release tag (e.g., "r1", "r2"). If not provided, auto-generates
-                 the next sequential release number.
         force_all: If True, rebuild all packages regardless of changes.
         push: If True (default), push commits and tags at the end.
         dry_run: If True, print what would happen without making any changes.
     """
     Path("dist").mkdir(parents=True, exist_ok=True)
-
-    # Determine release tag
-    if not release:
-        release = find_next_release_tag()
-        step(f"Auto-generated release tag: {release}")
 
     # Phase 1: Discovery
     packages = discover_packages()
@@ -645,7 +619,6 @@ def run_release(
 
     if dry_run:
         step("Dry-run: plan summary (no changes made)")
-        print(f"  Release tag: {release}")
         print(f"  Would build: {', '.join(sorted(changed)) or 'none'}")
         print(f"  Would reuse: {', '.join(sorted(unchanged)) or 'none'}")
         for name, info in changed.items():
@@ -661,10 +634,90 @@ def run_release(
     build_packages(changed)
 
     # Phase 3: Publish first, then tag/bump only on success
-    publish_release(changed, unchanged, release, release_tags)
+    published_state = collect_published_state(changed, unchanged, release_tags)
+    publish_release(changed, release_tags)
     tag_changed_packages(changed)
-    bumped = bump_versions(changed, unchanged)
+    bumped = bump_versions(published_state)
     commit_bumps(changed, bumped)
+    tag_dev_baselines(bumped)
+
+    if push:
+        step("Pushing commits and tags.")
+        git("push")
+        git("push", "--tags")
+
+    print(f"\n{'=' * 60}\nDone!\n{'=' * 60}")
+
+
+def build_plan(
+    *,
+    force_all: bool,
+    matrix: dict[str, list[str]],
+    uvr_version: str,
+    python_version: str = "3.12",
+) -> ReleasePlan:
+    """Run discovery locally and return a ReleasePlan. Makes no git writes.
+
+    Args:
+        force_all: If True, mark all packages as changed.
+        matrix: Stored per-package runner config from the workflow file.
+        uvr_version: The uvr version to embed in the plan.
+
+    Returns:
+        A ReleasePlan ready for inspection or dispatch to the executor workflow.
+    """
+    packages = discover_packages()
+    release_tags = find_release_tags(packages)
+    dev_baselines = find_dev_baselines(packages)
+    changed_names = detect_changes(packages, dev_baselines, force_all)
+
+    changed = {name: packages[name] for name in changed_names}
+    unchanged = {
+        name: info for name, info in packages.items() if name not in changed_names
+    }
+
+    # Expand matrix — only changed packages need build runners
+    matrix_entries: list[MatrixEntry] = []
+    for name in sorted(changed_names):
+        runners = matrix.get(name, ["ubuntu-latest"])
+        for runner in runners:
+            matrix_entries.append(MatrixEntry(package=name, runner=runner))
+
+    return ReleasePlan(
+        uvr_version=uvr_version,
+        python_version=python_version,
+        force_all=force_all,
+        changed=changed,
+        unchanged=unchanged,
+        release_tags=release_tags,
+        matrix=matrix_entries,
+    )
+
+
+def execute_plan(plan: ReleasePlan, *, push: bool = True) -> None:
+    """Execute a ReleasePlan: build, publish, tag, bump, commit, push.
+
+    Intended for local execution via `uvr run --plan`. The executor workflow
+    uses execute_build / execute_release (in workflow_steps.py) instead, with
+    the push step handled by the workflow YAML directly.
+
+    Args:
+        plan: The release plan to execute.
+        push: If True (default), push commits and tags at the end.
+    """
+    Path("dist").mkdir(parents=True, exist_ok=True)
+
+    check_for_existing_wheels(plan.changed)
+    fetch_unchanged_wheels(plan.unchanged, plan.release_tags)
+    build_packages(plan.changed)
+
+    published_state = collect_published_state(
+        plan.changed, plan.unchanged, plan.release_tags
+    )
+    publish_release(plan.changed, plan.release_tags)
+    tag_changed_packages(plan.changed)
+    bumped = bump_versions(published_state)
+    commit_bumps(plan.changed, bumped)
     tag_dev_baselines(bumped)
 
     if push:

@@ -6,15 +6,16 @@ import argparse
 import json
 import sys
 
-from uv_release_monorepo.pipeline import (
+from .models import ReleasePlan
+from .pipeline import (
     build_packages,
     bump_versions,
+    collect_published_state,
     commit_bumps,
     detect_changes,
     discover_packages,
     fetch_unchanged_wheels,
     find_dev_baselines,
-    find_next_release_tag,
     find_release_tags,
     publish_release,
     run_release,
@@ -27,11 +28,49 @@ from uv_release_monorepo.pipeline import (
 SCHEMA_VERSION = 1
 
 
-def run_pipeline(
-    release: str | None, force_all: bool, push: bool = True, dry_run: bool = False
-) -> None:
+def run_pipeline(force_all: bool, push: bool = True, dry_run: bool = False) -> None:
     """Run the full release pipeline."""
-    run_release(release=release, force_all=force_all, push=push, dry_run=dry_run)
+    run_release(force_all=force_all, push=push, dry_run=dry_run)
+
+
+def execute_build(plan_json: str, package: str) -> None:
+    """CI build step: build one package if it is in the plan's changed set."""
+    plan = ReleasePlan.model_validate_json(plan_json)
+    if package not in plan.changed:
+        print(f"  {package} not in changed list, skipping")
+        return
+    build_packages({package: plan.changed[package]})
+
+
+def execute_fetch_unchanged(plan_json: str) -> None:
+    """CI step: download wheels for unchanged packages from their GitHub releases."""
+    plan = ReleasePlan.model_validate_json(plan_json)
+    fetch_unchanged_wheels(plan.unchanged, plan.release_tags)
+
+
+def execute_publish_releases(plan_json: str) -> None:
+    """CI step: create one GitHub release per changed package."""
+    plan = ReleasePlan.model_validate_json(plan_json)
+    publish_release(plan.changed, plan.release_tags)
+
+
+def execute_finalize(plan_json: str) -> None:
+    """CI step: tag packages, bump versions, commit, and tag dev baselines."""
+    plan = ReleasePlan.model_validate_json(plan_json)
+    published_state = collect_published_state(
+        plan.changed, plan.unchanged, plan.release_tags
+    )
+    tag_changed_packages(plan.changed)
+    bumped = bump_versions(published_state)
+    commit_bumps(plan.changed, bumped)
+    tag_dev_baselines(bumped)
+
+
+def execute_release(plan_json: str) -> None:
+    """Run all release steps in sequence (convenience wrapper for local use)."""
+    execute_fetch_unchanged(plan_json)
+    execute_publish_releases(plan_json)
+    execute_finalize(plan_json)
 
 
 def _parse_json(value: str, *, arg_name: str):
@@ -66,9 +105,8 @@ def _write_output(output_path: str, name: str, value: str) -> None:
         fh.write(f"{name}={value}\n")
 
 
-def discover(release: str | None, force_all: bool, github_output: str) -> None:
+def discover(force_all: bool, github_output: str) -> None:
     """Compute release plan and emit GitHub step outputs."""
-    resolved_release = release or find_next_release_tag()
     packages = discover_packages()
     release_tags = find_release_tags(packages)
     dev_baselines = find_dev_baselines(packages)
@@ -81,7 +119,6 @@ def discover(release: str | None, force_all: bool, github_output: str) -> None:
     _write_output(github_output, "changed", json.dumps(changed))
     _write_output(github_output, "unchanged", json.dumps(unchanged))
     _write_output(github_output, "release_tags", json.dumps(release_tags))
-    _write_output(github_output, "release", resolved_release)
 
 
 def build(package: str, changed_json: str) -> None:
@@ -97,9 +134,8 @@ def release(
     changed_json: str,
     unchanged_json: str,
     release_tags_json: str,
-    release_tag: str,
 ) -> None:
-    """Fetch unchanged wheels, then tag, bump, commit, and publish."""
+    """Fetch unchanged wheels, then publish, tag, bump, and commit."""
     packages = discover_packages()
     changed_names = _parse_package_list(changed_json, arg_name="--changed")
     unchanged_names = _parse_package_list(unchanged_json, arg_name="--unchanged")
@@ -107,10 +143,11 @@ def release(
 
     changed = {name: packages[name] for name in changed_names}
     unchanged = {name: packages[name] for name in unchanged_names}
+    published_state = collect_published_state(changed, unchanged, release_tags)
     fetch_unchanged_wheels(unchanged, release_tags)
-    publish_release(changed, unchanged, release_tag, release_tags)
+    publish_release(changed, release_tags)
     tag_changed_packages(changed)
-    bumped = bump_versions(changed, unchanged)
+    bumped = bump_versions(published_state)
     commit_bumps(changed, bumped)
     tag_dev_baselines(bumped)
 
@@ -124,9 +161,6 @@ def main(argv: list[str] | None = None) -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     discover_parser = subparsers.add_parser("discover")
-    discover_parser.add_argument(
-        "--release", default=None, help="Release tag to use; auto-generated if omitted."
-    )
     discover_parser.add_argument(
         "--force-all",
         action="store_true",
@@ -154,19 +188,50 @@ def main(argv: list[str] | None = None) -> None:
         required=True,
         help="JSON object mapping package name to its previous release tag.",
     )
-    release_parser.add_argument(
-        "--release-tag", required=True, help="Release tag to publish."
+
+    execute_build_parser = subparsers.add_parser("execute-build")
+    execute_build_parser.add_argument(
+        "--plan", required=True, help="Release plan JSON."
     )
+    execute_build_parser.add_argument(
+        "--package", required=True, help="Package name to build."
+    )
+
+    execute_release_parser = subparsers.add_parser("execute-release")
+    execute_release_parser.add_argument(
+        "--plan", required=True, help="Release plan JSON."
+    )
+
+    fetch_unchanged_parser = subparsers.add_parser("fetch-unchanged")
+    fetch_unchanged_parser.add_argument(
+        "--plan", required=True, help="Release plan JSON."
+    )
+
+    publish_releases_parser = subparsers.add_parser("publish-releases")
+    publish_releases_parser.add_argument(
+        "--plan", required=True, help="Release plan JSON."
+    )
+
+    finalize_parser = subparsers.add_parser("finalize")
+    finalize_parser.add_argument("--plan", required=True, help="Release plan JSON.")
 
     parsed = parser.parse_args(args)
     if parsed.command == "discover":
-        discover(parsed.release, parsed.force_all, parsed.github_output)
+        discover(parsed.force_all, parsed.github_output)
     elif parsed.command == "build":
         build(parsed.package, parsed.changed)
     elif parsed.command == "release":
-        release(
-            parsed.changed, parsed.unchanged, parsed.release_tags, parsed.release_tag
-        )
+        release(parsed.changed, parsed.unchanged, parsed.release_tags)
+    elif parsed.command == "execute-build":
+        execute_build(parsed.plan, parsed.package)
+    elif parsed.command == "execute-release":
+        execute_release(parsed.plan)
+    elif parsed.command == "fetch-unchanged":
+        execute_fetch_unchanged(parsed.plan)
+    elif parsed.command == "publish-releases":
+        execute_publish_releases(parsed.plan)
+    elif parsed.command == "finalize":
+        execute_finalize(parsed.plan)
 
 
 if __name__ == "__main__":

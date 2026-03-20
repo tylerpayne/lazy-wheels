@@ -4,21 +4,21 @@ requires-python = ">=3.11"
 
 [manifest]
 members = [
-    "lazy-wheels",
     "pkg-alpha",
     "pkg-beta",
     "pkg-delta",
     "pkg-gamma",
+    "uv-release-monorepo",
 ]
 
 [manifest.dependency-groups]
 dev = [
-    { name = "lazy-wheels", editable = "packages/lazy-wheels" },
     { name = "poethepoet", specifier = ">=0.32" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.9" },
     { name = "ty", specifier = ">=0.0.1a6" },
+    { name = "uv-release-monorepo", editable = "packages/uv-release-monorepo" },
 ]
 
 [[package]]
@@ -82,25 +82,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
-]
-
-[[package]]
-name = "lazy-wheels"
-version = "0.2.1"
-source = { editable = "packages/lazy-wheels" }
-dependencies = [
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "semver" },
-    { name = "tomlkit" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "packaging", specifier = ">=23.0" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "semver", specifier = ">=3.0" },
-    { name = "tomlkit", specifier = ">=0.12" },
 ]
 
 [[package]]
@@ -493,6 +474,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/e3/70399cb7dd41c10ac53367ae42139cf4b1ca5f36bb3dc6c9d33acdb43655/typing_inspection-0.4.2.tar.gz", hash = "sha256:ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464", size = 75949, upload-time = "2025-10-01T02:14:41.687Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl", hash = "sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7", size = 14611, upload-time = "2025-10-01T02:14:40.154Z" },
+]
+
+[[package]]
+name = "uv-release-monorepo"
+version = "0.3.0"
+source = { editable = "packages/uv-release-monorepo" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "semver" },
+    { name = "tomlkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "packaging", specifier = ">=23.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "semver", specifier = ">=3.0" },
+    { name = "tomlkit", specifier = ">=0.12" },
 ]
 
 [[package]]

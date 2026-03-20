@@ -7,10 +7,10 @@ pyproject.toml files to pin internal workspace dependencies to exact versions.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
+from tomlkit.items import Table
 
 from .toml import load_pyproject, save_pyproject
 
@@ -41,7 +41,7 @@ def pin_dep(dep_str: str, version: str) -> str:
     req = Requirement(dep_str)
     # Sort extras alphabetically for consistent output
     extras = f"[{','.join(sorted(req.extras))}]" if req.extras else ""
-    return f"{req.name}{extras}=={version}"
+    return f"{req.name}{extras}>={version}"
 
 
 def rewrite_pyproject(
@@ -68,8 +68,8 @@ def rewrite_pyproject(
         internal_dep_versions: Map of package name → version for internal deps.
     """
     doc = load_pyproject(pyproject_path)
-    # Cast needed because tomlkit types are complex unions
-    project = cast(dict[str, Any], doc["project"])
+    project = doc["project"]
+    assert isinstance(project, Table)
     project["version"] = new_version
 
     if internal_dep_versions:

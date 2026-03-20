@@ -7,14 +7,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uv_release_monorepo.models import PackageInfo
+from uv_release_monorepo.models import (
+    MatrixEntry,
+    PackageInfo,
+    PublishedPackage,
+    ReleasePlan,
+)
 from uv_release_monorepo.pipeline import (
+    build_plan,
+    bump_versions,
     check_for_existing_wheels,
+    collect_published_state,
     detect_changes,
     discover_packages,
+    execute_plan,
     fetch_unchanged_wheels,
     find_dev_baselines,
-    find_next_release_tag,
     find_release_tags,
     get_existing_wheels,
     publish_release,
@@ -172,37 +180,6 @@ class TestFindDevBaselines:
         result = find_dev_baselines(sample_packages)
 
         assert result == {"pkg-a": None, "pkg-b": None}
-
-
-class TestFindNextReleaseTag:
-    """Tests for find_next_release_tag()."""
-
-    @patch("uv_release_monorepo.pipeline.git")
-    def test_first_release(self, mock_git: MagicMock) -> None:
-        """When no releases exist, returns r1."""
-        mock_git.return_value = ""
-
-        result = find_next_release_tag()
-
-        assert result == "r1"
-
-    @patch("uv_release_monorepo.pipeline.git")
-    def test_increments_from_last(self, mock_git: MagicMock) -> None:
-        """Returns one more than the highest existing release."""
-        mock_git.return_value = "r5\nr4\nr3"
-
-        result = find_next_release_tag()
-
-        assert result == "r6"
-
-    @patch("uv_release_monorepo.pipeline.git")
-    def test_handles_single_release(self, mock_git: MagicMock) -> None:
-        """Works with a single existing release."""
-        mock_git.return_value = "r1"
-
-        result = find_next_release_tag()
-
-        assert result == "r2"
 
 
 class TestDetectChanges:
@@ -614,14 +591,12 @@ class TestRunRelease:
     @patch("uv_release_monorepo.pipeline.detect_changes")
     @patch("uv_release_monorepo.pipeline.find_dev_baselines")
     @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.find_next_release_tag")
     @patch("uv_release_monorepo.pipeline.discover_packages")
     @patch("uv_release_monorepo.pipeline.Path")
     def test_golden_path_partial_rebuild(
         self,
         mock_path: MagicMock,
         mock_discover: MagicMock,
-        mock_find_next_tag: MagicMock,
         mock_find_release_tags: MagicMock,
         mock_find_dev_baselines: MagicMock,
         mock_detect: MagicMock,
@@ -658,7 +633,6 @@ class TestRunRelease:
         mock_discover.return_value = packages
         mock_find_release_tags.return_value = release_tags
         mock_find_dev_baselines.return_value = dev_baselines
-        mock_find_next_tag.return_value = "r1"
         # pkg-b changed directly, pkg-c is dirty because it depends on pkg-b
         mock_detect.return_value = ["pkg-b", "pkg-c"]
         bumped = {
@@ -923,32 +897,6 @@ class TestCheckForDuplicateVersions:
         assert "pkg-b 2.0.0" in error_msg
 
 
-class TestFindNextReleaseTagSort:
-    """Tests for find_next_release_tag() sort correctness beyond r9."""
-
-    @patch("uv_release_monorepo.pipeline.git")
-    def test_sort_by_creatordate_r10(self, mock_git: MagicMock) -> None:
-        """find_next_release_tag uses --sort=-creatordate (handles r10+)."""
-        # Simulate git returning tags newest-first (as creatordate would)
-        mock_git.return_value = "r10\nr9\nr8"
-
-        result = find_next_release_tag()
-
-        assert result == "r11"
-        # Verify --sort=-creatordate is used (not -v:refname)
-        call_args = mock_git.call_args[0]
-        assert "--sort=-creatordate" in call_args
-
-    @patch("uv_release_monorepo.pipeline.git")
-    def test_handles_non_numeric_r_tags(self, mock_git: MagicMock) -> None:
-        """Skips r* tags that don't have numeric suffixes."""
-        mock_git.return_value = "readme\nr3\nr2"
-
-        result = find_next_release_tag()
-
-        assert result == "r4"
-
-
 class TestPublishReleaseChangelog:
     """Tests for publish_release() changelog generation."""
 
@@ -982,7 +930,7 @@ class TestPublishReleaseChangelog:
                 }
                 release_tags = {"pkg-a": "pkg-a/v0.9.0"}
 
-                publish_release(changed, {}, "r1", release_tags)
+                publish_release(changed, release_tags)
 
                 notes = mock_gh.call_args[0]
                 notes_str = " ".join(notes)
@@ -1017,7 +965,7 @@ class TestPublishReleaseChangelog:
                 }
                 release_tags: dict[str, str | None] = {"pkg-a": None}
 
-                publish_release(changed, {}, "r1", release_tags)
+                publish_release(changed, release_tags)
 
                 # git should not be called for commit log (no baseline)
                 mock_git.assert_not_called()
@@ -1056,8 +1004,7 @@ class TestRunReleaseDryRun:
         mock_find_dev_baselines.return_value = {"pkg-a": "pkg-a/v1.0.0-dev"}
         mock_detect.return_value = ["pkg-a"]
 
-        # Pass an explicit release tag to avoid find_next_release_tag() calling git
-        run_release(release="r1", dry_run=True)
+        run_release(dry_run=True)
 
         # No mutations should happen
         mock_build.assert_not_called()
@@ -1124,3 +1071,377 @@ class TestDiscoverPackagesRoot:
 
         assert "my-pkg" in result
         assert result["my-pkg"].version == "0.1.0"
+
+
+class TestCollectPublishedState:
+    """Tests for collect_published_state()."""
+
+    def _pkg(
+        self, name: str, version: str, deps: list[str] | None = None
+    ) -> PackageInfo:
+        return PackageInfo(path=f"packages/{name}", version=version, deps=deps or [])
+
+    def test_changed_package_uses_info_version(self) -> None:
+        """Changed packages: published_version == info.version (pre-bump)."""
+        alpha = self._pkg("pkg-alpha", "0.1.5")
+        state = collect_published_state(
+            changed={"pkg-alpha": alpha},
+            unchanged={},
+            release_tags={"pkg-alpha": "pkg-alpha/v0.1.4"},
+        )
+        assert state["pkg-alpha"].published_version == "0.1.5"
+        assert state["pkg-alpha"].changed is True
+
+    def test_unchanged_package_uses_release_tag_version(self) -> None:
+        """Unchanged packages: published_version == version from release tag."""
+        alpha = self._pkg("pkg-alpha", "0.1.6")  # pyproject already bumped to dev
+        state = collect_published_state(
+            changed={},
+            unchanged={"pkg-alpha": alpha},
+            release_tags={"pkg-alpha": "pkg-alpha/v0.1.5"},
+        )
+        assert state["pkg-alpha"].published_version == "0.1.5"
+        assert state["pkg-alpha"].changed is False
+
+    def test_unchanged_package_no_tag_falls_back_to_info_version(self) -> None:
+        """Unchanged packages without a release tag fall back to info.version."""
+        alpha = self._pkg("pkg-alpha", "0.1.0")
+        state = collect_published_state(
+            changed={},
+            unchanged={"pkg-alpha": alpha},
+            release_tags={"pkg-alpha": None},
+        )
+        assert state["pkg-alpha"].published_version == "0.1.0"
+
+    def test_mixed_changed_and_unchanged(self) -> None:
+        """Both changed and unchanged packages appear in state."""
+        alpha = self._pkg("pkg-alpha", "0.1.5")
+        beta = self._pkg("pkg-beta", "0.1.6")
+        state = collect_published_state(
+            changed={"pkg-alpha": alpha},
+            unchanged={"pkg-beta": beta},
+            release_tags={"pkg-beta": "pkg-beta/v0.1.5"},
+        )
+        assert state["pkg-alpha"].published_version == "0.1.5"
+        assert state["pkg-alpha"].changed is True
+        assert state["pkg-beta"].published_version == "0.1.5"
+        assert state["pkg-beta"].changed is False
+
+
+class TestBumpVersions:
+    """Tests for bump_versions()."""
+
+    def _pkg(
+        self, name: str, version: str, deps: list[str] | None = None
+    ) -> PackageInfo:
+        return PackageInfo(path=f"packages/{name}", version=version, deps=deps or [])
+
+    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.step")
+    def test_bumps_changed_package_version(
+        self, mock_step: MagicMock, mock_rewrite: MagicMock
+    ) -> None:
+        """Changed packages get their version bumped."""
+        alpha = PublishedPackage(
+            info=self._pkg("pkg-alpha", "0.1.5"),
+            published_version="0.1.5",
+            changed=True,
+        )
+        result = bump_versions({"pkg-alpha": alpha})
+        assert result["pkg-alpha"].old == "0.1.5"
+        assert result["pkg-alpha"].new == "0.1.6"
+
+    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.step")
+    def test_unchanged_package_not_bumped(
+        self, mock_step: MagicMock, mock_rewrite: MagicMock
+    ) -> None:
+        """Unchanged packages are not included in returned bumped dict."""
+        alpha = PublishedPackage(
+            info=self._pkg("pkg-alpha", "0.1.5"),
+            published_version="0.1.5",
+            changed=False,
+        )
+        result = bump_versions({"pkg-alpha": alpha})
+        assert "pkg-alpha" not in result
+        mock_rewrite.assert_not_called()
+
+    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.step")
+    def test_internal_dep_pinned_to_published_version_not_bumped(
+        self, mock_step: MagicMock, mock_rewrite: MagicMock
+    ) -> None:
+        """Internal deps are pinned to published_version (pre-bump), not next-dev version.
+
+        Scenario: pkg-alpha published at 0.1.5 (changed), pkg-beta depends on
+        pkg-alpha. The bump writes pkg-alpha>=0.1.5 into pkg-beta, NOT >=0.1.6.
+        """
+        alpha = PublishedPackage(
+            info=self._pkg("pkg-alpha", "0.1.5"),
+            published_version="0.1.5",
+            changed=True,
+        )
+        beta = PublishedPackage(
+            info=self._pkg("pkg-beta", "0.1.5", deps=["pkg-alpha"]),
+            published_version="0.1.5",
+            changed=True,
+        )
+        bump_versions({"pkg-alpha": alpha, "pkg-beta": beta})
+
+        beta_rewrite_call = next(
+            call for call in mock_rewrite.call_args_list if "pkg-beta" in str(call)
+        )
+        _, _, internal_dep_versions = beta_rewrite_call.args
+        assert internal_dep_versions["pkg-alpha"] == "0.1.5"
+
+    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.step")
+    def test_unchanged_dep_pinned_to_release_tag_version(
+        self, mock_step: MagicMock, mock_rewrite: MagicMock
+    ) -> None:
+        """Deps from unchanged packages use their release-tag version, not pyproject version.
+
+        Scenario: pkg-alpha unchanged (pyproject says 0.1.6 from last bump, but last
+        release was 0.1.5). pkg-beta changed and depends on pkg-alpha. The bump should
+        write pkg-alpha>=0.1.5, not >=0.1.6, so the wheel stays installable when only
+        pkg-beta changes.
+        """
+        alpha = PublishedPackage(
+            info=self._pkg("pkg-alpha", "0.1.6"),  # dev version in pyproject
+            published_version="0.1.5",  # actual last-released version
+            changed=False,
+        )
+        beta = PublishedPackage(
+            info=self._pkg("pkg-beta", "0.1.5", deps=["pkg-alpha"]),
+            published_version="0.1.5",
+            changed=True,
+        )
+        bump_versions({"pkg-alpha": alpha, "pkg-beta": beta})
+
+        beta_rewrite_call = next(
+            call for call in mock_rewrite.call_args_list if "pkg-beta" in str(call)
+        )
+        _, _, internal_dep_versions = beta_rewrite_call.args
+        assert (
+            internal_dep_versions["pkg-alpha"] == "0.1.5"
+        )  # release tag version, not 0.1.6
+
+
+class TestBuildPlan:
+    """Tests for build_plan()."""
+
+    @patch("uv_release_monorepo.pipeline.detect_changes")
+    @patch("uv_release_monorepo.pipeline.find_dev_baselines")
+    @patch("uv_release_monorepo.pipeline.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.discover_packages")
+    def test_returns_release_plan(
+        self,
+        mock_discover: MagicMock,
+        mock_find_release: MagicMock,
+        mock_find_dev: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """build_plan returns a ReleasePlan with correct changed/unchanged split."""
+        packages = {
+            "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
+            "pkg-b": PackageInfo(path="packages/b", version="1.0.0", deps=[]),
+        }
+        mock_discover.return_value = packages
+        mock_find_release.return_value = {
+            "pkg-a": "pkg-a/v0.9.0",
+            "pkg-b": "pkg-b/v0.9.0",
+        }
+        mock_find_dev.return_value = {
+            "pkg-a": "pkg-a/v1.0.0-dev",
+            "pkg-b": "pkg-b/v1.0.0-dev",
+        }
+        mock_detect.return_value = ["pkg-a"]
+
+        plan = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+
+        assert isinstance(plan, ReleasePlan)
+        assert "pkg-a" in plan.changed
+        assert "pkg-b" in plan.unchanged
+        assert plan.uvr_version == "0.3.0"
+        assert plan.force_all is False
+
+    @patch("uv_release_monorepo.pipeline.detect_changes")
+    @patch("uv_release_monorepo.pipeline.find_dev_baselines")
+    @patch("uv_release_monorepo.pipeline.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.discover_packages")
+    def test_expands_matrix_for_changed_only(
+        self,
+        mock_discover: MagicMock,
+        mock_find_release: MagicMock,
+        mock_find_dev: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """Matrix entries are only created for changed packages, not unchanged."""
+        packages = {
+            "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
+            "pkg-b": PackageInfo(path="packages/b", version="1.0.0", deps=[]),
+        }
+        mock_discover.return_value = packages
+        mock_find_release.return_value = {"pkg-a": None, "pkg-b": None}
+        mock_find_dev.return_value = {"pkg-a": None, "pkg-b": None}
+        mock_detect.return_value = ["pkg-a"]  # only pkg-a changed
+
+        plan = build_plan(
+            force_all=False,
+            matrix={"pkg-a": ["ubuntu-latest", "macos-14"], "pkg-b": ["ubuntu-latest"]},
+            uvr_version="0.3.0",
+        )
+
+        # Only pkg-a gets matrix entries; pkg-b is unchanged
+        packages_in_matrix = {e.package for e in plan.matrix}
+        assert "pkg-a" in packages_in_matrix
+        assert "pkg-b" not in packages_in_matrix
+        assert len(plan.matrix) == 2  # ubuntu-latest + macos-14 for pkg-a
+
+    @patch("uv_release_monorepo.pipeline.detect_changes")
+    @patch("uv_release_monorepo.pipeline.find_dev_baselines")
+    @patch("uv_release_monorepo.pipeline.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.discover_packages")
+    def test_defaults_matrix_to_ubuntu_latest(
+        self,
+        mock_discover: MagicMock,
+        mock_find_release: MagicMock,
+        mock_find_dev: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """Changed packages with no matrix entry default to ubuntu-latest."""
+        packages = {"pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[])}
+        mock_discover.return_value = packages
+        mock_find_release.return_value = {"pkg-a": None}
+        mock_find_dev.return_value = {"pkg-a": None}
+        mock_detect.return_value = ["pkg-a"]
+
+        plan = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+
+        assert len(plan.matrix) == 1
+        assert plan.matrix[0].package == "pkg-a"
+        assert plan.matrix[0].runner == "ubuntu-latest"
+
+    @patch("uv_release_monorepo.pipeline.detect_changes")
+    @patch("uv_release_monorepo.pipeline.find_dev_baselines")
+    @patch("uv_release_monorepo.pipeline.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.discover_packages")
+    def test_empty_changed_returns_empty_plan(
+        self,
+        mock_discover: MagicMock,
+        mock_find_release: MagicMock,
+        mock_find_dev: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """When nothing changed, returns a plan with empty changed dict."""
+        packages = {"pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[])}
+        mock_discover.return_value = packages
+        mock_find_release.return_value = {"pkg-a": "pkg-a/v1.0.0"}
+        mock_find_dev.return_value = {"pkg-a": "pkg-a/v1.0.0-dev"}
+        mock_detect.return_value = []
+
+        plan = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+
+        assert plan.changed == {}
+        assert "pkg-a" in plan.unchanged
+
+
+class TestExecutePlan:
+    """Tests for execute_plan()."""
+
+    @patch("uv_release_monorepo.pipeline.git")
+    @patch("uv_release_monorepo.pipeline.tag_dev_baselines")
+    @patch("uv_release_monorepo.pipeline.commit_bumps")
+    @patch("uv_release_monorepo.pipeline.bump_versions")
+    @patch("uv_release_monorepo.pipeline.tag_changed_packages")
+    @patch("uv_release_monorepo.pipeline.publish_release")
+    @patch("uv_release_monorepo.pipeline.collect_published_state")
+    @patch("uv_release_monorepo.pipeline.build_packages")
+    @patch("uv_release_monorepo.pipeline.fetch_unchanged_wheels")
+    @patch("uv_release_monorepo.pipeline.check_for_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.Path")
+    def test_calls_pipeline_in_order(
+        self,
+        mock_path: MagicMock,
+        mock_check: MagicMock,
+        mock_fetch: MagicMock,
+        mock_build: MagicMock,
+        mock_collect: MagicMock,
+        mock_publish: MagicMock,
+        mock_tag_pkg: MagicMock,
+        mock_bump: MagicMock,
+        mock_commit: MagicMock,
+        mock_tag_dev: MagicMock,
+        mock_git: MagicMock,
+    ) -> None:
+        """execute_plan calls pipeline steps in the correct order."""
+        alpha = PackageInfo(path="packages/alpha", version="0.1.5", deps=[])
+        plan = ReleasePlan(
+            uvr_version="0.3.0",
+            force_all=False,
+            changed={"pkg-alpha": alpha},
+            unchanged={},
+            release_tags={"pkg-alpha": "pkg-alpha/v0.1.4"},
+            matrix=[MatrixEntry(package="pkg-alpha", runner="ubuntu-latest")],
+        )
+        mock_path.return_value.mkdir = MagicMock()
+        bumped = {"pkg-alpha": MagicMock(old="0.1.5", new="0.1.6")}
+        mock_bump.return_value = bumped
+
+        execute_plan(plan, push=False)
+
+        mock_check.assert_called_once()
+        mock_fetch.assert_called_once()
+        mock_build.assert_called_once()
+        mock_collect.assert_called_once()
+        mock_publish.assert_called_once()
+        mock_tag_pkg.assert_called_once()
+        mock_bump.assert_called_once()
+        mock_commit.assert_called_once()
+        mock_tag_dev.assert_called_once_with(bumped)
+        mock_git.assert_not_called()  # push=False
+
+    @patch("uv_release_monorepo.pipeline.git")
+    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.tag_dev_baselines")
+    @patch("uv_release_monorepo.pipeline.commit_bumps")
+    @patch("uv_release_monorepo.pipeline.bump_versions")
+    @patch("uv_release_monorepo.pipeline.tag_changed_packages")
+    @patch("uv_release_monorepo.pipeline.publish_release")
+    @patch("uv_release_monorepo.pipeline.collect_published_state")
+    @patch("uv_release_monorepo.pipeline.build_packages")
+    @patch("uv_release_monorepo.pipeline.fetch_unchanged_wheels")
+    @patch("uv_release_monorepo.pipeline.check_for_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.Path")
+    def test_pushes_when_push_true(
+        self,
+        mock_path: MagicMock,
+        mock_check: MagicMock,
+        mock_fetch: MagicMock,
+        mock_build: MagicMock,
+        mock_collect: MagicMock,
+        mock_publish: MagicMock,
+        mock_tag_pkg: MagicMock,
+        mock_bump: MagicMock,
+        mock_commit: MagicMock,
+        mock_tag_dev: MagicMock,
+        mock_step: MagicMock,
+        mock_git: MagicMock,
+    ) -> None:
+        """execute_plan pushes commits and tags when push=True."""
+        alpha = PackageInfo(path="packages/alpha", version="0.1.5", deps=[])
+        plan = ReleasePlan(
+            uvr_version="0.3.0",
+            force_all=False,
+            changed={"pkg-alpha": alpha},
+            unchanged={},
+            release_tags={"pkg-alpha": None},
+            matrix=[MatrixEntry(package="pkg-alpha", runner="ubuntu-latest")],
+        )
+        mock_path.return_value.mkdir = MagicMock()
+        mock_bump.return_value = {}
+
+        execute_plan(plan, push=True)
+
+        mock_git.assert_any_call("push")
+        mock_git.assert_any_call("push", "--tags")

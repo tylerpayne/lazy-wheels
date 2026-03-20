@@ -10,6 +10,8 @@ from pathlib import Path
 
 import tomlkit
 from packaging.utils import canonicalize_name
+from tomlkit.container import OutOfOrderTableProxy
+from tomlkit.items import Table
 
 from .shell import fatal
 
@@ -79,3 +81,28 @@ def get_workspace_member_globs(doc: tomlkit.TOMLDocument) -> list[str]:
     if not members:
         fatal("No [tool.uv.workspace] members defined in root pyproject.toml")
     return list(members)
+
+
+def get_uvr_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[str]]:
+    """Extract [tool.uvr.matrix] as {package: [runner, ...]}."""
+    raw = doc.get("tool", {}).get("uvr", {}).get("matrix", {})
+    return {k: list(v) for k, v in raw.items()}
+
+
+def set_uvr_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[str]]) -> None:
+    """Write {package: [runner, ...]} into [tool.uvr.matrix]."""
+    if "tool" not in doc:
+        doc["tool"] = tomlkit.table()
+    tool = doc["tool"]
+    assert isinstance(tool, (Table, OutOfOrderTableProxy))
+    if "uvr" not in tool:
+        tool["uvr"] = tomlkit.table()
+    uvr = tool["uvr"]
+    assert isinstance(uvr, Table)
+    matrix_table = tomlkit.table()
+    for pkg, runners in sorted(matrix.items()):
+        arr = tomlkit.array()
+        for r in runners:
+            arr.append(r)
+        matrix_table[pkg] = arr
+    uvr["matrix"] = matrix_table
