@@ -36,15 +36,16 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
-      - name: Set up
-        run: |
-          uv python install ${{ fromJSON(inputs.plan).python_version }}
-          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
+      - name: Set up Python
+        run: uv python install ${{ fromJSON(inputs.plan).python_version }}
       - name: Build package
         run: |
-          uvr-steps execute-build \
-            --plan '${{ inputs.plan }}' \
-            --package '${{ matrix.package }}'
+          pkg_path=$(echo '${{ inputs.plan }}' | jq -r '.changed["${{ matrix.package }}"].path // empty')
+          if [ -n "$pkg_path" ]; then
+            uv build "$pkg_path" --out-dir dist/
+          else
+            echo "${{ matrix.package }} not in changed list, skipping"
+          fi
       - name: Upload built wheels
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,7 +70,12 @@ jobs:
       - name: Set up
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
+          uvr_wheel=$(ls dist/uv_release_monorepo-*.whl 2>/dev/null | head -1)
+          if [ -n "$uvr_wheel" ]; then
+            uv tool install "$uvr_wheel"
+          else
+            uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
+          fi
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"

@@ -40,11 +40,11 @@ def test_executor_template_has_dynamic_matrix() -> None:
     assert "fromJSON(inputs.plan).matrix" in template
 
 
-def test_executor_template_has_execute_build_step() -> None:
+def test_executor_template_has_build_step() -> None:
     template = (TEMPLATES_DIR / "release.yml").read_text()
 
-    assert "execute-build" in template
-    assert "--plan" in template
+    assert "uv build" in template
+    assert "jq" in template
 
 
 def test_executor_template_has_granular_release_steps() -> None:
