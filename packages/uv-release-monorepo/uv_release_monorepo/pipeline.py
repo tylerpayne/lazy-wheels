@@ -798,6 +798,8 @@ def build_plan(
             )
 
     # Build publish matrix — one entry per changed package with precomputed notes
+    root_doc = load_pyproject(Path.cwd() / "pyproject.toml")
+    latest_pkg = get_uvr_config(root_doc).get("latest", "")
     publish_entries: list[PublishEntry] = []
     for name in sorted(changed_names):
         info = changed[name]
@@ -809,6 +811,7 @@ def build_plan(
                 tag=f"{name}/v{info.version}",
                 title=f"{name} {info.version}",
                 body=generate_release_notes(name, info, baseline),
+                make_latest=name == latest_pkg,
             )
         )
 

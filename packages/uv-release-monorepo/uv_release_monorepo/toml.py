@@ -83,12 +83,13 @@ def get_workspace_member_globs(doc: tomlkit.TOMLDocument) -> list[str]:
     return list(members)
 
 
-def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict[str, list[str]]:
+def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict:
     """Extract [tool.uvr.config] as a dict.
 
     Supported keys:
         include: list of package names to whitelist (only these are considered).
         exclude: list of package names to blacklist (these are skipped).
+        latest: package name whose GitHub release should be marked "Latest".
 
     If ``include`` is set, only listed packages are considered.
     ``exclude`` is applied after ``include``.
@@ -97,6 +98,7 @@ def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict[str, list[str]]:
     return {
         "include": list(raw.get("include", [])),
         "exclude": list(raw.get("exclude", [])),
+        "latest": raw.get("latest", ""),
     }
 
 

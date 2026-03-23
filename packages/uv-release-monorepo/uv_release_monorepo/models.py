@@ -90,6 +90,7 @@ class PublishEntry(BaseModel):
     tag: str
     title: str
     body: str
+    make_latest: bool = False
 
 
 class ReleasePlan(BaseModel):

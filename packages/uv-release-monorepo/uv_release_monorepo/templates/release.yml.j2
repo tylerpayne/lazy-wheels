@@ -131,7 +131,7 @@ jobs:
           name: ${{ matrix.title }}
           body: ${{ matrix.body }}
           files: dist/*.whl
-          make_latest: false
+          make_latest: ${{ matrix.make_latest }}
 
   finalize:
     runs-on: ubuntu-latest

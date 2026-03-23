@@ -40,7 +40,7 @@ jobs:
       - name: Set up Python
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          uv tool install ./packages/uv-release-monorepo
+          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
       - name: Prepare release version
         run: |
           uvr-steps prepare-release \
@@ -73,7 +73,7 @@ jobs:
           name: ${{ matrix.title }}
           body: ${{ matrix.body }}
           files: dist/*.whl
-          make_latest: false
+          make_latest: ${{ matrix.make_latest }}
 
   finalize:
     runs-on: ubuntu-latest
@@ -86,7 +86,7 @@ jobs:
       - name: Set up
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          uv tool install ./packages/uv-release-monorepo
+          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
       - name: Finalize release
         run: uvr-steps finalize --plan '${{ inputs.plan }}'
 
