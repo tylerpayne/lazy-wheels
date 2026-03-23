@@ -7,7 +7,7 @@ This is the full reference for uv-release-monorepo. If you just want to get star
 - [uv](https://github.com/astral-sh/uv) installed
 - A git repository hosted on GitHub with Actions enabled
 - A workspace root `pyproject.toml` with `[tool.uv.workspace]` members defined
-- The [GitHub CLI](https://cli.github.com/) (`gh`) authenticated — uvr dispatches workflows through it
+- The [GitHub CLI](https://cli.github.com/) (`gh`) authenticated — only needed if you want `uvr release` to dispatch workflows automatically
 
 ## Setting Up Your First Release
 
@@ -23,7 +23,19 @@ Then scaffold the release workflow:
 uvr init
 ```
 
-This generates `.github/workflows/release.yml` from a built-in Jinja2 template. The workflow is a pure executor — it reads a `ReleasePlan` JSON dispatched from your machine and does exactly what it says. You never need to edit it by hand.
+This generates `.github/workflows/release.yml` from a built-in Jinja2 template. The workflow is a pure executor — it reads a `ReleasePlan` JSON and does exactly what it says. You never need to edit it by hand.
+
+To regenerate the workflow (discarding any manual edits but preserving hooks):
+
+```bash
+uvr init
+```
+
+To regenerate and discard hooks too:
+
+```bash
+uvr init --force
+```
 
 To verify what was generated:
 
@@ -44,6 +56,18 @@ Each `-m` takes a package name followed by one or more runner labels. Re-run `uv
 
 Runner configuration is stored in `[tool.uvr.matrix]` in your workspace root `pyproject.toml`.
 
+### Filtering packages
+
+If your workspace contains packages that shouldn't be part of the release cycle, add `[tool.uvr.config]` to your workspace root `pyproject.toml`:
+
+```toml
+[tool.uvr.config]
+include = ["pkg-alpha", "pkg-beta"]   # whitelist: only these packages
+exclude = ["pkg-internal"]            # blacklist: skip these packages
+```
+
+If `include` is set, only listed packages are considered. `exclude` is applied after `include`. Both are optional — omit both to manage all workspace packages.
+
 ## Releasing
 
 When you're ready to release:
@@ -52,19 +76,17 @@ When you're ready to release:
 uvr release
 ```
 
-This does three things in sequence:
+This does three things:
 
 1. **Discovery** — Scans the workspace and diffs each package against its last dev baseline tag. Only packages with new commits (plus their downstream dependents) are included.
-2. **Plan** — Builds a `ReleasePlan` JSON containing every package to build, its version, and the runner matrix.
-3. **Dispatch** — Sends the plan to GitHub Actions via `gh workflow run`. The workflow takes it from there.
+2. **Plan** — Builds a `ReleasePlan` JSON containing every package to build, its version, precomputed release notes, and the runner matrix.
+3. **Prompt** — Prints the plan as JSON and asks `Dispatch release? [y/N]`. If you confirm, the plan is dispatched to GitHub Actions via `gh workflow run`.
 
-### Previewing a release
+To skip the confirmation prompt (useful in scripts):
 
 ```bash
-uvr release --dry-run
+uvr release -y
 ```
-
-Prints the release plan as JSON without dispatching anything. Use this to verify which packages would be rebuilt and what versions they'd get.
 
 ### Forcing a full rebuild
 
@@ -81,6 +103,26 @@ uvr release --python 3.11
 ```
 
 Sets the Python version used in CI builds. Defaults to `3.12`.
+
+### Using the plan without dispatching
+
+If you don't have `gh` installed or prefer to dispatch manually, just run `uvr release` and decline the prompt. The plan JSON is printed to stdout — you can copy it into the GitHub Actions "Run workflow" UI as the `plan` input.
+
+## CI Workflow Architecture
+
+The generated workflow has three core jobs that run in sequence:
+
+```
+build (matrix: package × runner)
+  → publish (matrix: one per changed package)
+    → finalize (single job)
+```
+
+**build** — One matrix entry per (package, runner) pair. Each entry strips the `.dev0` suffix, runs `uv build`, and uploads the wheel as an artifact.
+
+**publish** — One matrix entry per changed package. Downloads the built wheels and creates a GitHub release using `softprops/action-gh-release@v2`. Release notes are precomputed in the plan, so this job needs no Python — just `download-artifact` + the release action.
+
+**finalize** — Bumps patch versions, commits, creates dev baseline tags, and pushes to main.
 
 ## Mixed-Architecture Builds
 
@@ -109,10 +151,16 @@ Hooks let you inject custom steps into the release workflow at four points:
 |---|---|
 | `pre-build` | Before the build matrix starts |
 | `post-build` | After all build jobs finish |
-| `pre-release` | Before the release job |
-| `post-release` | After the release job |
+| `pre-release` | Before the publish job |
+| `post-release` | After the finalize job |
 
-Each configured hook becomes its own GitHub Actions job with the correct `needs:` chain. Unconfigured hooks don't appear in the generated YAML at all.
+Each configured hook becomes its own GitHub Actions job with the correct `needs:` chain. The full dependency chain is:
+
+```
+pre-build → build → post-build → pre-release → publish → finalize → post-release
+```
+
+Unconfigured hooks don't appear in the generated YAML at all.
 
 ### Environment variables
 
@@ -165,9 +213,9 @@ uvr hooks pre-build add --name "Run tests" --run "uv run pytest" --id run-tests
 
 After any change, `uvr hooks` automatically re-renders `.github/workflows/release.yml`.
 
-### Editing hooks in TOML
+### Where hooks live
 
-Hooks live in the generated `release.yml`, not in `pyproject.toml`. Use the CLI commands above to manage them — `uvr hooks` re-renders the workflow automatically after each change.
+Hooks live in the generated `release.yml`, not in `pyproject.toml`. Use the CLI commands above to manage them — `uvr hooks` re-renders the workflow automatically after each change. Running `uvr init` preserves existing hooks unless you pass `--force`.
 
 ### Common hook patterns
 
@@ -228,32 +276,33 @@ uvr release
   ├─ scan workspace
   ├─ diff each package vs dev tag
   ├─ walk dependency graph
+  ├─ precompute release notes
   ├─ expand build matrix
-  └─ dispatch ReleasePlan JSON ──────► release.yml receives plan
+  ├─ print plan JSON
+  └─ [confirm] dispatch plan ────────► release.yml receives plan
                                          ├─ [hook] pre-build
-                                         ├─ matrix: build changed packages
+                                         ├─ build: matrix build per package
                                          ├─ [hook] post-build
                                          ├─ [hook] pre-release
-                                         ├─ release job:
-                                         │   ├─ download unchanged wheels
-                                         │   │   from prior GitHub releases
-                                         │   ├─ publish new release per
-                                         │   │   changed package
+                                         ├─ publish: one GitHub release
+                                         │   per changed package
+                                         │   (softprops/action-gh-release)
+                                         ├─ finalize:
                                          │   ├─ bump patch versions
                                          │   ├─ commit & tag dev baselines
                                          │   └─ push
                                          └─ [hook] post-release
 ```
 
-The workflow is a **pure executor**. It receives the plan as a single JSON input and follows it exactly. All intelligence — change detection, dependency resolution, matrix expansion — lives in the CLI on your machine.
-
-### Wheel caching
-
-Packages that didn't change aren't rebuilt. Instead, the release job downloads their existing wheels from their most recent GitHub release and re-attaches them. This keeps the full set of wheels available on the latest release without redundant builds.
+The workflow is a **pure executor**. It receives the plan as a single JSON input and follows it exactly. All intelligence — change detection, dependency resolution, matrix expansion, release notes — lives in the CLI on your machine.
 
 ### Version bumping
 
 You control **major.minor** by editing `version` in each package's `pyproject.toml`. CI controls **patch** — after every release, it bumps the patch number and appends `.dev0`, commits, and tags the dev baseline. Between releases, your pyproject.toml always shows the development version (e.g., `0.5.2.dev0`). On release, the `.dev0` is stripped automatically.
+
+### Dependency pinning
+
+When a package depends on another workspace package, uvr pins the internal dependency constraint to the just-published version before releasing. This ensures that published wheels remain installable even when only a subset of packages change in the next cycle. Pin updates are applied locally during `uvr release` — if any pins change, uvr tells you to commit them before proceeding.
 
 ## Tag Structure
 
@@ -271,6 +320,41 @@ commit D   ← my-pkg/v1.0.1      (released; wheels in the my-pkg/v1.0.1 GitHub 
 commit E   ← my-pkg/v1.0.2-dev  (pyproject.toml bumped to 1.0.2.dev0; new diff base)
 ```
 
+## Publishing to PyPI
+
+The release workflow creates GitHub releases with wheels attached. If you also want to publish to PyPI, add a separate workflow that triggers on release events and uploads the wheel using [trusted publishing](https://docs.pypi.org/trusted-publishers/):
+
+```yaml
+# .github/workflows/publish.yml
+name: Publish to PyPI
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'my-package/v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Download wheel from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir dist
+          gh release download "${{ github.event.release.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.whl" \
+            --dir dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+```
+
+This downloads the wheel directly from the GitHub release (already built at the correct version) and publishes it — no rebuilding needed.
+
+You can also trigger it manually with `workflow_dispatch` if you add a `version` input and construct the tag from it.
+
 ## Command Reference
 
 ### `uvr init`
@@ -278,32 +362,35 @@ commit E   ← my-pkg/v1.0.2-dev  (pyproject.toml bumped to 1.0.2.dev0; new diff
 Scaffold the GitHub Actions release workflow.
 
 ```
-uvr init [-m PKG RUNNER [RUNNER ...]] [--workflow-dir DIR]
+uvr init [-m PKG RUNNER [RUNNER ...]] [--force] [--workflow-dir DIR]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-m`, `--matrix` | — | Per-package runners. Repeatable: `-m pkg1 ubuntu-latest -m pkg2 macos-14` |
+| `--force` | — | Regenerate workflow, discarding existing hooks |
 | `--workflow-dir` | `.github/workflows` | Directory to write the workflow file |
 
 ### `uvr release`
 
-Generate a release plan and dispatch it to GitHub Actions.
+Generate a release plan and optionally dispatch it to GitHub Actions.
 
 ```
-uvr release [--dry-run] [--force-all] [--python VERSION] [--workflow-dir DIR]
+uvr release [-y] [--force-all] [--python VERSION] [--workflow-dir DIR]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--dry-run` | — | Print the plan as JSON without dispatching |
+| `-y`, `--yes` | — | Skip confirmation prompt and dispatch immediately |
 | `--force-all` | — | Rebuild all packages regardless of changes |
 | `--python` | `3.12` | Python version for CI builds |
 | `--workflow-dir` | `.github/workflows` | Directory containing the workflow file |
 
+By default, prints the plan as JSON and prompts `Dispatch release? [y/N]` before invoking `gh`. Without `gh` installed, you can still view the plan and dispatch manually via the GitHub UI.
+
 ### `uvr run`
 
-Execute the release pipeline locally (usually called from CI).
+Execute the release pipeline locally (for testing or CI).
 
 ```
 uvr run [--dry-run] [--force-all] [--no-push] [--plan JSON]
@@ -318,7 +405,7 @@ uvr run [--dry-run] [--force-all] [--no-push] [--plan JSON]
 
 ### `uvr status`
 
-Show the current workflow configuration.
+Show the current workflow configuration, build matrix, and which packages have changed.
 
 ```
 uvr status [--workflow-dir DIR]
@@ -357,3 +444,17 @@ uvr hooks PHASE [ACTION]
 | `update` | `uvr hooks PHASE update POS [--name "..."] [--run "..."] [--uses "..."] [--with K=V] [--env K=V] [--if "..."]` | Update step at position |
 | `remove` | `uvr hooks PHASE remove POS` | Remove step at position |
 | `clear` | `uvr hooks PHASE clear` | Remove all steps in phase |
+
+## Configuration Reference
+
+All uvr configuration lives in the workspace root `pyproject.toml`:
+
+```toml
+[tool.uvr.matrix]
+my-native-pkg = ["ubuntu-latest", "macos-14"]
+my-python-pkg = ["ubuntu-latest"]
+
+[tool.uvr.config]
+include = ["pkg-alpha", "pkg-beta"]   # optional whitelist
+exclude = ["pkg-internal"]            # optional blacklist
+```

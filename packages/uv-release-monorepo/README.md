@@ -13,22 +13,34 @@ uvr turns the whole thing into one command. It diffs against the last release, w
 ```bash
 uv tool install uv-release-monorepo   # install the CLI
 uvr init                               # generate .github/workflows/release.yml
-uvr release                            # detect changes, build, and publish
+uvr release                            # detect changes → print plan → confirm → dispatch
 ```
 
-You need [uv](https://github.com/astral-sh/uv), a GitHub repo with Actions enabled, and a `pyproject.toml` with `[tool.uv.workspace]` members defined.
+You need [uv](https://github.com/astral-sh/uv), a GitHub repo with Actions enabled, a `pyproject.toml` with `[tool.uv.workspace]` members defined, and the [GitHub CLI](https://cli.github.com/) (`gh`) if you want to dispatch from the terminal.
 
 ## What You Can Do
 
 ### Release only what changed
 
 ```bash
-uvr release            # build and publish changed packages
-uvr release --dry-run  # preview the plan without dispatching
+uvr release              # print plan, prompt before dispatching
+uvr release -y           # skip prompt, dispatch immediately
 uvr release --force-all  # rebuild everything regardless of changes
 ```
 
-uvr scans your workspace, diffs each package against its last dev baseline tag, and builds only what's new — plus anything downstream in the dependency graph.
+uvr scans your workspace, diffs each package against its last dev baseline tag, and builds only what's new — plus anything downstream in the dependency graph. By default, `uvr release` prints the plan as JSON and asks for confirmation before dispatching via `gh`.
+
+### Filter packages
+
+Add `[tool.uvr.config]` to your workspace root `pyproject.toml` to control which packages uvr manages:
+
+```toml
+[tool.uvr.config]
+include = ["pkg-alpha", "pkg-beta"]   # only these packages (whitelist)
+exclude = ["pkg-internal"]            # skip these packages (blacklist)
+```
+
+If `include` is set, only listed packages are considered. `exclude` filters out from whatever remains. Both are optional.
 
 ### Build for multiple architectures
 
@@ -66,8 +78,12 @@ uvr status
 
 ## How It Works
 
-`uvr release` runs on your machine. It scans the workspace, detects which packages changed since their last dev baseline tag, expands the build matrix, and serializes a `ReleasePlan` JSON. That plan is dispatched to GitHub Actions as a single input — the workflow is a pure executor that makes no decisions of its own.
+`uvr release` runs on your machine. It scans the workspace, detects which packages changed since their last dev baseline tag, precomputes release notes, expands the build matrix, and serializes a `ReleasePlan` JSON. After you confirm, that plan is dispatched to GitHub Actions — the workflow is a pure executor that makes no decisions of its own.
 
-On CI, a matrix job builds each changed package on its configured runners. The release job then downloads unchanged wheels from their existing GitHub releases, publishes a new release per changed package, bumps patch versions, commits, tags dev baselines, and pushes.
+On CI, three jobs run in sequence:
 
-For the full internals — tag structure, wheel caching, version bumping — see the [guide](../../docs/guide.md).
+1. **build** — A matrix job builds each changed package on its configured runners and uploads wheels as artifacts.
+2. **publish** — A matrix job creates one GitHub release per changed package using `softprops/action-gh-release`, attaching the built wheels.
+3. **finalize** — Bumps patch versions, commits, tags dev baselines, and pushes.
+
+For the full internals — tag structure, version bumping, CI hooks — see the [guide](../../docs/guide.md).
