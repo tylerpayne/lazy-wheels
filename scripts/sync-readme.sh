@@ -27,9 +27,9 @@ if [[ -z "$REPO_SECTION" ]]; then
     exit 1
 fi
 
-# Combine package README + repo section
+# Combine package README + repo section, rewriting guide link for root context
 {
-    cat "$PKG_README"
+    sed 's|(../../docs/guide.md)|(docs/guide.md)|g' "$PKG_README"
     echo ""
     echo "$REPO_SECTION"
 } > "$ROOT_README.tmp"

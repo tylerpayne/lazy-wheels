@@ -2,75 +2,75 @@
 
 Push-button releases for your [uv](https://github.com/astral-sh/uv) multi-package monorepo. It rebuilds only the packages that changed, creates one GitHub release per package, and handles version bumping automatically. You own major.minor; CI owns patch.
 
-## Installation + Usage
+## Why
 
-You'll need [uv](https://github.com/astral-sh/uv) installed, a git repository with GitHub Actions enabled, and a `pyproject.toml` with `[tool.uv.workspace]` members defined.
+Releasing from a monorepo is tedious. You have to figure out which packages actually changed, build the right ones, tag them, bump versions, and publish — without forgetting a transitive dependent three levels deep. Multiply that by a matrix of OS runners and it stops being something you do by hand.
 
-Install as a uv tool:
+uvr turns the whole thing into one command. It diffs against the last release, walks the dependency graph, builds a plan, and hands it to GitHub Actions. Unchanged packages keep their existing wheels. You stay in control of major and minor versions; CI owns the patch number.
 
-```bash
-uv tool install uv-release-monorepo
-```
-
-Run once in your repo to generate `.github/workflows/release.yml`:
+## Quick Start
 
 ```bash
-uvr init
+uv tool install uv-release-monorepo   # install the CLI
+uvr init                               # generate .github/workflows/release.yml
+uvr release                            # detect changes, build, and publish
 ```
 
-For mixed-architecture builds, specify per-package runners with `-m`. Each `-m` takes a package name followed by one or more runners:
+You need [uv](https://github.com/astral-sh/uv), a GitHub repo with Actions enabled, and a `pyproject.toml` with `[tool.uv.workspace]` members defined.
+
+## What You Can Do
+
+### Release only what changed
 
 ```bash
-uvr init -m pkg-alpha ubuntu-latest -m pkg-beta ubuntu-latest macos-14
+uvr release            # build and publish changed packages
+uvr release --dry-run  # preview the plan without dispatching
+uvr release --force-all  # rebuild everything regardless of changes
 ```
 
-Re-run `uvr init` at any time to update the runner configuration. Existing entries are preserved and only the packages you specify are changed.
+uvr scans your workspace, diffs each package against its last dev baseline tag, and builds only what's new — plus anything downstream in the dependency graph.
 
-When you're ready to release:
+### Build for multiple architectures
 
 ```bash
-uvr release
+uvr init -m my-native-pkg ubuntu-latest macos-14
 ```
 
-Pass `--dry-run` to preview the release plan without dispatching anything, or `--force-all` to rebuild every package regardless of detected changes.
+Each `-m` assigns one or more GitHub Actions runners to a package. Re-run `uvr init` to update runners; existing entries are preserved.
 
-## How It Works
+### Run tests or lints in CI
 
-`uvr release` runs entirely on your machine first. It scans the workspace, detects which packages changed since their last dev baseline tag, expands the build matrix, and serializes everything into a `ReleasePlan` JSON. That plan is then dispatched to GitHub Actions via `gh workflow run` as a single input. The workflow is a pure executor — it makes no decisions of its own.
-
-On the CI side, a matrix job builds each changed package on its configured runner(s). Once all builds complete, the release job downloads unchanged wheels directly from their existing per-package GitHub releases, publishes a new `{package}/v{version}` release for each changed package, bumps patch versions, commits, tags dev baselines, and pushes.
-
-## Tag Structure
-
-uvr uses two kinds of git tags. A package tag like `my-pkg/v1.2.3` is created for each changed package at release time and doubles as the identifier for its GitHub release. A dev baseline tag like `my-pkg/v1.2.4-dev` is placed on the version-bump commit immediately after a release and serves as the diff base for the next one — only commits after this tag are considered new work.
-
-```
-commit A   ← my-pkg/v1.0.0      (released; wheels stored in the my-pkg/v1.0.0 GitHub release)
-commit B   ← my-pkg/v1.0.1-dev  (version bumped to 1.0.1; this is the new diff base)
-commit C   … normal development …
-commit D   ← my-pkg/v1.0.1      (released; wheels stored in the my-pkg/v1.0.1 GitHub release)
-commit E   ← my-pkg/v1.0.2-dev  (version bumped to 1.0.2; this is the new diff base)
-```
-
-## Installing from GitHub Releases
-
-To install a workspace package and its transitive internal dependencies directly from GitHub releases:
+Hooks let you inject steps at four points in the release pipeline: `pre-build`, `post-build`, `pre-release`, and `post-release`.
 
 ```bash
-uvr install my-package
-uvr install my-package@1.2.3
+uvr hooks pre-build add --name "Run tests" --run "uv run pytest"
+```
+
+Every hook job has access to `$UVR_PLAN` (the full release plan JSON) and `$UVR_CHANGED` (space-separated list of changed packages). See the [full guide](docs/guide.md) for all hook operations.
+
+### Install packages from GitHub releases
+
+```bash
+uvr install my-package           # latest version, resolves internal deps
+uvr install my-package@1.2.3     # pinned version
+uvr install acme/other-repo/pkg  # from another repository
 ```
 
 This resolves the full dependency graph, downloads the appropriate wheels, and installs them with `uv pip install`.
 
-To install a package from another repository, prefix the package name with `org/repo`:
+### Check your configuration
 
 ```bash
-uvr install acme/my-monorepo/my-package
-uvr install acme/my-monorepo/my-package@1.2.3
+uvr status
 ```
 
-Remote installs download and install the specified package directly. External dependencies are resolved by pip from the wheel metadata.
+## How It Works
+
+`uvr release` runs on your machine. It scans the workspace, detects which packages changed since their last dev baseline tag, expands the build matrix, and serializes a `ReleasePlan` JSON. That plan is dispatched to GitHub Actions as a single input — the workflow is a pure executor that makes no decisions of its own.
+
+On CI, a matrix job builds each changed package on its configured runners. The release job then downloads unchanged wheels from their existing GitHub releases, publishes a new release per changed package, bumps patch versions, commits, tags dev baselines, and pushes.
+
+For the full internals — tag structure, wheel caching, version bumping — see the [guide](docs/guide.md).
 
 ## Repository Structure
 

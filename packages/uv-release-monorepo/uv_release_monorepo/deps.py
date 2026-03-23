@@ -95,7 +95,9 @@ def rewrite_pyproject(
     save_pyproject(pyproject_path, doc)
 
 
-def update_dep_pins(path: Path, versions: dict[str, str]) -> bool:
+def update_dep_pins(
+    path: Path, versions: dict[str, str], *, write: bool = True
+) -> list[tuple[str, str]]:
     """Pin internal dep constraints in a pyproject.toml without changing the version.
 
     Updates [project].dependencies, [project].optional-dependencies.*, and
@@ -104,40 +106,43 @@ def update_dep_pins(path: Path, versions: dict[str, str]) -> bool:
     Args:
         path: Path to the pyproject.toml file.
         versions: Map of package name → version to pin.
+        write: If False, detect whether pins need updating without writing to disk.
 
     Returns:
-        True if the file was modified, False if all pins were already current.
+        List of (old_spec, new_spec) pairs for each changed dependency.
+        Empty list means no changes were needed.
     """
     if not versions:
-        return False
+        return []
     doc = load_pyproject(path)
     project = doc["project"]
     assert isinstance(project, Table)
 
-    changed = 0
+    changes: list[tuple[str, str]] = []
     deps = project.get("dependencies")
     if isinstance(deps, list):
-        changed += _pin_dep_list(deps, versions)
+        changes += _pin_dep_list(deps, versions)
 
     opt_deps = project.get("optional-dependencies")
     if isinstance(opt_deps, dict):
         for group in opt_deps.values():
             if isinstance(group, list):
-                changed += _pin_dep_list(group, versions)
+                changes += _pin_dep_list(group, versions)
 
     dep_groups = doc.get("dependency-groups")
     if isinstance(dep_groups, dict):
         for group in dep_groups.values():
             if isinstance(group, list):
-                changed += _pin_dep_list(group, versions)
+                changes += _pin_dep_list(group, versions)
 
-    if not changed:
-        return False
-    save_pyproject(path, doc)
-    return True
+    if not changes:
+        return []
+    if write:
+        save_pyproject(path, doc)
+    return changes
 
 
-def _pin_dep_list(deps: list, versions: dict[str, str]) -> int:
+def _pin_dep_list(deps: list, versions: dict[str, str]) -> list[tuple[str, str]]:
     """Pin internal dependencies in a list, modifying in place.
 
     Iterates through a list of PEP 508 dependency strings and replaces
@@ -148,14 +153,14 @@ def _pin_dep_list(deps: list, versions: dict[str, str]) -> int:
         versions: Map of canonical package name → version to pin.
 
     Returns:
-        Number of entries that were changed.
+        List of (old_spec, new_spec) pairs for each changed entry.
     """
-    changed = 0
+    changes: list[tuple[str, str]] = []
     for i, dep_str in enumerate(deps):
         name = dep_canonical_name(str(dep_str))
         if name in versions:
             new = pin_dep(str(dep_str), versions[name])
             if new != str(dep_str):
                 deps[i] = new
-                changed += 1
-    return changed
+                changes.append((str(dep_str), new))
+    return changes
