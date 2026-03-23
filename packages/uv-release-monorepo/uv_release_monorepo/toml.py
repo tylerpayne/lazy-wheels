@@ -83,6 +83,23 @@ def get_workspace_member_globs(doc: tomlkit.TOMLDocument) -> list[str]:
     return list(members)
 
 
+def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict[str, list[str]]:
+    """Extract [tool.uvr.config] as a dict.
+
+    Supported keys:
+        include: list of package names to whitelist (only these are considered).
+        exclude: list of package names to blacklist (these are skipped).
+
+    If ``include`` is set, only listed packages are considered.
+    ``exclude`` is applied after ``include``.
+    """
+    raw = doc.get("tool", {}).get("uvr", {}).get("config", {})
+    return {
+        "include": list(raw.get("include", [])),
+        "exclude": list(raw.get("exclude", [])),
+    }
+
+
 def get_uvr_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[str]]:
     """Extract [tool.uvr.matrix] as {package: [runner, ...]}."""
     raw = doc.get("tool", {}).get("uvr", {}).get("matrix", {})

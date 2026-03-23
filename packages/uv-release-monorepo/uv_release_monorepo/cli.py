@@ -10,11 +10,27 @@ from pathlib import Path
 from typing import NoReturn
 
 from .pipeline import build_plan, execute_plan
-from .toml import get_uvr_matrix, load_pyproject, save_pyproject, set_uvr_matrix
+from .toml import (
+    get_uvr_matrix,
+    load_pyproject,
+    save_pyproject,
+    set_uvr_matrix,
+)
 from .workflow_steps import run_pipeline
 
 __version__ = pkg_version("uv-release-monorepo")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+_VALID_HOOKS = ("pre_build", "post_build", "pre_release", "post_release")
+_HOOK_ALIASES = {
+    "pre-build": "pre_build",
+    "post-build": "post_build",
+    "pre-release": "pre_release",
+    "post-release": "post_release",
+    "pre_build": "pre_build",
+    "post_build": "post_build",
+    "pre_release": "pre_release",
+    "post_release": "post_release",
+}
 
 
 def _read_matrix(root: Path) -> dict[str, list[str]]:
@@ -88,6 +104,18 @@ def _discover_packages(root: Path | None = None) -> dict[str, tuple[str, list[st
                     dep_strs.extend(s for s in group if isinstance(s, str))
                 raw_deps[name] = dep_strs
 
+    # Apply include/exclude filters from [tool.uvr.config]
+    uvr_config = doc.get("tool", {}).get("uvr", {}).get("config", {})
+    include = list(uvr_config.get("include", []))
+    exclude = list(uvr_config.get("exclude", []))
+    if include:
+        packages = {n: p for n, p in packages.items() if n in include}
+        raw_deps = {n: d for n, d in raw_deps.items() if n in packages}
+    if exclude:
+        for name in exclude:
+            packages.pop(name, None)
+            raw_deps.pop(name, None)
+
     # Second pass: resolve internal deps
     workspace_names = set(packages.keys())
     for name, dep_strs in raw_deps.items():
@@ -156,6 +184,106 @@ def _fatal(msg: str) -> NoReturn:
     sys.exit(1)
 
 
+def _empty_hooks() -> dict[str, list[dict]]:
+    """Return an empty hooks dict with all four phases."""
+    return {h: [] for h in _VALID_HOOKS}
+
+
+def _get_hooks_from_workflow(path: Path) -> dict[str, list[dict]]:
+    """Extract user-defined hook steps from a generated release.yml.
+
+    Parses the YAML and looks for hook jobs (pre-build, post-build,
+    pre-release, post-release). User steps are those after the
+    "Export plan context" step.
+    """
+    import yaml
+
+    hooks = _empty_hooks()
+    if not path.exists():
+        return hooks
+
+    try:
+        with open(path) as f:
+            doc = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise SystemExit(
+            f"error: {path} contains invalid YAML and cannot be parsed.\n"
+            f"  {exc}\n\n"
+            "Run `uvr init --force` to discard the existing file and regenerate."
+        ) from None
+
+    if not doc or "jobs" not in doc:
+        return hooks
+
+    jobs = doc["jobs"]
+    job_to_hook = {
+        "pre-build": "pre_build",
+        "post-build": "post_build",
+        "pre-release": "pre_release",
+        "post-release": "post_release",
+    }
+
+    for job_name, hook_key in job_to_hook.items():
+        job = jobs.get(job_name)
+        if not job or "steps" not in job:
+            continue
+        steps = job["steps"]
+        after_export = False
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            if step.get("name") == "Export plan context":
+                after_export = True
+                continue
+            if after_export:
+                hooks[hook_key].append(dict(step))
+
+    return hooks
+
+
+def _step_to_yaml(step: dict) -> str:
+    """Convert a step dict to YAML for embedding in the workflow template.
+
+    Returns the YAML mapping body (no leading ``- ``). The caller or
+    Jinja2 ``indent`` filter handles indentation of continuation lines.
+    """
+    import yaml
+
+    class _Dumper(yaml.SafeDumper):
+        pass
+
+    def _str_representer(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
+        if "\n" in data:
+            return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+    _Dumper.add_representer(str, _str_representer)
+
+    result = yaml.dump(step, Dumper=_Dumper, default_flow_style=False, sort_keys=False)
+    return result.rstrip("\n")
+
+
+def _render_workflow(dest: Path, hooks: dict[str, list[dict]]) -> None:
+    """Render the Jinja2 template with hook config and write to dest."""
+    import jinja2
+
+    template_env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
+        variable_start_string="[[",
+        variable_end_string="]]",
+        block_start_string="[%",
+        block_end_string="%]",
+        comment_start_string="[#",
+        comment_end_string="#]",
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+    template_env.filters["step_yaml"] = _step_to_yaml
+    rendered = template_env.get_template("release.yml.j2").render(hooks=hooks)
+    dest.write_text(rendered)
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     """Scaffold the GitHub Actions workflow into your repo."""
     root = Path.cwd()
@@ -200,9 +328,13 @@ def cmd_init(args: argparse.Namespace) -> None:
     set_uvr_matrix(doc, package_runners)
     save_pyproject(pyproject, doc)
 
-    # Write workflow template
-    template = TEMPLATES_DIR / "release.yml"
-    dest.write_text(template.read_text())
+    # Render and write workflow template, preserving existing hooks
+    force = getattr(args, "force", False)
+    if dest.exists() and not force:
+        hooks = _get_hooks_from_workflow(dest)
+    else:
+        hooks = _empty_hooks()
+    _render_workflow(dest, hooks)
 
     print(f"\u2713 Wrote workflow to {dest.relative_to(root)}")
     _print_matrix_status(package_runners)
@@ -230,10 +362,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 
 def cmd_release(args: argparse.Namespace) -> None:
-    """Generate a release plan locally and dispatch the executor workflow."""
-    import subprocess
-    import time
-
+    """Generate a release plan and optionally dispatch the executor workflow."""
     root = Path.cwd()
     workflow_path = root / args.workflow_dir / "release.yml"
     if not workflow_path.exists():
@@ -264,9 +393,22 @@ def cmd_release(args: argparse.Namespace) -> None:
         print("Nothing changed since last release. Use --force-all to rebuild all.")
         return
 
-    if args.dry_run:
-        print(json.dumps(plan.model_dump(), indent=2))
-        return
+    # Print the plan
+    print(json.dumps(plan.model_dump(), indent=2))
+
+    # Prompt for confirmation before dispatching (skip with --yes)
+    if not args.yes:
+        try:
+            answer = input("\nDispatch release? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if answer != "y":
+            return
+
+    # Dispatch via gh
+    import subprocess
+    import time
 
     plan_json = plan.model_dump_json()
     cmd = [
@@ -493,6 +635,268 @@ def cmd_install(args: argparse.Namespace) -> None:
         subprocess.run(["uv", "pip", "install", *wheels], check=True)
 
 
+def _hooks_show(steps: list[dict], hook_display: str) -> None:
+    """Print a numbered list of hook steps."""
+    n = len(steps)
+    if n == 0:
+        print(f"{hook_display}: (no steps)")
+        return
+    print(f"{hook_display} ({n} step{'s' if n != 1 else ''}):")
+    for i, step in enumerate(steps, 1):
+        id_part = f" [{step['id']}]" if "id" in step else ""
+        label = step.get("name") or step.get("uses") or step.get("run", "(unnamed)")
+        print(f"  {i}.{id_part} {label}")
+        if "run" in step and "name" in step:
+            print(f"       run: {step['run']}")
+        if "uses" in step:
+            print(f"       uses: {step['uses']}")
+
+
+def _hooks_apply(steps: list[dict], action: str, **kwargs: object) -> list[dict]:
+    """Return a new step list after applying action. Raises ValueError on bad input."""
+    n = len(steps)
+    if action == "clear":
+        return []
+
+    if action in ("add", "insert"):
+        step: dict = {}
+        for key in ("id", "name", "uses", "run", "if", "with", "env"):
+            val = kwargs.get(key)
+            if val:
+                step[key] = val
+        if not step.get("run") and not step.get("uses"):
+            raise ValueError("Step requires at least --run or --uses.")
+        if action == "insert":
+            pos = int(kwargs["position"])  # type: ignore[arg-type]
+            if pos < 1 or pos > n + 1:
+                raise ValueError(f"Position {pos} out of range (1–{n + 1})")
+            new = list(steps)
+            new.insert(pos - 1, step)
+            return new
+        return steps + [step]
+
+    if action == "remove":
+        pos = int(kwargs["position"])  # type: ignore[arg-type]
+        if n == 0:
+            raise ValueError("No steps to remove.")
+        if pos < 1 or pos > n:
+            raise ValueError(f"Position {pos} out of range (1–{n})")
+        new = list(steps)
+        del new[pos - 1]
+        return new
+
+    if action == "update":
+        pos = int(kwargs["position"])  # type: ignore[arg-type]
+        if n == 0:
+            raise ValueError("No steps to update.")
+        if pos < 1 or pos > n:
+            raise ValueError(f"Position {pos} out of range (1–{n})")
+        new = list(steps)
+        step = dict(new[pos - 1])
+        for key in ("id", "name", "uses", "run", "if", "with", "env"):
+            val = kwargs.get(key)
+            if val:
+                step[key] = val
+        new[pos - 1] = step
+        return new
+
+    raise ValueError(f"Unknown action: {action}")
+
+
+def _hooks_interactive(hook_key: str, steps: list[dict]) -> list[dict]:
+    """Prompt-based step editor. Returns the final step list."""
+    hook_display = hook_key.replace("_", "-")
+    print(f"Editing {hook_display} hooks. Type 'done' or press Ctrl-D to finish.")
+    while True:
+        print()
+        _hooks_show(steps, hook_display)
+        print()
+        print(
+            "  add | insert POSITION | remove POSITION | update POSITION | clear | done"
+        )
+        try:
+            line = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not line or line == "done":
+            break
+
+        parts = line.split(None, 1)
+        cmd = parts[0].lower()
+
+        if cmd == "clear":
+            steps = []
+            print("Cleared.")
+            continue
+
+        if cmd == "add":
+            try:
+                name = input("  name (optional): ").strip()
+                uses = input("  uses (optional): ").strip()
+                run = input("  run  (optional): ").strip()
+                step_id = input("  id   (optional): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            try:
+                steps = _hooks_apply(
+                    steps,
+                    "add",
+                    name=name or None,
+                    uses=uses or None,
+                    run=run or None,
+                    id=step_id or None,
+                )
+                print("Added step.")
+            except ValueError as e:
+                print(f"Error: {e}")
+            continue
+
+        if cmd in ("insert", "remove", "update"):
+            if len(parts) < 2:
+                print(f"Usage: {cmd} POSITION")
+                continue
+            try:
+                pos = int(parts[1])
+            except ValueError:
+                print(f"Invalid position '{parts[1]}'")
+                continue
+
+            try:
+                if cmd == "remove":
+                    steps = _hooks_apply(steps, "remove", position=pos)
+                    print(f"Removed step {pos}.")
+                elif cmd == "insert":
+                    name = input("  name (optional): ").strip()
+                    uses = input("  uses (optional): ").strip()
+                    run = input("  run  (optional): ").strip()
+                    step_id = input("  id   (optional): ").strip()
+                    steps = _hooks_apply(
+                        steps,
+                        "insert",
+                        position=pos,
+                        name=name or None,
+                        uses=uses or None,
+                        run=run or None,
+                        id=step_id or None,
+                    )
+                    print(f"Inserted at position {pos}.")
+                else:  # update
+                    if 1 <= pos <= len(steps):
+                        cur = steps[pos - 1]
+                        for k, v in cur.items():
+                            print(f"  Current {k}: {v}")
+                    name = input("  name (Enter to keep): ").strip()
+                    uses = input("  uses (Enter to keep): ").strip()
+                    run = input("  run  (Enter to keep): ").strip()
+                    step_id = input("  id   (Enter to keep): ").strip()
+                    steps = _hooks_apply(
+                        steps,
+                        "update",
+                        position=pos,
+                        name=name or None,
+                        uses=uses or None,
+                        run=run or None,
+                        id=step_id or None,
+                    )
+                    print(f"Updated step {pos}.")
+            except (ValueError, EOFError, KeyboardInterrupt) as e:
+                if isinstance(e, (EOFError, KeyboardInterrupt)):
+                    print()
+                    break
+                print(f"Error: {e}")
+            continue
+
+        print(
+            f"Unknown command '{cmd}'. Try: add | insert N | remove N | update N | clear | done"
+        )
+
+    return steps
+
+
+def _parse_kv_pairs(pairs: list[str] | None) -> dict[str, str] | None:
+    """Parse ['KEY=VALUE', ...] into a dict, or None if empty."""
+    if not pairs:
+        return None
+    result: dict[str, str] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep:
+            _fatal(f"Invalid key=value pair: {pair!r} (expected KEY=VALUE)")
+        result[key] = value
+    return result
+
+
+def _step_kwargs_from_args(args: argparse.Namespace) -> dict[str, object]:
+    """Extract step fields from parsed CLI args."""
+    kw: dict[str, object] = {}
+    for field in ("id", "name", "uses", "run"):
+        val = getattr(args, field, None)
+        if val:
+            kw[field] = val
+    step_if = getattr(args, "step_if", None)
+    if step_if:
+        kw["if"] = step_if
+    step_with = _parse_kv_pairs(getattr(args, "step_with", None))
+    if step_with:
+        kw["with"] = step_with
+    step_env = _parse_kv_pairs(getattr(args, "step_env", None))
+    if step_env:
+        kw["env"] = step_env
+    return kw
+
+
+def cmd_hooks(args: argparse.Namespace) -> None:
+    """Manage CI hook steps in the release workflow."""
+    root = Path.cwd()
+    workflow_dir = getattr(args, "workflow_dir", ".github/workflows")
+    release_yml = root / workflow_dir / "release.yml"
+    if not release_yml.exists():
+        _fatal("No release.yml found. Run `uvr init` first to generate the workflow.")
+
+    hook_key = _HOOK_ALIASES[args.hook_point]
+    hook_display = args.hook_point
+
+    all_hooks = _get_hooks_from_workflow(release_yml)
+    steps = all_hooks[hook_key]
+
+    action = getattr(args, "hook_action", None)
+
+    if action is None:
+        # Interactive mode
+        steps = _hooks_interactive(hook_key, steps)
+        all_hooks[hook_key] = steps
+    elif action == "clear":
+        all_hooks[hook_key] = []
+        print(f"Cleared all steps from {hook_display}.")
+    elif action == "add":
+        step_kw = _step_kwargs_from_args(args)
+        if args.id:
+            for i, s in enumerate(steps):
+                if s.get("id") == args.id:
+                    steps[i] = _hooks_apply([s], "update", position=1, **step_kw)[0]
+                    print(f"Updated step '{args.id}' in {hook_display}.")
+                    break
+            else:
+                all_hooks[hook_key] = _hooks_apply(steps, "add", **step_kw)
+                print(f"Added step to {hook_display}.")
+        else:
+            all_hooks[hook_key] = _hooks_apply(steps, "add", **step_kw)
+            print(f"Added step to {hook_display}.")
+    else:
+        try:
+            step_kw = _step_kwargs_from_args(args)
+            step_kw["position"] = args.position
+            all_hooks[hook_key] = _hooks_apply(steps, action, **step_kw)
+            print("Done.")
+        except ValueError as e:
+            _fatal(str(e))
+
+    _render_workflow(release_yml, all_hooks)
+    print(f"Re-rendered {release_yml.relative_to(root)}")
+
+
 def cli() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -521,6 +925,11 @@ def cli() -> None:
         action="append",
         metavar="PKG RUNNER",
         help="Per-package runners: -m PKG runner1 runner2 (repeatable).",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite release.yml without preserving existing hooks.",
     )
     init_parser.set_defaults(func=cmd_init)
 
@@ -557,9 +966,10 @@ def cli() -> None:
         "--force-all", action="store_true", help="Force rebuild all packages."
     )
     release_parser.add_argument(
-        "--dry-run",
+        "-y",
+        "--yes",
         action="store_true",
-        help="Print the release plan as JSON without dispatching.",
+        help="Skip confirmation prompt and dispatch immediately.",
     )
     release_parser.add_argument(
         "--python",
@@ -585,6 +995,88 @@ def cli() -> None:
         help="Directory containing the workflow file. (default: %(default)s)",
     )
     status_parser.set_defaults(func=cmd_status)
+
+    # hooks subcommand — uvr hooks PHASE [ACTION ...]
+    hooks_parser = subparsers.add_parser(
+        "hooks",
+        help="Manage CI hook steps in the release workflow.",
+    )
+    hooks_parser.add_argument(
+        "--workflow-dir",
+        default=".github/workflows",
+        help="Directory containing the workflow file. (default: %(default)s)",
+    )
+    phase_subparsers = hooks_parser.add_subparsers(dest="hook_point")
+
+    _PHASE_CHOICES = [
+        ("pre-build", "Steps that run before the build job."),
+        ("post-build", "Steps that run after the build job."),
+        ("pre-release", "Steps that run before the release job."),
+        ("post-release", "Steps that run after the release job."),
+    ]
+
+    def _add_step_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--name", help="Step display name.")
+        p.add_argument("--run", help="Shell command to run.")
+        p.add_argument("--uses", help="Action to use (e.g. actions/checkout@v4).")
+        p.add_argument(
+            "--with",
+            dest="step_with",
+            action="append",
+            metavar="KEY=VALUE",
+            help="Action input (repeatable).",
+        )
+        p.add_argument(
+            "--env",
+            dest="step_env",
+            action="append",
+            metavar="KEY=VALUE",
+            help="Environment variable (repeatable).",
+        )
+        p.add_argument("--if", dest="step_if", help="Conditional expression.")
+        p.add_argument("--id", help="Unique id for upsert semantics.")
+
+    for _phase_name, _phase_help in _PHASE_CHOICES:
+        _phase_parser = phase_subparsers.add_parser(_phase_name, help=_phase_help)
+        _phase_parser.set_defaults(
+            func=cmd_hooks, hook_point=_phase_name, hook_action=None
+        )
+
+        _action_subs = _phase_parser.add_subparsers(dest="hook_action")
+
+        # clear
+        _action_subs.add_parser("clear", help="Remove all steps.")
+
+        # add (appends, or upserts by --id)
+        _add_p = _action_subs.add_parser(
+            "add", help="Append a step (upsert if --id matches)."
+        )
+        _add_step_args(_add_p)
+
+        # insert POSITION
+        _ins_p = _action_subs.add_parser(
+            "insert", help="Insert a step at POSITION (1-indexed)."
+        )
+        _ins_p.add_argument("position", type=int, metavar="POSITION")
+        _add_step_args(_ins_p)
+
+        # remove POSITION
+        _rm_p = _action_subs.add_parser(
+            "remove", help="Remove the step at POSITION (1-indexed)."
+        )
+        _rm_p.add_argument("position", type=int, metavar="POSITION")
+
+        # update POSITION
+        _upd_p = _action_subs.add_parser(
+            "update", help="Update the step at POSITION (1-indexed)."
+        )
+        _upd_p.add_argument("position", type=int, metavar="POSITION")
+        _add_step_args(_upd_p)
+
+        for _sub in _action_subs.choices.values():
+            _sub.set_defaults(func=cmd_hooks, hook_point=_phase_name)
+
+    hooks_parser.set_defaults(func=lambda _: hooks_parser.print_help())
 
     # install subcommand
     install_parser = subparsers.add_parser(
