@@ -1,4 +1,4 @@
-"""Shared test fixtures."""
+"""Shared test fixtures and helpers."""
 
 from __future__ import annotations
 
@@ -6,6 +6,14 @@ from pathlib import Path
 
 import pytest
 import tomlkit
+
+from tests._helpers import (  # noqa: F401 — re-export for convenience
+    _init_workflow,
+    _make_plan,
+    _runners_args,
+    _wf_args,
+    _write_workspace_repo,
+)
 
 
 @pytest.fixture
