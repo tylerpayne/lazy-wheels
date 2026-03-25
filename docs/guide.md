@@ -113,14 +113,14 @@ If you don't have `gh` installed or prefer to dispatch manually, just run `uvr r
 The generated workflow has three core jobs that run in sequence:
 
 ```
-build (matrix: package × runner)
+build (matrix: one job per runner)
   → publish (matrix: one per changed package)
     → finalize (single job)
 ```
 
-**build** — One matrix entry per (package, runner) pair. Each entry strips the `.dev0` suffix, runs `uv build`, and uploads the wheel as an artifact.
+**build** — One matrix entry per runner. Each runner builds all its assigned packages in topological dependency order using `uvr-steps build-all`. This ensures packages with build-time dependencies on siblings have those wheels available via `--find-links`. Wheels are uploaded as artifacts.
 
-**publish** — One matrix entry per changed package. Downloads the built wheels and creates a GitHub release using `softprops/action-gh-release@v2`. Release notes are precomputed in the plan, so this job needs no Python — just `download-artifact` + the release action.
+**publish** — One matrix entry per changed package. Downloads the built wheels and creates a GitHub release using `softprops/action-gh-release@v2`. Release notes are precomputed in the plan, so this job needs no Python — just `download-artifact` + the release action. The `make_latest` field (driven by `[tool.uvr.config] latest`) controls which package gets the "Latest" badge.
 
 **finalize** — Bumps patch versions, commits, creates dev baseline tags, and pushes to main.
 
@@ -281,7 +281,7 @@ uvr release
   ├─ print plan JSON
   └─ [confirm] dispatch plan ────────► release.yml receives plan
                                          ├─ [hook] pre-build
-                                         ├─ build: matrix build per package
+                                         ├─ build: per-runner, topo-ordered
                                          ├─ [hook] post-build
                                          ├─ [hook] pre-release
                                          ├─ publish: one GitHub release
@@ -322,38 +322,26 @@ commit E   ← my-pkg/v1.0.2-dev  (pyproject.toml bumped to 1.0.2.dev0; new diff
 
 ## Publishing to PyPI
 
-The release workflow creates GitHub releases with wheels attached. If you also want to publish to PyPI, add a separate workflow that triggers on release events and uploads the wheel using [trusted publishing](https://docs.pypi.org/trusted-publishers/):
+The release workflow creates GitHub releases with wheels attached. To also publish to PyPI, add a `post-release` hook that downloads the wheel from the GitHub release and publishes it using [trusted publishing](https://docs.pypi.org/trusted-publishers/):
 
-```yaml
-# .github/workflows/publish.yml
-name: Publish to PyPI
-on:
-  release:
-    types: [published]
-jobs:
-  publish:
-    if: startsWith(github.event.release.tag_name, 'my-package/v')
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - name: Download wheel from release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir dist
-          gh release download "${{ github.event.release.tag_name }}" \
-            --repo "${{ github.repository }}" \
-            --pattern "*.whl" \
-            --dir dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
+```bash
+uvr hooks post-release add --id pypi-download \
+  --name "Download wheel for PyPI" \
+  --if 'contains(fromJSON(inputs.plan).changed, "my-package")' \
+  --run 'VERSION=$(echo "$UVR_PLAN" | python3 -c "import sys,json; p=json.load(sys.stdin); print(p[\"changed\"][\"my-package\"][\"version\"])")
+TAG="my-package/v${VERSION}"
+mkdir -p dist
+gh release download "$TAG" --repo "${{ github.repository }}" --pattern "my_package-*.whl" --dir dist'
+
+uvr hooks post-release add --id pypi-publish \
+  --name "Publish to PyPI" \
+  --if 'contains(fromJSON(inputs.plan).changed, "my-package")' \
+  --uses pypa/gh-action-pypi-publish@release/v1
 ```
 
-This downloads the wheel directly from the GitHub release (already built at the correct version) and publishes it — no rebuilding needed.
+You'll also need `id-token: write` in the workflow's top-level `permissions` for trusted publishing. Add it manually to `release.yml` after the existing `contents: write` line.
 
-You can also trigger it manually with `workflow_dispatch` if you add a `version` input and construct the tag from it.
+This approach runs PyPI publishing as part of the same release workflow — no separate workflow, no trigger indirection, and the `--if` condition ensures it only runs when the target package was actually released.
 
 ## Command Reference
 

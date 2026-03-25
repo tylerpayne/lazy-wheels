@@ -9,6 +9,7 @@
 * [0003 - Move Dependency Pinning to Local Planning](0003-move-dependency-pinning-to-local-planning.md)
 * [0004 - Use Per-Runner Build Matrix Instead of Per-Package](0004-use-per-runner-build-matrix-instead-of-per-package.md)
 * [0005 - Replace lazy-wheels with uv-release-monorepo](0005-replace-lazy-wheels-with-uv-release-monorepo.md)
+* [0006 - Use Post-Release Hook for PyPI Publishing](0006-use-post-release-hook-for-pypi-publishing.md)
 
 ## Rejected Records
 

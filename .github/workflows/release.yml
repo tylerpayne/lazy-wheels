@@ -24,9 +24,34 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
+  pre-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export plan context
+        env:
+          UVR_PLAN: ${{ inputs.plan }}
+        run: |
+          echo "UVR_CHANGED=$(echo "$UVR_PLAN" | jq -r '.changed | keys | join(" ")')" >> "$GITHUB_ENV"
+          echo "UVR_PLAN=$UVR_PLAN" >> "$GITHUB_ENV"
+      - id: setup-uv
+        name: Set up uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ fromJSON(inputs.plan).python_version }}
+      - id: check
+        name: Lint, typecheck, and test
+        run: |-
+          uv sync --all-packages
+          uv run poe check
+          uv run poe test
   build:
+    needs: [pre-build]
     strategy:
       fail-fast: false
       matrix:
@@ -40,13 +65,7 @@ jobs:
       - name: Set up Python
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          if [ -d packages/uv-release-monorepo ]; then
-            uv tool install ./packages/uv-release-monorepo
-          elif [ -n '${{ inputs.uvr_version }}' ]; then
-            uv tool install 'uv-release-monorepo==${{ inputs.uvr_version }}'
-          else
-            uv tool install uv-release-monorepo
-          fi
+          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
       - name: Build packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,14 +109,34 @@ jobs:
       - name: Set up
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          if [ -d packages/uv-release-monorepo ]; then
-            uv tool install ./packages/uv-release-monorepo
-          elif [ -n '${{ inputs.uvr_version }}' ]; then
-            uv tool install 'uv-release-monorepo==${{ inputs.uvr_version }}'
-          else
-            uv tool install uv-release-monorepo
-          fi
+          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
       - name: Finalize release
         env:
           UVR_PLAN: ${{ inputs.plan }}
         run: uvr-steps finalize --plan "$UVR_PLAN"
+
+  post-release:
+    runs-on: ubuntu-latest
+    needs: [finalize]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export plan context
+        env:
+          UVR_PLAN: ${{ inputs.plan }}
+        run: |
+          echo "UVR_CHANGED=$(echo "$UVR_PLAN" | jq -r '.changed | keys | join(" ")')" >> "$GITHUB_ENV"
+          echo "UVR_PLAN=$UVR_PLAN" >> "$GITHUB_ENV"
+      - id: pypi-download
+        name: Download wheel for PyPI
+        run: |-
+          VERSION=$(echo "$UVR_PLAN" | python3 -c "import sys,json; p=json.load(sys.stdin); print(p[\"changed\"][\"uv-release-monorepo\"][\"version\"])")
+          TAG="uv-release-monorepo/v${VERSION}"
+          mkdir -p dist
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist
+        if: contains(fromJSON(inputs.plan).changed, "uv-release-monorepo")
+      - id: pypi-publish
+        name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: contains(fromJSON(inputs.plan).changed, "uv-release-monorepo")
