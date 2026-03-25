@@ -18,6 +18,7 @@ def _load_yaml(path: Path) -> dict:
 
     yaml = YAML()
     yaml.preserve_quotes = True
+    yaml.width = 2**31
     with open(path) as f:
         doc = yaml.load(f)
     return doc or {}
@@ -29,6 +30,7 @@ def _dump_yaml(doc: Any) -> str:
 
     yaml = YAML()
     yaml.preserve_quotes = True
+    yaml.width = 2**31  # effectively infinite -- never line-wrap
     stream = StringIO()
     yaml.dump(doc, stream)
     return stream.getvalue()
