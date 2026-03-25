@@ -87,8 +87,8 @@ def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict:
     """Extract [tool.uvr.config] as a dict.
 
     Supported keys:
-        include: list of package names to whitelist (only these are considered).
-        exclude: list of package names to blacklist (these are skipped).
+        include: list of package names to allowlist (only these are considered).
+        exclude: list of package names to denylist (these are skipped).
         latest: package name whose GitHub release should be marked "Latest".
 
     If ``include`` is set, only listed packages are considered.

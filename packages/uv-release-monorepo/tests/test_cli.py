@@ -52,7 +52,7 @@ def _make_plan(
     }
     return ReleasePlan(
         uvr_version=__version__,
-        force_all=False,
+        rebuild_all=False,
         changed={name: packages[name] for name in changed},
         unchanged={name: packages[name] for name in unchanged},
         release_tags={name: None for name in all_pkgs},
@@ -115,30 +115,30 @@ class TestInit:
 @patch("uv_release_monorepo.cli.run_pipeline")
 def test_run_command_uses_workflow_steps_runner(mock_run_pipeline: MagicMock) -> None:
     """run command dispatches through workflow_steps.run_pipeline."""
-    args = argparse.Namespace(force_all=True, no_push=False, dry_run=False, plan=None)
+    args = argparse.Namespace(rebuild_all=True, no_push=False, dry_run=False, plan=None)
     cmd_run(args)
 
-    mock_run_pipeline.assert_called_once_with(force_all=True, push=True, dry_run=False)
+    mock_run_pipeline.assert_called_once_with(rebuild_all=True, push=True, dry_run=False)
 
 
 @patch("uv_release_monorepo.cli.run_pipeline")
 def test_run_command_no_push_flag(mock_run_pipeline: MagicMock) -> None:
     """run command passes push=False when --no-push is set."""
-    args = argparse.Namespace(force_all=False, no_push=True, dry_run=False, plan=None)
+    args = argparse.Namespace(rebuild_all=False, no_push=True, dry_run=False, plan=None)
     cmd_run(args)
 
     mock_run_pipeline.assert_called_once_with(
-        force_all=False, push=False, dry_run=False
+        rebuild_all=False, push=False, dry_run=False
     )
 
 
 @patch("uv_release_monorepo.cli.run_pipeline")
 def test_run_command_dry_run_flag(mock_run_pipeline: MagicMock) -> None:
     """run command passes dry_run=True when --dry-run is set."""
-    args = argparse.Namespace(force_all=False, no_push=False, dry_run=True, plan=None)
+    args = argparse.Namespace(rebuild_all=False, no_push=False, dry_run=True, plan=None)
     cmd_run(args)
 
-    mock_run_pipeline.assert_called_once_with(force_all=False, push=True, dry_run=True)
+    mock_run_pipeline.assert_called_once_with(rebuild_all=False, push=True, dry_run=True)
 
 
 def test_cli_dry_run_is_valid_arg() -> None:
@@ -679,7 +679,7 @@ class TestCmdRelease:
         )
 
         args = argparse.Namespace(
-            force_all=False,
+            rebuild_all=False,
             yes=False,
             workflow_dir=".github/workflows",
             python_version="3.12",
@@ -712,7 +712,7 @@ class TestCmdRelease:
         monkeypatch.setattr("builtins.input", lambda _: "n")
 
         args = argparse.Namespace(
-            force_all=False,
+            rebuild_all=False,
             yes=False,
             workflow_dir=".github/workflows",
             python_version="3.12",
@@ -749,7 +749,7 @@ class TestCmdRelease:
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="[]")
 
         args = argparse.Namespace(
-            force_all=False,
+            rebuild_all=False,
             yes=True,
             workflow_dir=".github/workflows",
             python_version="3.12",
@@ -908,7 +908,7 @@ def test_run_with_plan_calls_execute_plan(
     plan_json = plan.model_dump_json()
 
     args = argparse.Namespace(
-        plan=plan_json, no_push=False, force_all=False, dry_run=False
+        plan=plan_json, no_push=False, rebuild_all=False, dry_run=False
     )
     cmd_run(args)
 

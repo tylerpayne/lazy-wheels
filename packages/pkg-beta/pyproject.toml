@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "pkg-alpha"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

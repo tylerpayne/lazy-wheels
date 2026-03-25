@@ -62,8 +62,8 @@ If your workspace contains packages that shouldn't be part of the release cycle,
 
 ```toml
 [tool.uvr.config]
-include = ["pkg-alpha", "pkg-beta"]   # whitelist: only these packages
-exclude = ["pkg-internal"]            # blacklist: skip these packages
+include = ["pkg-alpha", "pkg-beta"]   # allowlist: only these packages
+exclude = ["pkg-internal"]            # denylist: skip these packages
 ```
 
 If `include` is set, only listed packages are considered. `exclude` is applied after `include`. Both are optional — omit both to manage all workspace packages.
@@ -91,7 +91,7 @@ uvr release -y
 ### Forcing a full rebuild
 
 ```bash
-uvr release --force-all
+uvr release --rebuild-all
 ```
 
 Ignores change detection and rebuilds every package in the workspace.
@@ -376,13 +376,13 @@ uvr init [-m PKG RUNNER [RUNNER ...]] [--force] [--workflow-dir DIR]
 Generate a release plan and optionally dispatch it to GitHub Actions.
 
 ```
-uvr release [-y] [--force-all] [--python VERSION] [--workflow-dir DIR]
+uvr release [-y] [--rebuild-all] [--python VERSION] [--workflow-dir DIR]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-y`, `--yes` | — | Skip confirmation prompt and dispatch immediately |
-| `--force-all` | — | Rebuild all packages regardless of changes |
+| `--rebuild-all` | — | Rebuild all packages regardless of changes |
 | `--python` | `3.12` | Python version for CI builds |
 | `--workflow-dir` | `.github/workflows` | Directory containing the workflow file |
 
@@ -393,13 +393,13 @@ By default, prints the plan as JSON and prompts `Dispatch release? [y/N]` before
 Execute the release pipeline locally (for testing or CI).
 
 ```
-uvr run [--dry-run] [--force-all] [--no-push] [--plan JSON]
+uvr run [--dry-run] [--rebuild-all] [--no-push] [--plan JSON]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--dry-run` | — | Print what would be released without making changes |
-| `--force-all` | — | Rebuild all packages |
+| `--rebuild-all` | — | Rebuild all packages |
 | `--no-push` | — | Skip git push |
 | `--plan` | — | Execute a pre-computed release plan JSON |
 
@@ -455,6 +455,6 @@ my-native-pkg = ["ubuntu-latest", "macos-14"]
 my-python-pkg = ["ubuntu-latest"]
 
 [tool.uvr.config]
-include = ["pkg-alpha", "pkg-beta"]   # optional whitelist
-exclude = ["pkg-internal"]            # optional blacklist
+include = ["pkg-alpha", "pkg-beta"]   # optional allowlist
+exclude = ["pkg-internal"]            # optional denylist
 ```

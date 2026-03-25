@@ -6,7 +6,7 @@
 #   uvr init -m PKG runner1 runner2 ...
 # Trigger releases with:
 #   uvr release
-#   uvr release --force-all
+#   uvr release --rebuild-all
 #
 name: Release Wheels
 
@@ -52,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.plan).matrix }}
+        runner: ${{ fromJSON(inputs.plan).runners }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -63,16 +63,16 @@ jobs:
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
           uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
-      - name: Prepare release version
+      - name: Build packages
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          uvr-steps prepare-release \
+          uvr-steps build-all \
             --plan '${{ inputs.plan }}' \
-            --package '${{ matrix.package }}'
-      - name: Build package
-        run: uv build "${{ matrix.path }}" --out-dir dist/
+            --runner '${{ matrix.runner }}'
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.package }}-${{ matrix.runner }}
+          name: wheels-${{ matrix.runner }}
           path: dist/*.whl
           if-no-files-found: error
 
@@ -122,7 +122,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: wheels-${{ matrix.package }}-*
+          pattern: wheels-*
           merge-multiple: true
           path: dist
       - uses: softprops/action-gh-release@v2
@@ -130,7 +130,7 @@ jobs:
           tag_name: ${{ matrix.tag }}
           name: ${{ matrix.title }}
           body: ${{ matrix.body }}
-          files: dist/*.whl
+          files: dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl
           make_latest: ${{ matrix.make_latest }}
 
   finalize:

@@ -47,7 +47,7 @@ class TestReleasePlan:
         beta = PackageInfo(path="packages/beta", version="0.2.0", deps=["pkg-alpha"])
         return ReleasePlan(
             uvr_version="0.3.0",
-            force_all=False,
+            rebuild_all=False,
             changed={"pkg-alpha": alpha},
             unchanged={"pkg-beta": beta},
             release_tags={
@@ -57,9 +57,9 @@ class TestReleasePlan:
             matrix=[MatrixEntry(package="pkg-alpha", runner="ubuntu-latest")],
         )
 
-    def test_schema_version_defaults_to_3(self) -> None:
+    def test_schema_version_defaults_to_4(self) -> None:
         plan = self._make_plan()
-        assert plan.schema_version == 3
+        assert plan.schema_version == 4
 
     def test_round_trip_json(self) -> None:
         plan = self._make_plan()

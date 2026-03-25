@@ -25,7 +25,7 @@ You need [uv](https://github.com/astral-sh/uv), a GitHub repo with Actions enabl
 ```bash
 uvr release              # print plan, prompt before dispatching
 uvr release -y           # skip prompt, dispatch immediately
-uvr release --force-all  # rebuild everything regardless of changes
+uvr release --rebuild-all  # rebuild everything regardless of changes
 ```
 
 uvr scans your workspace, diffs each package against its last dev baseline tag, and builds only what's new — plus anything downstream in the dependency graph. By default, `uvr release` prints the plan as JSON and asks for confirmation before dispatching via `gh`.
@@ -36,8 +36,8 @@ Add `[tool.uvr.config]` to your workspace root `pyproject.toml` to control which
 
 ```toml
 [tool.uvr.config]
-include = ["pkg-alpha", "pkg-beta"]   # only these packages (whitelist)
-exclude = ["pkg-internal"]            # skip these packages (blacklist)
+include = ["pkg-alpha", "pkg-beta"]   # only these packages (allowlist)
+exclude = ["pkg-internal"]            # skip these packages (denylist)
 ```
 
 If `include` is set, only listed packages are considered. `exclude` filters out from whatever remains. Both are optional.

@@ -91,6 +91,7 @@ class PublishEntry(BaseModel):
     title: str
     body: str
     make_latest: bool = False
+    dist_name: str = ""
 
 
 class ReleasePlan(BaseModel):
@@ -102,14 +103,15 @@ class ReleasePlan(BaseModel):
     commands, change detection, or version arithmetic.
     """
 
-    schema_version: int = 3
+    schema_version: int = 4
     uvr_version: str
     python_version: str = "3.12"
-    force_all: bool
+    rebuild_all: bool
     changed: dict[str, PackageInfo]
     unchanged: dict[str, PackageInfo]
     release_tags: dict[str, str | None]
     matrix: list[MatrixEntry]
+    runners: list[str] = Field(default_factory=list)
     bumps: dict[str, BumpPlan] = Field(default_factory=dict)
     publish_matrix: list[PublishEntry] = Field(default_factory=list)
     ci_publish: bool = False

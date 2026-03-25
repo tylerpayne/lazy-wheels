@@ -194,12 +194,12 @@ def find_dev_baselines(packages: dict[str, PackageInfo]) -> dict[str, str | None
 def detect_changes(
     packages: dict[str, PackageInfo],
     dev_baselines: Mapping[str, str | None],
-    force_all: bool,
+    rebuild_all: bool,
 ) -> list[str]:
     """Determine which packages need to be rebuilt.
 
     A package is "dirty" and needs rebuilding if:
-    1. force_all is True (rebuild everything)
+    1. rebuild_all is True (rebuild everything)
     2. No previous baseline tag exists for the package (first release)
     3. Any file in the package directory changed since its dev baseline
     4. Root pyproject.toml or uv.lock changed since its dev baseline
@@ -212,14 +212,14 @@ def detect_changes(
     Args:
         packages: Map of package name → PackageInfo.
         dev_baselines: Map of package name → dev baseline tag (or None).
-        force_all: If True, mark all packages as dirty.
+        rebuild_all: If True, mark all packages as dirty.
 
     Returns:
         List of changed package names.
     """
     step("Detecting changes")
 
-    if force_all:
+    if rebuild_all:
         dirty = set(packages.keys())
         print("  Force rebuild: all packages marked dirty")
     else:
@@ -417,7 +417,12 @@ def build_packages(changed: dict[str, PackageInfo]) -> None:
     for pkg in build_order:
         info = changed[pkg]
         print(f"\n  {pkg} ({info.path})")
-        result = run("uv", "build", info.path, "--out-dir", "dist/", check=False)
+        result = run(
+            "uv", "build", info.path,
+            "--out-dir", "dist/",
+            "--find-links", "dist/",
+            check=False,
+        )
         if result.returncode != 0:
             fatal(f"Failed to build {pkg}. Check uv build output above for details.")
 
@@ -625,14 +630,14 @@ def publish_release(
 
 def run_release(
     *,
-    force_all: bool = False,
+    rebuild_all: bool = False,
     push: bool = True,
     dry_run: bool = False,
 ) -> None:
     """Execute the full release pipeline.
 
     Args:
-        force_all: If True, rebuild all packages regardless of changes.
+        rebuild_all: If True, rebuild all packages regardless of changes.
         push: If True (default), push commits and tags at the end.
         dry_run: If True, print what would happen without making any changes.
     """
@@ -642,12 +647,12 @@ def run_release(
     packages = discover_packages()
     release_tags = find_release_tags(packages)
     dev_baselines = find_dev_baselines(packages)
-    changed_names = detect_changes(packages, dev_baselines, force_all)
+    changed_names = detect_changes(packages, dev_baselines, rebuild_all)
 
     if not changed_names:
         fatal(
             "Nothing changed since last release. "
-            "Use --force-all to rebuild all packages."
+            "Use --rebuild-all to rebuild all packages."
         )
 
     # Split packages into changed and unchanged dicts
@@ -704,7 +709,7 @@ def run_release(
 
 def build_plan(
     *,
-    force_all: bool,
+    rebuild_all: bool,
     matrix: dict[str, list[str]],
     uvr_version: str,
     python_version: str = "3.12",
@@ -717,7 +722,7 @@ def build_plan(
     commit any pin changes before dispatching to CI.
 
     Args:
-        force_all: If True, mark all packages as changed.
+        rebuild_all: If True, mark all packages as changed.
         matrix: Stored per-package runner config from the workflow file.
         uvr_version: The uvr version to embed in the plan.
         dry_run: If True, detect pin updates but do not write them to disk.
@@ -730,7 +735,7 @@ def build_plan(
     packages = discover_packages()
     release_tags = find_release_tags(packages)
     dev_baselines = find_dev_baselines(packages)
-    changed_names = detect_changes(packages, dev_baselines, force_all)
+    changed_names = detect_changes(packages, dev_baselines, rebuild_all)
 
     changed = {name: packages[name] for name in changed_names}
     unchanged = {
@@ -812,17 +817,21 @@ def build_plan(
                 title=f"{name} {info.version}",
                 body=generate_release_notes(name, info, baseline),
                 make_latest=name == latest_pkg,
+                dist_name=canonicalize_name(name).replace("-", "_"),
             )
         )
+
+    unique_runners = sorted(set(entry.runner for entry in matrix_entries))
 
     plan = ReleasePlan(
         uvr_version=uvr_version,
         python_version=python_version,
-        force_all=force_all,
+        rebuild_all=rebuild_all,
         changed=changed,
         unchanged=unchanged,
         release_tags=release_tags,
         matrix=matrix_entries,
+        runners=unique_runners,
         bumps=bumps,
         publish_matrix=publish_entries,
         ci_publish=True,

@@ -222,23 +222,23 @@ class TestDetectChanges:
         # No git diff called when tags are None
 
         changed = detect_changes(
-            sample_packages, dev_baselines=no_tags, force_all=False
+            sample_packages, dev_baselines=no_tags, rebuild_all=False
         )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
     @patch("uv_release_monorepo.pipeline.git")
     @patch("uv_release_monorepo.pipeline.step")
-    def test_force_all_marks_everything_dirty(
+    def test_rebuild_all_marks_everything_dirty(
         self,
         mock_step: MagicMock,
         mock_git: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
-        """force_all=True marks all packages as changed regardless of git diff."""
+        """rebuild_all=True marks all packages as changed regardless of git diff."""
         changed = detect_changes(
-            sample_packages, dev_baselines=all_tags, force_all=True
+            sample_packages, dev_baselines=all_tags, rebuild_all=True
         )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
@@ -261,7 +261,7 @@ class TestDetectChanges:
         ]
 
         changed = detect_changes(
-            sample_packages, dev_baselines=all_tags, force_all=False
+            sample_packages, dev_baselines=all_tags, rebuild_all=False
         )
 
         assert set(changed) == {"pkg-c"}
@@ -283,7 +283,7 @@ class TestDetectChanges:
         ]
 
         changed = detect_changes(
-            sample_packages, dev_baselines=all_tags, force_all=False
+            sample_packages, dev_baselines=all_tags, rebuild_all=False
         )
 
         # pkg-a changed directly, pkg-b and pkg-c are dirty because they depend on it
@@ -306,7 +306,7 @@ class TestDetectChanges:
         ]
 
         changed = detect_changes(
-            sample_packages, dev_baselines=all_tags, force_all=False
+            sample_packages, dev_baselines=all_tags, rebuild_all=False
         )
 
         # pkg-b changed, pkg-c depends on it, pkg-a is unaffected
@@ -329,7 +329,7 @@ class TestDetectChanges:
         ]
 
         changed = detect_changes(
-            sample_packages, dev_baselines=all_tags, force_all=False
+            sample_packages, dev_baselines=all_tags, rebuild_all=False
         )
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
@@ -351,7 +351,7 @@ class TestDetectChanges:
         ]
 
         changed = detect_changes(
-            sample_packages, dev_baselines=all_tags, force_all=False
+            sample_packages, dev_baselines=all_tags, rebuild_all=False
         )
 
         assert changed == []
@@ -402,7 +402,7 @@ class TestDetectChangesDiamondDeps:
         ]
 
         changed = detect_changes(
-            diamond_packages, dev_baselines=diamond_tags, force_all=False
+            diamond_packages, dev_baselines=diamond_tags, rebuild_all=False
         )
 
         assert set(changed) == {"bottom", "left", "right", "top"}
@@ -425,7 +425,7 @@ class TestDetectChangesDiamondDeps:
         ]
 
         changed = detect_changes(
-            diamond_packages, dev_baselines=diamond_tags, force_all=False
+            diamond_packages, dev_baselines=diamond_tags, rebuild_all=False
         )
 
         assert set(changed) == {"left", "top"}
@@ -448,7 +448,7 @@ class TestDetectChangesDiamondDeps:
         ]
 
         changed = detect_changes(
-            diamond_packages, dev_baselines=diamond_tags, force_all=False
+            diamond_packages, dev_baselines=diamond_tags, rebuild_all=False
         )
 
         assert set(changed) == {"top"}
@@ -1236,13 +1236,13 @@ class TestBuildPlan:
         }
         mock_detect.return_value = ["pkg-a"]
 
-        plan, pin_updates = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+        plan, pin_updates = build_plan(rebuild_all=False, matrix={}, uvr_version="0.3.0")
 
         assert isinstance(plan, ReleasePlan)
         assert "pkg-a" in plan.changed
         assert "pkg-b" in plan.unchanged
         assert plan.uvr_version == "0.3.0"
-        assert plan.force_all is False
+        assert plan.rebuild_all is False
         assert pin_updates == []  # no deps, no pins to update
 
     @patch("uv_release_monorepo.pipeline.detect_changes")
@@ -1267,7 +1267,7 @@ class TestBuildPlan:
         mock_detect.return_value = ["pkg-a"]  # only pkg-a changed
 
         plan, _ = build_plan(
-            force_all=False,
+            rebuild_all=False,
             matrix={"pkg-a": ["ubuntu-latest", "macos-14"], "pkg-b": ["ubuntu-latest"]},
             uvr_version="0.3.0",
         )
@@ -1296,7 +1296,7 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": None}
         mock_detect.return_value = ["pkg-a"]
 
-        plan, _ = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+        plan, _ = build_plan(rebuild_all=False, matrix={}, uvr_version="0.3.0")
 
         assert len(plan.matrix) == 1
         assert plan.matrix[0].package == "pkg-a"
@@ -1320,7 +1320,7 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": "pkg-a/v1.0.0-dev"}
         mock_detect.return_value = []
 
-        plan, _ = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+        plan, _ = build_plan(rebuild_all=False, matrix={}, uvr_version="0.3.0")
 
         assert plan.changed == {}
         assert "pkg-a" in plan.unchanged
@@ -1348,7 +1348,7 @@ class TestBuildPlan:
         mock_detect.return_value = ["pkg-a"]
         mock_gen_notes.return_value = "**Released:** pkg-a 1.0.0"
 
-        plan, _ = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+        plan, _ = build_plan(rebuild_all=False, matrix={}, uvr_version="0.3.0")
 
         assert plan.ci_publish is True
         assert len(plan.publish_matrix) == 1
@@ -1379,7 +1379,7 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": None}
         mock_detect.return_value = ["pkg-a"]
 
-        plan, _ = build_plan(force_all=False, matrix={}, uvr_version="0.3.0")
+        plan, _ = build_plan(rebuild_all=False, matrix={}, uvr_version="0.3.0")
 
         assert plan.matrix[0].path == "packages/a"
         assert plan.matrix[0].version == "1.0.0"
@@ -1453,7 +1453,7 @@ class TestExecutePlan:
         alpha = PackageInfo(path="packages/alpha", version="0.1.5", deps=[])
         plan = ReleasePlan(
             uvr_version="0.3.0",
-            force_all=False,
+            rebuild_all=False,
             changed={"pkg-alpha": alpha},
             unchanged={},
             release_tags={"pkg-alpha": "pkg-alpha/v0.1.4"},
@@ -1504,7 +1504,7 @@ class TestExecutePlan:
         alpha = PackageInfo(path="packages/alpha", version="0.1.5", deps=[])
         plan = ReleasePlan(
             uvr_version="0.3.0",
-            force_all=False,
+            rebuild_all=False,
             changed={"pkg-alpha": alpha},
             unchanged={},
             release_tags={"pkg-alpha": None},

@@ -9,6 +9,7 @@ import pytest
 from uv_release_monorepo.models import MatrixEntry, PackageInfo, ReleasePlan
 from uv_release_monorepo.workflow_steps import (
     execute_build,
+    execute_build_all,
     execute_fetch_unchanged,
     execute_finalize,
     execute_publish_releases,
@@ -31,7 +32,7 @@ def _make_plan_json(
     }
     plan = ReleasePlan(
         uvr_version="0.3.0",
-        force_all=False,
+        rebuild_all=False,
         changed={name: packages[name] for name in changed},
         unchanged={name: packages[name] for name in unchanged},
         release_tags={name: None for name in all_pkgs},
@@ -217,3 +218,156 @@ def test_main_rejects_unknown_step(capsys: pytest.CaptureFixture[str]) -> None:
         main(["not-a-step"])
     assert excinfo.value.code == 2
     assert "invalid choice" in capsys.readouterr().err
+
+
+@patch("uv_release_monorepo.workflow_steps.execute_build_all")
+def test_main_dispatches_build_all(mock_build_all: MagicMock) -> None:
+    """main dispatches build-all subcommand."""
+    plan_json = _make_plan_json(changed=["pkg-a"], unchanged=[])
+    main(["build-all", "--plan", plan_json, "--runner", "ubuntu-latest"])
+    mock_build_all.assert_called_once_with(plan_json, "ubuntu-latest")
+
+
+class TestExecuteBuildAll:
+    """Tests for the build-all workflow step."""
+
+    @staticmethod
+    def _plan_json_with_deps() -> str:
+        """Plan where beta depends on alpha, both assigned to ubuntu-latest."""
+        alpha = PackageInfo(path="packages/alpha", version="1.0.0", deps=[])
+        beta = PackageInfo(
+            path="packages/beta", version="2.0.0", deps=["alpha"]
+        )
+        plan = ReleasePlan(
+            uvr_version="0.3.0",
+            rebuild_all=False,
+            changed={"alpha": alpha, "beta": beta},
+            unchanged={},
+            release_tags={"alpha": None, "beta": None},
+            matrix=[
+                MatrixEntry(
+                    package="alpha",
+                    runner="ubuntu-latest",
+                    path="packages/alpha",
+                    version="1.0.0",
+                ),
+                MatrixEntry(
+                    package="beta",
+                    runner="ubuntu-latest",
+                    path="packages/beta",
+                    version="2.0.0",
+                ),
+            ],
+            runners=["ubuntu-latest"],
+        )
+        return plan.model_dump_json()
+
+    @staticmethod
+    def _plan_json_with_unchanged_dep() -> str:
+        """Plan where beta depends on alpha, but alpha is unchanged."""
+        alpha = PackageInfo(path="packages/alpha", version="1.0.0", deps=[])
+        beta = PackageInfo(
+            path="packages/beta", version="2.0.0", deps=["alpha"]
+        )
+        plan = ReleasePlan(
+            uvr_version="0.3.0",
+            rebuild_all=False,
+            changed={"beta": beta},
+            unchanged={"alpha": alpha},
+            release_tags={"alpha": "alpha/v1.0.0", "beta": None},
+            matrix=[
+                MatrixEntry(
+                    package="beta",
+                    runner="ubuntu-latest",
+                    path="packages/beta",
+                    version="2.0.0",
+                ),
+            ],
+            runners=["ubuntu-latest"],
+        )
+        return plan.model_dump_json()
+
+    @patch("uv_release_monorepo.shell.run")
+    @patch("uv_release_monorepo.shell.step")
+    @patch("uv_release_monorepo.deps.rewrite_pyproject")
+    @patch("uv_release_monorepo.versions.strip_dev", side_effect=lambda v: v)
+    def test_builds_in_topo_order(
+        self,
+        _mock_strip: MagicMock,
+        _mock_rewrite: MagicMock,
+        _mock_step: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        """build-all builds alpha before beta (dependency order)."""
+        mock_run.return_value = MagicMock(returncode=0)
+        plan_json = self._plan_json_with_deps()
+
+        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.glob", return_value=[]):
+            execute_build_all(plan_json, "ubuntu-latest")
+
+        # Extract the package paths from uv build calls
+        build_calls = [
+            c for c in mock_run.call_args_list
+            if c[0][0] == "uv" and c[0][1] == "build"
+        ]
+        assert len(build_calls) == 2
+        assert build_calls[0][0][2] == "packages/alpha"
+        assert build_calls[1][0][2] == "packages/beta"
+
+    @patch("uv_release_monorepo.shell.run")
+    @patch("uv_release_monorepo.shell.step")
+    @patch("uv_release_monorepo.deps.rewrite_pyproject")
+    @patch("uv_release_monorepo.versions.strip_dev", side_effect=lambda v: v)
+    @patch("uv_release_monorepo.workflow_steps.fetch_unchanged_wheels")
+    def test_fetches_unchanged_deps(
+        self,
+        mock_fetch: MagicMock,
+        _mock_strip: MagicMock,
+        _mock_rewrite: MagicMock,
+        _mock_step: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        """build-all fetches wheels for unchanged deps before building."""
+        mock_run.return_value = MagicMock(returncode=0)
+        plan_json = self._plan_json_with_unchanged_dep()
+
+        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.glob", return_value=[]):
+            execute_build_all(plan_json, "ubuntu-latest")
+
+        # Should have fetched alpha (unchanged dep)
+        mock_fetch.assert_called_once()
+        fetched_pkgs = mock_fetch.call_args[0][0]
+        assert "alpha" in fetched_pkgs
+
+    @patch("uv_release_monorepo.shell.run")
+    @patch("uv_release_monorepo.shell.step")
+    @patch("uv_release_monorepo.deps.rewrite_pyproject")
+    @patch("uv_release_monorepo.versions.strip_dev", side_effect=lambda v: v)
+    def test_passes_find_links(
+        self,
+        _mock_strip: MagicMock,
+        _mock_rewrite: MagicMock,
+        _mock_step: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        """build-all passes --find-links dist/ to uv build."""
+        mock_run.return_value = MagicMock(returncode=0)
+        plan_json = self._plan_json_with_deps()
+
+        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.glob", return_value=[]):
+            execute_build_all(plan_json, "ubuntu-latest")
+
+        build_calls = [
+            c for c in mock_run.call_args_list
+            if c[0][0] == "uv" and c[0][1] == "build"
+        ]
+        for call in build_calls:
+            args = call[0]
+            assert "--find-links" in args
+            assert "dist/" in args
+
+    def test_skips_unassigned_runner(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """build-all does nothing for a runner with no assigned packages."""
+        plan_json = self._plan_json_with_deps()
+        execute_build_all(plan_json, "macos-latest")
+        assert "No packages assigned" in capsys.readouterr().out

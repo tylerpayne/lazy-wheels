@@ -343,7 +343,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     print("  1. Commit and push the workflow file")
     print("  2. Trigger a release:")
     print("       uvr release")
-    print("       uvr release --force-all")
+    print("       uvr release --rebuild-all")
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -355,7 +355,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         execute_plan(plan, push=not args.no_push)
     else:
         run_pipeline(
-            force_all=args.force_all,
+            rebuild_all=args.rebuild_all,
             push=not args.no_push,
             dry_run=args.dry_run,
         )
@@ -373,7 +373,7 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     # Build the plan locally (runs discovery + change detection + pin updates)
     plan, pin_updates = build_plan(
-        force_all=args.force_all,
+        rebuild_all=args.rebuild_all,
         matrix=package_runners,
         uvr_version=__version__,
         python_version=args.python_version,
@@ -390,7 +390,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         return
 
     if not plan.changed:
-        print("Nothing changed since last release. Use --force-all to rebuild all.")
+        print("Nothing changed since last release. Use --rebuild-all to rebuild all.")
         return
 
     # Print the plan
@@ -489,7 +489,7 @@ def cmd_status(args: argparse.Namespace) -> None:
             pipeline_pkgs = discover_packages()
             dev_baselines = find_dev_baselines(pipeline_pkgs)
             all_dirty = set(
-                detect_changes(pipeline_pkgs, dev_baselines, force_all=False)
+                detect_changes(pipeline_pkgs, dev_baselines, rebuild_all=False)
             )
         finally:
             sys.stdout = old_stdout
@@ -938,7 +938,7 @@ def cli() -> None:
         "run", help="Run the release pipeline locally (usually called from CI)."
     )
     run_parser.add_argument(
-        "--force-all", action="store_true", help="Rebuild all packages."
+        "--rebuild-all", action="store_true", help="Rebuild all packages."
     )
     run_parser.add_argument(
         "--no-push",
@@ -963,7 +963,7 @@ def cli() -> None:
         help="Generate a release plan locally and dispatch the executor workflow.",
     )
     release_parser.add_argument(
-        "--force-all", action="store_true", help="Force rebuild all packages."
+        "--rebuild-all", action="store_true", help="Rebuild all packages."
     )
     release_parser.add_argument(
         "-y",
