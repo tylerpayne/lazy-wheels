@@ -118,6 +118,7 @@ jobs:
   post-release:
     runs-on: ubuntu-latest
     needs: [finalize]
+    environment: pypi
     steps:
       - uses: actions/checkout@v4
         with:
@@ -135,8 +136,8 @@ jobs:
           TAG="uv-release-monorepo/v${VERSION}"
           mkdir -p dist
           gh release download "$TAG" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist
-        if: contains(fromJSON(inputs.plan).changed, "uv-release-monorepo")
+        if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
       - id: pypi-publish
         name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: contains(fromJSON(inputs.plan).changed, "uv-release-monorepo")
+        if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
