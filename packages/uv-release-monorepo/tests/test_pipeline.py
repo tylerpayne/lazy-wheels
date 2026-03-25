@@ -1236,7 +1236,9 @@ class TestBuildPlan:
         }
         mock_detect.return_value = ["pkg-a"]
 
-        plan, pin_updates = build_plan(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+        plan, pin_updates = build_plan(
+            rebuild_all=False, matrix={}, uvr_version="0.3.0"
+        )
 
         assert isinstance(plan, ReleasePlan)
         assert "pkg-a" in plan.changed

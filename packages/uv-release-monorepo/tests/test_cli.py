@@ -11,17 +11,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uv_release_monorepo.cli import (
+    _MISSING,
     __version__,
     _discover_packages,
     _find_latest_release_tag,
     _parse_install_spec,
     _read_matrix,
+    _yaml_delete,
+    _yaml_get,
+    _yaml_set,
     cli,
     cmd_init,
     cmd_install,
     cmd_release,
     cmd_run,
+    cmd_runners,
     cmd_status,
+    cmd_workflow,
 )
 from uv_release_monorepo.models import MatrixEntry, PackageInfo, ReleasePlan
 
@@ -78,38 +84,12 @@ class TestInit:
         _write_workspace_repo(tmp_path, [])
         monkeypatch.chdir(tmp_path)
 
-        args = argparse.Namespace(
-            workflow_dir=".github/workflows",
-            matrix=None,
-        )
+        args = argparse.Namespace(workflow_dir=".github/workflows")
         cmd_init(args)
 
         workflow = tmp_path / ".github" / "workflows" / "release.yml"
         assert workflow.exists()
         assert "jobs:\n  build:" in workflow.read_text()
-
-    def test_matrix_writes_split_jobs_workflow(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """init with matrix args creates executor workflow and writes matrix to pyproject.toml."""
-        _write_workspace_repo(tmp_path, ["pkg-alpha", "pkg-beta"])
-        monkeypatch.chdir(tmp_path)
-
-        args = argparse.Namespace(
-            workflow_dir=".github/workflows",
-            matrix=[
-                ["pkg-alpha", "ubuntu-latest"],
-                ["pkg-beta", "ubuntu-latest", "ubuntu-24.04-arm"],
-            ],
-        )
-        cmd_init(args)
-
-        workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
-        assert "jobs:\n  build:" in workflow
-        # Matrix is stored in pyproject.toml, not in the workflow comment
-        pyproject_text = (tmp_path / "pyproject.toml").read_text()
-        assert "pkg-beta" in pyproject_text
-        assert "ubuntu-24.04-arm" in pyproject_text
 
 
 @patch("uv_release_monorepo.cli.run_pipeline")
@@ -118,7 +98,9 @@ def test_run_command_uses_workflow_steps_runner(mock_run_pipeline: MagicMock) ->
     args = argparse.Namespace(rebuild_all=True, no_push=False, dry_run=False, plan=None)
     cmd_run(args)
 
-    mock_run_pipeline.assert_called_once_with(rebuild_all=True, push=True, dry_run=False)
+    mock_run_pipeline.assert_called_once_with(
+        rebuild_all=True, push=True, dry_run=False
+    )
 
 
 @patch("uv_release_monorepo.cli.run_pipeline")
@@ -138,7 +120,9 @@ def test_run_command_dry_run_flag(mock_run_pipeline: MagicMock) -> None:
     args = argparse.Namespace(rebuild_all=False, no_push=False, dry_run=True, plan=None)
     cmd_run(args)
 
-    mock_run_pipeline.assert_called_once_with(rebuild_all=False, push=True, dry_run=True)
+    mock_run_pipeline.assert_called_once_with(
+        rebuild_all=False, push=True, dry_run=True
+    )
 
 
 def test_cli_dry_run_is_valid_arg() -> None:
@@ -157,7 +141,7 @@ def test_init_workflow_has_uvr_version_input(
     _write_workspace_repo(tmp_path, [])
     monkeypatch.chdir(tmp_path)
 
-    args = argparse.Namespace(workflow_dir=".github/workflows", matrix=None)
+    args = argparse.Namespace(workflow_dir=".github/workflows")
     cmd_init(args)
 
     workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
@@ -166,150 +150,120 @@ def test_init_workflow_has_uvr_version_input(
     assert "__UVR_VERSION__" not in workflow
 
 
-def test_cli_parses_matrix_args() -> None:
-    """CLI correctly parses -m arguments with nargs='+'."""
-    with patch.object(
-        sys,
-        "argv",
-        [
-            "uvr",
-            "init",
-            "-m",
-            "pkg-alpha",
-            "ubuntu-latest",
-            "-m",
-            "pkg-beta",
-            "ubuntu-latest",
-            "macos-14",
-        ],
-    ):
-        with patch("uv_release_monorepo.cli.cmd_init") as mock_init:
-            cli()
-            args = mock_init.call_args[0][0]
-            assert args.matrix == [
-                ["pkg-alpha", "ubuntu-latest"],
-                ["pkg-beta", "ubuntu-latest", "macos-14"],
-            ]
+def _runners_args(**kwargs: object) -> argparse.Namespace:
+    """Build a cmd_runners Namespace with sensible defaults."""
+    defaults: dict[str, object] = dict(
+        package=None,
+        add_value=None,
+        remove_value=None,
+        clear=False,
+    )
+    defaults.update(kwargs)
+    return argparse.Namespace(**defaults)
 
 
-class TestInitAdditive:
-    """Tests for additive init behavior."""
+class TestCmdRunners:
+    """Tests for cmd_runners()."""
 
-    def test_init_m_merges_with_existing_matrix(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_show_all_empty(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Adding a new package preserves existing packages."""
-        _write_workspace_repo(tmp_path, ["pkg-alpha", "pkg-beta"])
-        monkeypatch.chdir(tmp_path)
-
-        # First init: pkg-alpha
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[["pkg-alpha", "ubuntu-latest"]],
-            )
-        )
-
-        # Second init: pkg-beta (should keep pkg-alpha)
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[["pkg-beta", "ubuntu-latest"]],
-            )
-        )
-
-        # Both packages should appear in pyproject.toml [tool.uvr.matrix]
-        pyproject_text = (tmp_path / "pyproject.toml").read_text()
-        assert "pkg-alpha" in pyproject_text
-        assert "pkg-beta" in pyproject_text
-
-    def test_init_m_replaces_runners_for_existing_package(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Re-specifying a package replaces its runner list."""
+        """No matrix configured shows default message."""
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        # First init: ubuntu-latest
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[["pkg-alpha", "ubuntu-latest"]],
-            )
-        )
+        cmd_runners(_runners_args())
+        output = capsys.readouterr().out
+        assert "No runners configured" in output
 
-        # Second init: replace with macos-14
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[["pkg-alpha", "macos-14"]],
-            )
-        )
+    def test_add_runner(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Adds a runner for a package, verifiable via _read_matrix."""
+        _write_workspace_repo(tmp_path, ["pkg-alpha"])
+        monkeypatch.chdir(tmp_path)
 
-        # Check pyproject.toml has the updated runner for pkg-alpha
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+
+        result = _read_matrix(tmp_path)
+        assert result["pkg-alpha"] == ["ubuntu-latest"]
+
+    def test_add_duplicate_ignored(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Adding the same runner twice does not duplicate it."""
+        _write_workspace_repo(tmp_path, ["pkg-alpha"])
+        monkeypatch.chdir(tmp_path)
+
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+
+        result = _read_matrix(tmp_path)
+        assert result["pkg-alpha"] == ["ubuntu-latest"]
+        output = capsys.readouterr().out
+        assert "already in runners" in output
+
+    def test_remove_runner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Removes a runner from a package."""
+        _write_workspace_repo(tmp_path, ["pkg-alpha"])
+        monkeypatch.chdir(tmp_path)
+
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="macos-14"))
+        cmd_runners(_runners_args(package="pkg-alpha", remove_value="ubuntu-latest"))
+
         result = _read_matrix(tmp_path)
         assert result["pkg-alpha"] == ["macos-14"]
 
-    def test_init_no_m_preserves_existing_matrix(
+    def test_remove_last_runner_clears_package(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Bare `uvr init` on a matrix workflow preserves matrix entries."""
+        """Removing the only runner removes the package from the matrix."""
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        # First init with matrix
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[["pkg-alpha", "ubuntu-latest", "macos-14"]],
-            )
-        )
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", remove_value="ubuntu-latest"))
 
-        # Second init without -m
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=None,
-            )
-        )
+        result = _read_matrix(tmp_path)
+        assert "pkg-alpha" not in result
 
-        workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
-        assert "jobs:\n  build:" in workflow
-        # Matrix is preserved in pyproject.toml
-        pyproject_text = (tmp_path / "pyproject.toml").read_text()
-        assert "pkg-alpha" in pyproject_text
-        assert "ubuntu-latest" in pyproject_text
-        assert "macos-14" in pyproject_text
-
-    def test_init_m_upgrades_simple_to_matrix(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Adding -m always uses executor template (which has build job)."""
+    def test_clear(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Clears all runners for a package."""
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        # First init: simple workflow (executor template always has build job)
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=None,
-            )
-        )
-        workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
-        assert "jobs:\n  build:" in workflow
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="macos-14"))
+        cmd_runners(_runners_args(package="pkg-alpha", clear=True))
 
-        # Second init: add matrix
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[["pkg-alpha", "ubuntu-latest"]],
-            )
-        )
-        workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
-        assert "jobs:\n  build:" in workflow
-        # Matrix is stored in pyproject.toml
-        pyproject_text = (tmp_path / "pyproject.toml").read_text()
-        assert "pkg-alpha" in pyproject_text
+        result = _read_matrix(tmp_path)
+        assert "pkg-alpha" not in result
+
+    def test_read_single_package(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Reads runners for one package."""
+        _write_workspace_repo(tmp_path, ["pkg-alpha"])
+        monkeypatch.chdir(tmp_path)
+
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="macos-14"))
+        capsys.readouterr()  # clear add output
+
+        cmd_runners(_runners_args(package="pkg-alpha"))
+        output = capsys.readouterr().out
+        assert "ubuntu-latest" in output
+        assert "macos-14" in output
 
 
 class TestReadMatrix:
@@ -326,22 +280,16 @@ class TestReadMatrix:
         result = _read_matrix(tmp_path)
         assert result == {}
 
-    def test_returns_matrix_after_cmd_init(
+    def test_returns_matrix_after_cmd_runners(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Returns the matrix after cmd_init has been run with -m args."""
+        """Returns the matrix after cmd_runners has been used to set up runners."""
         _write_workspace_repo(tmp_path, ["pkg-a", "pkg-b"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[
-                    ["pkg-a", "ubuntu-latest"],
-                    ["pkg-b", "ubuntu-latest", "macos-14"],
-                ],
-            )
-        )
+        cmd_runners(_runners_args(package="pkg-a", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-b", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-b", add_value="macos-14"))
 
         result = _read_matrix(tmp_path)
         assert result == {
@@ -362,16 +310,14 @@ class TestStatus:
         _write_workspace_repo(tmp_path, ["pkg-alpha", "pkg-beta"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_init(
-            argparse.Namespace(
-                workflow_dir=".github/workflows",
-                matrix=[
-                    ["pkg-alpha", "ubuntu-latest"],
-                    ["pkg-beta", "ubuntu-latest", "macos-14"],
-                ],
-            )
-        )
-        capsys.readouterr()  # clear init output
+        # Set up matrix via cmd_runners
+        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-beta", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-beta", add_value="macos-14"))
+
+        # Init workflow (needed for cmd_status to find release.yml)
+        cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
+        capsys.readouterr()  # clear output
 
         cmd_status(argparse.Namespace(workflow_dir=".github/workflows"))
         output = capsys.readouterr().out
@@ -406,7 +352,7 @@ class TestStatus:
         _write_workspace_repo(tmp_path, ["pkg-alpha", "pkg-beta"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_init(argparse.Namespace(workflow_dir=".github/workflows", matrix=None))
+        cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
         capsys.readouterr()
 
         cmd_status(argparse.Namespace(workflow_dir=".github/workflows"))
@@ -460,7 +406,7 @@ class TestDiscoverPackages:
         )
         monkeypatch.chdir(tmp_path)
 
-        cmd_init(argparse.Namespace(workflow_dir=".github/workflows", matrix=None))
+        cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
         capsys.readouterr()
 
         cmd_status(argparse.Namespace(workflow_dir=".github/workflows"))
@@ -915,3 +861,345 @@ def test_run_with_plan_calls_execute_plan(
     mock_execute_plan.assert_called_once()
     (called_plan,) = mock_execute_plan.call_args[0]
     assert called_plan.changed == plan.changed
+
+
+# ---------------------------------------------------------------------------
+# YAML helpers: _yaml_get, _yaml_set, _yaml_delete
+# ---------------------------------------------------------------------------
+
+
+class TestYamlGet:
+    def test_shallow(self) -> None:
+        assert _yaml_get({"a": 1}, ["a"]) == 1
+
+    def test_nested(self) -> None:
+        assert _yaml_get({"a": {"b": {"c": 3}}}, ["a", "b", "c"]) == 3
+
+    def test_missing_key(self) -> None:
+        assert _yaml_get({"a": 1}, ["b"]) is _MISSING
+
+    def test_missing_nested(self) -> None:
+        assert _yaml_get({"a": {"b": 1}}, ["a", "x"]) is _MISSING
+
+    def test_empty_path(self) -> None:
+        doc = {"a": 1}
+        assert _yaml_get(doc, []) is doc
+
+    def test_returns_dict(self) -> None:
+        assert _yaml_get({"a": {"b": 1}}, ["a"]) == {"b": 1}
+
+    def test_returns_list(self) -> None:
+        assert _yaml_get({"a": [1, 2]}, ["a"]) == [1, 2]
+
+
+class TestYamlSet:
+    def test_shallow(self) -> None:
+        doc: dict = {}
+        _yaml_set(doc, ["a"], 1)
+        assert doc == {"a": 1}
+
+    def test_nested_creates_intermediates(self) -> None:
+        doc: dict = {}
+        _yaml_set(doc, ["a", "b", "c"], 3)
+        assert doc == {"a": {"b": {"c": 3}}}
+
+    def test_overwrites_existing(self) -> None:
+        doc = {"a": 1}
+        _yaml_set(doc, ["a"], 2)
+        assert doc == {"a": 2}
+
+    def test_deep_overwrite(self) -> None:
+        doc = {"a": {"b": {"c": "old"}}}
+        _yaml_set(doc, ["a", "b", "c"], "new")
+        assert doc["a"]["b"]["c"] == "new"
+
+    def test_creates_intermediate_over_non_dict(self) -> None:
+        doc = {"a": "scalar"}
+        _yaml_set(doc, ["a", "b"], 1)
+        assert doc == {"a": {"b": 1}}
+
+    def test_set_list(self) -> None:
+        doc: dict = {}
+        _yaml_set(doc, ["items"], [1, 2, 3])
+        assert doc == {"items": [1, 2, 3]}
+
+
+class TestYamlDelete:
+    def test_shallow(self) -> None:
+        doc = {"a": 1, "b": 2}
+        assert _yaml_delete(doc, ["a"]) is True
+        assert doc == {"b": 2}
+
+    def test_nested(self) -> None:
+        doc = {"a": {"b": 1, "c": 2}}
+        assert _yaml_delete(doc, ["a", "b"]) is True
+        assert doc == {"a": {"c": 2}}
+
+    def test_missing_returns_false(self) -> None:
+        doc = {"a": 1}
+        assert _yaml_delete(doc, ["b"]) is False
+        assert doc == {"a": 1}
+
+    def test_missing_nested_returns_false(self) -> None:
+        doc = {"a": {"b": 1}}
+        assert _yaml_delete(doc, ["a", "x"]) is False
+
+    def test_missing_parent_returns_false(self) -> None:
+        doc = {"a": 1}
+        assert _yaml_delete(doc, ["x", "y"]) is False
+
+
+# ---------------------------------------------------------------------------
+# cmd_workflow integration tests
+# ---------------------------------------------------------------------------
+
+
+def _init_workflow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Create a workspace with a generated release.yml and return its path."""
+    _write_workspace_repo(tmp_path, ["pkg-alpha"])
+    monkeypatch.chdir(tmp_path)
+    cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
+    return tmp_path / ".github" / "workflows" / "release.yml"
+
+
+class TestCmdWorkflowRead:
+    def test_read_permissions(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(
+            argparse.Namespace(
+                workflow_dir=".github/workflows",
+                path=["permissions"],
+                set_value=None,
+                add_value=None,
+                insert_value=None,
+                remove_value=None,
+                insert_index=None,
+                clear=False,
+            )
+        )
+        out = capsys.readouterr().out
+        assert "contents" in out
+
+    def test_read_missing_key(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(
+            argparse.Namespace(
+                workflow_dir=".github/workflows",
+                path=["nonexistent"],
+                set_value=None,
+                add_value=None,
+                insert_value=None,
+                remove_value=None,
+                insert_index=None,
+                clear=False,
+            )
+        )
+        out = capsys.readouterr().out
+        assert "not found" in out
+
+    def test_read_no_path_dumps_doc(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(
+            argparse.Namespace(
+                workflow_dir=".github/workflows",
+                path=[],
+                set_value=None,
+                add_value=None,
+                insert_value=None,
+                remove_value=None,
+                insert_index=None,
+                clear=False,
+            )
+        )
+        out = capsys.readouterr().out
+        assert "jobs:" in out
+
+
+def _wf_args(**kwargs) -> argparse.Namespace:
+    """Build a cmd_workflow Namespace with sensible defaults."""
+    defaults = dict(
+        workflow_dir=".github/workflows",
+        path=[],
+        set_value=None,
+        add_value=None,
+        insert_value=None,
+        remove_value=None,
+        insert_index=None,
+        clear=False,
+    )
+    defaults.update(kwargs)
+    return argparse.Namespace(**defaults)
+
+
+class TestCmdWorkflowSet:
+    def test_set_scalar(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["permissions", "id-token"], set_value="write"))
+        cmd_workflow(_wf_args(path=["permissions", "id-token"]))
+        out = capsys.readouterr().out
+        assert "write" in out
+
+    def test_set_creates_intermediates(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["jobs", "build", "environment"], set_value="prod"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "environment"]))
+        out = capsys.readouterr().out
+        assert "prod" in out
+
+    def test_set_rejects_invalid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        with pytest.raises(SystemExit):
+            cmd_workflow(
+                _wf_args(path=["jobs", "bogus"], set_value="{runs-on: ubuntu}")
+            )
+
+
+class TestCmdWorkflowClear:
+    def test_clear_existing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["permissions", "id-token"], set_value="write"))
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["permissions", "id-token"], clear=True))
+        out = capsys.readouterr().out
+        assert "Deleted" in out
+
+    def test_clear_missing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["permissions", "nope"], clear=True))
+        out = capsys.readouterr().out
+        assert "not found" in out
+
+
+class TestCmdWorkflowList:
+    def test_add_creates_list(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="release"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"]))
+        out = capsys.readouterr().out
+        assert "release" in out
+
+    def test_add_appends(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        import yaml
+
+        release_yml = _init_workflow(tmp_path, monkeypatch)
+        capsys.readouterr()
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="b"))
+        doc = yaml.safe_load(release_yml.read_text())
+        assert doc["jobs"]["build"]["tags"] == ["a", "b"]
+
+    def test_add_to_non_list_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        with pytest.raises(SystemExit):
+            cmd_workflow(_wf_args(path=["permissions", "contents"], add_value="read"))
+
+    def test_insert_at_index(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import yaml
+
+        release_yml = _init_workflow(tmp_path, monkeypatch)
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="c"))
+        cmd_workflow(
+            _wf_args(path=["jobs", "build", "tags"], insert_value="b", insert_index=1)
+        )
+        doc = yaml.safe_load(release_yml.read_text())
+        assert doc["jobs"]["build"]["tags"] == ["a", "b", "c"]
+
+    def test_insert_negative_index(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import yaml
+
+        release_yml = _init_workflow(tmp_path, monkeypatch)
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="c"))
+        cmd_workflow(
+            _wf_args(path=["jobs", "build", "tags"], insert_value="b", insert_index=-1)
+        )
+        doc = yaml.safe_load(release_yml.read_text())
+        assert doc["jobs"]["build"]["tags"] == ["a", "b", "c"]
+
+    def test_insert_requires_at(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
+        with pytest.raises(SystemExit):
+            cmd_workflow(_wf_args(path=["jobs", "build", "tags"], insert_value="b"))
+
+    def test_remove(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import yaml
+
+        release_yml = _init_workflow(tmp_path, monkeypatch)
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="b"))
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], remove_value="a"))
+        doc = yaml.safe_load(release_yml.read_text())
+        assert doc["jobs"]["build"]["tags"] == ["b"]
+
+    def test_remove_missing_value_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _init_workflow(tmp_path, monkeypatch)
+        cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
+        with pytest.raises(SystemExit):
+            cmd_workflow(_wf_args(path=["jobs", "build", "tags"], remove_value="z"))

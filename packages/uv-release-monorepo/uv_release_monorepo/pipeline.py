@@ -418,9 +418,13 @@ def build_packages(changed: dict[str, PackageInfo]) -> None:
         info = changed[pkg]
         print(f"\n  {pkg} ({info.path})")
         result = run(
-            "uv", "build", info.path,
-            "--out-dir", "dist/",
-            "--find-links", "dist/",
+            "uv",
+            "build",
+            info.path,
+            "--out-dir",
+            "dist/",
+            "--find-links",
+            "dist/",
             check=False,
         )
         if result.returncode != 0:

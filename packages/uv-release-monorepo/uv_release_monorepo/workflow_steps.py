@@ -110,11 +110,7 @@ def execute_build_all(plan_json: str, runner: str) -> None:
     plan = ReleasePlan.model_validate_json(plan_json)
 
     # Which packages are assigned to this runner?
-    assigned = {
-        entry.package
-        for entry in plan.matrix
-        if entry.runner == runner
-    }
+    assigned = {entry.package for entry in plan.matrix if entry.runner == runner}
     if not assigned:
         print(f"No packages assigned to runner {runner}")
         return
@@ -162,9 +158,13 @@ def execute_build_all(plan_json: str, runner: str) -> None:
         )
         print(f"\n  {pkg} ({info.path})")
         result = run(
-            "uv", "build", info.path,
-            "--out-dir", "dist/",
-            "--find-links", "dist/",
+            "uv",
+            "build",
+            info.path,
+            "--out-dir",
+            "dist/",
+            "--find-links",
+            "dist/",
             check=False,
         )
         if result.returncode != 0:
@@ -231,9 +231,7 @@ def main(argv: list[str] | None = None) -> None:
     finalize_parser.add_argument("--plan", required=True, help="Release plan JSON.")
 
     build_all_parser = subparsers.add_parser("build-all")
-    build_all_parser.add_argument(
-        "--plan", required=True, help="Release plan JSON."
-    )
+    build_all_parser.add_argument("--plan", required=True, help="Release plan JSON.")
     build_all_parser.add_argument(
         "--runner", required=True, help="Runner name to build packages for."
     )

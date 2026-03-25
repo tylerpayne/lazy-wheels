@@ -235,9 +235,7 @@ class TestExecuteBuildAll:
     def _plan_json_with_deps() -> str:
         """Plan where beta depends on alpha, both assigned to ubuntu-latest."""
         alpha = PackageInfo(path="packages/alpha", version="1.0.0", deps=[])
-        beta = PackageInfo(
-            path="packages/beta", version="2.0.0", deps=["alpha"]
-        )
+        beta = PackageInfo(path="packages/beta", version="2.0.0", deps=["alpha"])
         plan = ReleasePlan(
             uvr_version="0.3.0",
             rebuild_all=False,
@@ -266,9 +264,7 @@ class TestExecuteBuildAll:
     def _plan_json_with_unchanged_dep() -> str:
         """Plan where beta depends on alpha, but alpha is unchanged."""
         alpha = PackageInfo(path="packages/alpha", version="1.0.0", deps=[])
-        beta = PackageInfo(
-            path="packages/beta", version="2.0.0", deps=["alpha"]
-        )
+        beta = PackageInfo(path="packages/beta", version="2.0.0", deps=["alpha"])
         plan = ReleasePlan(
             uvr_version="0.3.0",
             rebuild_all=False,
@@ -307,8 +303,7 @@ class TestExecuteBuildAll:
 
         # Extract the package paths from uv build calls
         build_calls = [
-            c for c in mock_run.call_args_list
-            if c[0][0] == "uv" and c[0][1] == "build"
+            c for c in mock_run.call_args_list if c[0][0] == "uv" and c[0][1] == "build"
         ]
         assert len(build_calls) == 2
         assert build_calls[0][0][2] == "packages/alpha"
@@ -358,8 +353,7 @@ class TestExecuteBuildAll:
             execute_build_all(plan_json, "ubuntu-latest")
 
         build_calls = [
-            c for c in mock_run.call_args_list
-            if c[0][0] == "uv" and c[0][1] == "build"
+            c for c in mock_run.call_args_list if c[0][0] == "uv" and c[0][1] == "build"
         ]
         for call in build_calls:
             args = call[0]

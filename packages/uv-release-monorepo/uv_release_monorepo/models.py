@@ -94,6 +94,103 @@ class PublishEntry(BaseModel):
     dist_name: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Release workflow models — represents the full .github/workflows/release.yml
+# ---------------------------------------------------------------------------
+
+
+class WorkflowInput(BaseModel):
+    """A single input for workflow_dispatch."""
+
+    description: str = ""
+    type: str = "string"
+    required: bool = False
+
+
+class WorkflowDispatch(BaseModel):
+    """The workflow_dispatch trigger."""
+
+    inputs: dict[str, WorkflowInput] = Field(default_factory=dict)
+
+
+class WorkflowTrigger(BaseModel):
+    """The ``on:`` block. Editable — users can add triggers."""
+
+    model_config = {"extra": "allow"}
+
+    workflow_dispatch: WorkflowDispatch = Field(default_factory=WorkflowDispatch)
+
+
+class Job(BaseModel):
+    """Base for all jobs. Common overridable fields."""
+
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+    runs_on: str = Field(default="ubuntu-latest", alias="runs-on")
+    needs: list[str] = Field(default_factory=list)
+    steps: list[dict] = Field(default_factory=list)
+    environment: str | None = None
+    concurrency: str | dict | None = None
+    timeout_minutes: int | None = Field(default=None, alias="timeout-minutes")
+    env: dict[str, str] | None = None
+    if_condition: str | None = Field(default=None, alias="if")
+
+
+class HookJob(Job):
+    """A hook phase job — fully user-configurable."""
+
+    pass
+
+
+class BuildJob(Job):
+    """The build job. Strategy is template-managed but accepted here."""
+
+    strategy: dict | None = None
+
+
+class PublishJob(Job):
+    """The publish job. Strategy is template-managed but accepted here."""
+
+    strategy: dict | None = None
+
+
+class FinalizeJob(Job):
+    """The finalize job."""
+
+    pass
+
+
+class WorkflowJobs(BaseModel):
+    """All jobs in the release workflow."""
+
+    model_config = {"extra": "forbid", "populate_by_name": True}
+
+    pre_build: HookJob | None = Field(default=None, alias="pre-build")
+    build: BuildJob = Field(default_factory=BuildJob)
+    post_build: HookJob | None = Field(default=None, alias="post-build")
+    pre_release: HookJob | None = Field(default=None, alias="pre-release")
+    publish: PublishJob = Field(default_factory=PublishJob)
+    finalize: FinalizeJob = Field(default_factory=FinalizeJob)
+    post_release: HookJob | None = Field(default=None, alias="post-release")
+
+
+class ReleaseWorkflow(BaseModel):
+    """Full representation of .github/workflows/release.yml.
+
+    The YAML file is the source of truth. This model validates its
+    structure after edits made via ``uvr workflow``. The Jinja2 template
+    generates the initial YAML; this model ensures user edits don't
+    break it.
+    """
+
+    model_config = {"extra": "forbid", "populate_by_name": True}
+
+    name: str = "Release Wheels"
+    on: WorkflowTrigger = Field(default_factory=WorkflowTrigger)
+    permissions: dict[str, str] = Field(default_factory=lambda: {"contents": "write"})
+    jobs: WorkflowJobs = Field(default_factory=WorkflowJobs)
+
+
 class ReleasePlan(BaseModel):
     """Self-contained release plan generated locally and executed by CI.
 

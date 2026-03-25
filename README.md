@@ -60,6 +60,63 @@ uvr hooks pre-build add --name "Run tests" --run "uv run pytest"
 
 Every hook job has access to `$UVR_PLAN` (the full release plan JSON) and `$UVR_CHANGED` (space-separated list of changed packages). See the [full guide](docs/guide.md) for all hook operations.
 
+### Edit workflow settings
+
+`uvr workflow` reads, writes, and deletes any key in `release.yml`:
+
+```bash
+uvr workflow permissions                          # read
+uvr workflow permissions id-token --set write     # write
+uvr workflow permissions id-token --clear         # delete
+uvr workflow jobs post-release environment --set pypi  # nested write
+```
+
+List operations:
+
+```bash
+uvr workflow jobs build tags --add release         # append
+uvr workflow jobs build tags --insert v2 --at 0    # insert at position
+uvr workflow jobs build tags --remove release      # remove by value
+```
+
+Edits are validated against the workflow schema before writing — unknown job names or invalid structures are rejected.
+
+### Example: full CI pipeline setup
+
+Starting from a fresh `uvr init`, add pre-build checks and a post-release PyPI publish:
+
+```bash
+# Gate releases on lint + tests
+uvr hooks pre-build add --id setup-uv \
+  --name "Set up uv and Python" \
+  --uses astral-sh/setup-uv@v5 \
+  --with 'python-version=${{ fromJSON(inputs.plan).python_version }}'
+
+uvr hooks pre-build add --id check \
+  --name "Lint, typecheck, and test" \
+  --run 'uv sync --all-packages
+uv run poe check
+uv run poe test'
+
+# Publish to PyPI after release (only when uv-release-monorepo changed)
+uvr hooks post-release add --id pypi-download \
+  --name "Download wheel for PyPI" \
+  --if "fromJSON(inputs.plan).changed['uv-release-monorepo'] != null" \
+  --run 'VERSION=$(echo "$UVR_PLAN" | python3 -c "import sys,json; p=json.load(sys.stdin); print(p[\"changed\"][\"uv-release-monorepo\"][\"version\"])")
+TAG="uv-release-monorepo/v${VERSION}"
+mkdir -p dist
+gh release download "$TAG" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist'
+
+uvr hooks post-release add --id pypi-publish \
+  --name "Publish to PyPI" \
+  --if "fromJSON(inputs.plan).changed['uv-release-monorepo'] != null" \
+  --uses pypa/gh-action-pypi-publish@release/v1
+
+# Set workflow permissions and job environment for trusted publishing
+uvr workflow permissions id-token --set write
+uvr workflow jobs post-release environment --set pypi
+```
+
 ### Install packages from GitHub releases
 
 ```bash

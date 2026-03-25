@@ -23,14 +23,23 @@ on:
         required: false
 
 permissions:
-  contents: write
+[% for scope, level in permissions.items() | sort %]
+  [[ scope ]]: [[ level ]]
+[% endfor %]
 [% set pre_release_needs = ['post-build'] if hooks.post_build else ['build'] %]
 [% set publish_needs = ['pre-release'] if hooks.pre_release else pre_release_needs %]
+[%- macro hook_job_attrs(phase) -%]
+[% set job = hook_jobs.get(phase, {}) %]
+[% for key, val in job.items() if key != 'runs-on' %]
+    [[ key ]]: [[ val ]]
+[% endfor %]
+[%- endmacro -%]
 
 jobs:
 [% if hooks.pre_build %]
   pre-build:
-    runs-on: ubuntu-latest
+    runs-on: [[ hook_jobs.get('pre_build', {}).get('runs-on', 'ubuntu-latest') ]]
+[[ hook_job_attrs('pre_build') ]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,8 +85,9 @@ jobs:
 
 [% if hooks.post_build %]
   post-build:
-    runs-on: ubuntu-latest
+    runs-on: [[ hook_jobs.get('post_build', {}).get('runs-on', 'ubuntu-latest') ]]
     needs: [build]
+[[ hook_job_attrs('post_build') ]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,8 +104,9 @@ jobs:
 [% endif %]
 [% if hooks.pre_release %]
   pre-release:
-    runs-on: ubuntu-latest
+    runs-on: [[ hook_jobs.get('pre_release', {}).get('runs-on', 'ubuntu-latest') ]]
     needs: [[ '[' + pre_release_needs | join(', ') + ']' ]]
+[[ hook_job_attrs('pre_release') ]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -150,8 +161,9 @@ jobs:
 
 [% if hooks.post_release %]
   post-release:
-    runs-on: ubuntu-latest
+    runs-on: [[ hook_jobs.get('post_release', {}).get('runs-on', 'ubuntu-latest') ]]
     needs: [finalize]
+[[ hook_job_attrs('post_release') ]]
     steps:
       - uses: actions/checkout@v4
         with:
