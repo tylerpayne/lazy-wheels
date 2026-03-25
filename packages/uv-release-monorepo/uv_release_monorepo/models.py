@@ -6,7 +6,9 @@ the release pipeline.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class PackageInfo(BaseModel):
@@ -189,6 +191,14 @@ class ReleaseWorkflow(BaseModel):
     on: WorkflowTrigger = Field(default_factory=WorkflowTrigger)
     permissions: dict[str, str] = Field(default_factory=lambda: {"contents": "write"})
     jobs: WorkflowJobs = Field(default_factory=WorkflowJobs)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_on_key(cls, data: Any) -> Any:
+        """PyYAML parses ``on:`` as boolean ``True`` — normalize to string."""
+        if isinstance(data, dict) and True in data:
+            data["on"] = data.pop(True)
+        return data
 
 
 class ReleasePlan(BaseModel):

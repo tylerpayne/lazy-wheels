@@ -39,14 +39,16 @@ def cmd_workflow(args: argparse.Namespace) -> None:
     def _validate_and_write() -> None:
         from pydantic import ValidationError
 
-        # PyYAML parses `on:` as boolean True — normalize for validation
-        validate_doc = {("on" if k is True else k): v for k, v in doc.items()}
         try:
-            ReleaseWorkflow.model_validate(validate_doc)
+            model = ReleaseWorkflow.model_validate(doc)
         except ValidationError as e:
             _fatal(f"Invalid workflow structure:\n{e}")
         release_yml.write_text(
-            yaml.dump(doc, default_flow_style=False, sort_keys=False)
+            yaml.dump(
+                model.model_dump(by_alias=True, exclude_none=True),
+                default_flow_style=False,
+                sort_keys=False,
+            )
         )
 
     path_str = ".".join(parts)

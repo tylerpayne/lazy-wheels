@@ -293,3 +293,22 @@ class TestCmdWorkflowList:
         cmd_workflow(_wf_args(path=["jobs", "build", "tags"], add_value="a"))
         with pytest.raises(SystemExit):
             cmd_workflow(_wf_args(path=["jobs", "build", "tags"], remove_value="z"))
+
+
+class TestCmdWorkflowOnKey:
+    """Verify the YAML ``on:`` key survives round-tripping (PyYAML parses it as True)."""
+
+    def test_set_preserves_on_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        release_yml = _init_workflow(tmp_path, monkeypatch)
+        cmd_workflow(_wf_args(path=["permissions", "id-token"], set_value="write"))
+        text = release_yml.read_text()
+        # Must not contain `true:` — should be `on:` or `'on':`
+        assert "\ntrue:" not in text
+        doc = yaml.safe_load(text)
+        # PyYAML reads `on:` / `'on':` back as True or "on" — either way,
+        # the workflow_dispatch trigger must be present
+        trigger = doc.get(True) or doc.get("on")
+        assert trigger is not None
+        assert "workflow_dispatch" in trigger
