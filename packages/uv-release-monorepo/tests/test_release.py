@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -48,6 +47,7 @@ class TestCmdRelease:
             skip_to=None,
             reuse_run=None,
             reuse_release=False,
+            json=False,
         )
         cmd_release(args)
 
@@ -55,14 +55,14 @@ class TestCmdRelease:
         assert "Nothing changed" in output
 
     @patch("uv_release_monorepo.cli.build_plan")
-    def test_release_prints_plan_json(
+    def test_release_prints_human_summary(
         self,
         mock_build_plan: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """cmd_release prints the plan as JSON and prompts before dispatching."""
+        """cmd_release prints a human-readable summary."""
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
@@ -73,7 +73,6 @@ class TestCmdRelease:
         plan = _make_plan(changed=["pkg-alpha"])
         mock_build_plan.return_value = plan, []
 
-        # Simulate user declining the prompt
         monkeypatch.setattr("builtins.input", lambda _: "n")
 
         args = argparse.Namespace(
@@ -85,15 +84,15 @@ class TestCmdRelease:
             skip_to=None,
             reuse_run=None,
             reuse_release=False,
+            json=False,
         )
         cmd_release(args)
 
         output = capsys.readouterr().out
-        # Extract just the JSON block (starts at the first '{')
-        json_part = output[output.index("{") :]
-        parsed = json.loads(json_part)
-        assert "changed" in parsed
-        assert "pkg-alpha" in parsed["changed"]
+        assert "Packages" in output
+        assert "pkg-alpha" in output
+        assert "Pipeline" in output
+        assert "changed" in output
 
     @patch("subprocess.run")
     @patch("uv_release_monorepo.cli.build_plan")
@@ -126,6 +125,7 @@ class TestCmdRelease:
             skip_to=None,
             reuse_run=None,
             reuse_release=False,
+            json=False,
         )
         cmd_release(args)
 

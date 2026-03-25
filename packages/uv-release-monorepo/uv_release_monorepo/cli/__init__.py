@@ -255,6 +255,11 @@ def cli() -> None:
         action="store_true",
         help="Assume GitHub releases already exist (requires build and publish to be skipped).",
     )
+    release_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Also print the raw plan JSON.",
+    )
     release_parser.set_defaults(func=cmd_release)
 
     # status subcommand
