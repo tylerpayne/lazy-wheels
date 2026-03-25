@@ -30,9 +30,9 @@ class TestCmdRelease:
         monkeypatch.chdir(tmp_path)
 
         # Create the workflow file so cmd_release doesn't fail on missing workflow
-        workflow_dir = tmp_path / ".github" / "workflows"
-        workflow_dir.mkdir(parents=True)
-        (workflow_dir / "release.yml").write_text("some: yaml\n")
+        from uv_release_monorepo.cli import cmd_init
+
+        cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         mock_build_plan.return_value = (
             _make_plan(changed=[], unchanged=["pkg-alpha"]),
@@ -66,9 +66,9 @@ class TestCmdRelease:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        workflow_dir = tmp_path / ".github" / "workflows"
-        workflow_dir.mkdir(parents=True)
-        (workflow_dir / "release.yml").write_text("some: yaml\n")
+        from uv_release_monorepo.cli import cmd_init
+
+        cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         plan = _make_plan(changed=["pkg-alpha"])
         mock_build_plan.return_value = plan, []
@@ -108,9 +108,9 @@ class TestCmdRelease:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        workflow_dir = tmp_path / ".github" / "workflows"
-        workflow_dir.mkdir(parents=True)
-        (workflow_dir / "release.yml").write_text("some: yaml\n")
+        from uv_release_monorepo.cli import cmd_init
+
+        cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         plan = _make_plan(changed=["pkg-alpha"])
         mock_build_plan.return_value = plan, []

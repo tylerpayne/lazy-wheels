@@ -5,9 +5,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ..models import ReleaseWorkflow
 from ..toml import load_pyproject
-from ._common import _WorkflowConfig, _empty_hooks, _fatal
-from ._workflow_state import _get_workflow_state, _render_workflow
+from ._common import _fatal
+from .workflow import _load_yaml, _write_yaml
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -37,14 +38,15 @@ def cmd_init(args: argparse.Namespace) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "release.yml"
 
-    # Render and write workflow template, preserving existing state
     force = getattr(args, "force", False)
     if dest.exists() and not force:
-        hooks, config = _get_workflow_state(dest)
+        # Preserve existing state: load, validate, write back
+        existing = _load_yaml(dest)
+        model = ReleaseWorkflow.model_validate(existing)
     else:
-        hooks = _empty_hooks()
-        config = _WorkflowConfig()
-    _render_workflow(dest, hooks, config)
+        model = ReleaseWorkflow()
+
+    _write_yaml(dest, model.model_dump(by_alias=True, exclude_none=True))
 
     print(f"\u2713 Wrote workflow to {dest.relative_to(root)}")
     print()

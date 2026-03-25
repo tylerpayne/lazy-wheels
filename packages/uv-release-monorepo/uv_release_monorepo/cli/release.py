@@ -6,8 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
-from ..models import JOB_ORDER
+from ..models import JOB_ORDER, ReleaseWorkflow, _NOOP_STEPS
 from ._common import __version__, _fatal, _read_matrix
+from .workflow import _load_yaml
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
@@ -82,6 +83,16 @@ def cmd_release(args: argparse.Namespace) -> None:
     if not plan.changed:
         print("Nothing changed since last release. Use --rebuild-all to rebuild all.")
         return
+
+    # Auto-skip hook jobs that only have the default no-op step
+    _HOOK_PHASES = ["pre-build", "post-build", "pre-release", "post-release"]
+    workflow_doc = _load_yaml(root / args.workflow_dir / "release.yml")
+    model = ReleaseWorkflow.model_validate(workflow_doc)
+    jobs_dict = model.model_dump(by_alias=True, exclude_none=True).get("jobs", {})
+    for phase in _HOOK_PHASES:
+        job = jobs_dict.get(phase, {})
+        if job.get("steps") == _NOOP_STEPS:
+            skipped.add(phase)
 
     # Set skip/reuse fields on the plan
     if skipped:

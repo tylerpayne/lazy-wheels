@@ -1,76 +1,77 @@
-"""Tests for bundled templates."""
+"""Tests for ReleaseWorkflow model serialization (replaces template tests)."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-TEMPLATES_DIR = (
-    Path(__file__).resolve().parent.parent / "uv_release_monorepo" / "templates"
-)
+from uv_release_monorepo.models import ReleaseWorkflow
 
 
-def test_executor_template_has_preamble() -> None:
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
-
-    assert "GENERATED FILE" in template
-    assert "Generated with uv-release-monorepo" in template
-    assert "https://github.com/tylerpayne/uv-release-monorepo" in template
-    assert "uv tool install uv-release-monorepo" in template
-    assert "uvr release" in template
+def _default_workflow() -> dict:
+    return ReleaseWorkflow().model_dump(by_alias=True, exclude_none=True)
 
 
-def test_executor_template_has_plan_input() -> None:
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
-
-    assert "plan:" in template
-    assert "required: true" in template
+def test_workflow_has_name() -> None:
+    doc = _default_workflow()
+    assert doc["name"] == "Release Wheels"
 
 
-def test_executor_template_has_uvr_version_input() -> None:
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
-
-    assert "uvr_version" in template
-    assert "uv-release-monorepo=={0}" in template
-    assert "__UVR_VERSION__" not in template
-
-
-def test_executor_template_has_dynamic_matrix() -> None:
-    """Executor uses fromJSON to drive build and publish matrices from the plan."""
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
-
-    # Template uses [[ p ]].runners which renders to fromJSON(inputs.plan).runners
-    assert ".runners" in template
-    assert ".publish_matrix" in template
+def test_workflow_has_plan_input() -> None:
+    doc = _default_workflow()
+    inputs = doc["on"]["workflow_dispatch"]["inputs"]
+    assert "plan" in inputs
+    assert inputs["plan"]["required"] is True
 
 
-def test_executor_template_has_build_step() -> None:
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
-
-    assert "uvr-steps build-all" in template
-    assert "matrix.runner" in template
-
-
-def test_executor_template_has_publish_job() -> None:
-    """Publish job uses softprops/action-gh-release, not shell scripts."""
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
-
-    assert "softprops/action-gh-release@v2" in template
-    assert "matrix.tag" in template
-    assert "matrix.title" in template
-    assert "matrix.body" in template
+def test_workflow_has_all_jobs() -> None:
+    doc = _default_workflow()
+    jobs = doc["jobs"]
+    assert "pre-build" in jobs
+    assert "build" in jobs
+    assert "post-build" in jobs
+    assert "pre-release" in jobs
+    assert "publish" in jobs
+    assert "finalize" in jobs
+    assert "post-release" in jobs
 
 
-def test_executor_template_has_finalize_job() -> None:
-    """Finalize job calls uvr-steps finalize with just --plan."""
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
+def test_workflow_job_needs_chain() -> None:
+    doc = _default_workflow()
+    jobs = doc["jobs"]
+    assert jobs["build"]["needs"] == ["pre-build"]
+    assert jobs["post-build"]["needs"] == ["build"]
+    assert jobs["pre-release"]["needs"] == ["post-build"]
+    assert jobs["publish"]["needs"] == ["pre-release"]
+    assert jobs["finalize"]["needs"] == ["publish"]
+    assert jobs["post-release"]["needs"] == ["finalize"]
 
-    assert "finalize:" in template
-    assert "uvr-steps finalize" in template
+
+def test_workflow_pre_build_has_no_needs() -> None:
+    doc = _default_workflow()
+    assert "needs" not in doc["jobs"]["pre-build"]
 
 
-def test_executor_template_no_shell_release_script() -> None:
-    """No gh release create or jq-based release logic in the template."""
-    template = (TEMPLATES_DIR / "release.yml.j2").read_text()
+def test_workflow_default_permissions() -> None:
+    doc = _default_workflow()
+    assert doc["permissions"] == {"contents": "write"}
 
-    assert "gh release create" not in template
-    assert "mapfile" not in template
+
+def test_workflow_hook_jobs_have_noop_steps() -> None:
+    doc = _default_workflow()
+    for phase in ("pre-build", "post-build", "pre-release", "post-release"):
+        steps = doc["jobs"][phase]["steps"]
+        assert len(steps) >= 1
+        assert steps[0]["name"] == "Never"
+
+
+def test_workflow_core_jobs_have_executor_steps() -> None:
+    doc = _default_workflow()
+    build_steps = doc["jobs"]["build"]["steps"]
+    assert any("uvr-steps build-all" in str(s.get("run", "")) for s in build_steps)
+
+    publish_steps = doc["jobs"]["publish"]["steps"]
+    assert any(
+        s.get("uses", "").startswith("softprops/action-gh-release")
+        for s in publish_steps
+    )
+
+    finalize_steps = doc["jobs"]["finalize"]["steps"]
+    assert any("uvr-steps finalize" in str(s.get("run", "")) for s in finalize_steps)
