@@ -18,7 +18,7 @@ class TestInit:
     def test_writes_default_release_workflow(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """init writes the executor workflow template."""
+        """init writes the release workflow with all jobs."""
         _write_workspace_repo(tmp_path, [])
         monkeypatch.chdir(tmp_path)
 
@@ -27,12 +27,15 @@ class TestInit:
 
         workflow = tmp_path / ".github" / "workflows" / "release.yml"
         assert workflow.exists()
-        assert "jobs:\n  build:" in workflow.read_text()
+        text = workflow.read_text()
+        assert "build:" in text
+        assert "pre-build:" in text
+        assert "finalize:" in text
 
-    def test_init_workflow_has_uvr_version_input(
+    def test_init_workflow_has_plan_input(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Generated workflow has uvr_version input (no baked-in version)."""
+        """Generated workflow has plan input."""
         _write_workspace_repo(tmp_path, [])
         monkeypatch.chdir(tmp_path)
 
@@ -40,6 +43,4 @@ class TestInit:
         cmd_init(args)
 
         workflow = (tmp_path / ".github" / "workflows" / "release.yml").read_text()
-        assert "uvr_version" in workflow
-        assert "uv-release-monorepo=={0}" in workflow
-        assert "__UVR_VERSION__" not in workflow
+        assert "plan:" in workflow

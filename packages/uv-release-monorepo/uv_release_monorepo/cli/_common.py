@@ -10,30 +10,6 @@ from typing import NoReturn
 from ..toml import get_uvr_matrix, load_pyproject
 
 __version__ = pkg_version("uv-release-monorepo")
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-
-
-class _WorkflowConfig:
-    """Lightweight container for template rendering (legacy path)."""
-
-    __slots__ = ("permissions", "hook_jobs")
-
-    def __init__(self) -> None:
-        self.permissions: dict[str, str] = {"contents": "write"}
-        self.hook_jobs: dict[str, dict] = {}
-
-
-_VALID_HOOKS = ("pre_build", "post_build", "pre_release", "post_release")
-_HOOK_ALIASES = {
-    "pre-build": "pre_build",
-    "post-build": "post_build",
-    "pre-release": "pre_release",
-    "post-release": "post_release",
-    "pre_build": "pre_build",
-    "post_build": "post_build",
-    "pre_release": "pre_release",
-    "post_release": "post_release",
-}
 
 
 def _read_matrix(root: Path) -> dict[str, list[str]]:
@@ -185,8 +161,3 @@ def _fatal(msg: str) -> NoReturn:
     """Print error and exit."""
     print(f"Error: {msg}", file=sys.stderr)
     sys.exit(1)
-
-
-def _empty_hooks() -> dict[str, list[dict]]:
-    """Return an empty hooks dict with all four phases."""
-    return {h: [] for h in _VALID_HOOKS}

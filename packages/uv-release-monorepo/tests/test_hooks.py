@@ -223,7 +223,10 @@ class TestCmdHooksClear:
         out = capsys.readouterr().out
         assert "Cleared" in out
         doc = yaml.safe_load(release_yml.read_text())
-        assert doc["jobs"]["pre-build"]["steps"] == []
+        # Clear resets to the no-op default (steps can never be empty)
+        steps = doc["jobs"]["pre-build"]["steps"]
+        assert len(steps) == 1
+        assert steps[0]["name"] == "Never"
 
 
 class TestCmdHooksNestedAccess:
