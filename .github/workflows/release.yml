@@ -1,23 +1,35 @@
+# GENERATED FILE — DO NOT EDIT. Regenerate with `uvr init`.
+# Generated with uv-release-monorepo: https://github.com/tylerpayne/uv-release-monorepo
+# From your repository root, regenerate with:
+#   uv tool install uv-release-monorepo
+#   uvr init
+#   uvr init -m PKG runner1 runner2 ...
+# Trigger releases with:
+#   uvr release
+#   uvr release --rebuild-all
+#
 name: Release Wheels
-'on':
+
+on:
   workflow_dispatch:
     inputs:
       plan:
-        description: Release plan JSON (generated automatically by `uvr release`).
+        description: "Release plan JSON (generated automatically by `uvr release`)."
         type: string
         required: true
       uvr_version:
-        description: uv-release-monorepo version to use (set automatically by `uvr
-          release`).
+        description: "uv-release-monorepo version to use (set automatically by `uvr
+          release`)."
         type: string
         required: false
+
 permissions:
   contents: write
   id-token: write
 jobs:
   pre-build:
     runs-on: ubuntu-latest
-    needs: []
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -25,12 +37,9 @@ jobs:
     - name: Export plan context
       env:
         UVR_PLAN: ${{ inputs.plan }}
-      run: 'echo "UVR_CHANGED=$(echo "$UVR_PLAN" | jq -r ''.changed | keys | join("
-        ")'')" >> "$GITHUB_ENV"
-
+      run: |
+        echo "UVR_CHANGED=$(echo "$UVR_PLAN" | jq -r '.changed | keys | join(" ")')" >> "$GITHUB_ENV"
         echo "UVR_PLAN=$UVR_PLAN" >> "$GITHUB_ENV"
-
-        '
     - id: setup-uv
       name: Set up uv and Python
       uses: astral-sh/setup-uv@v5
@@ -38,45 +47,45 @@ jobs:
         python-version: ${{ fromJSON(inputs.plan).python_version }}
     - id: check
       name: Lint, typecheck, and test
-      run: 'uv sync --all-packages
-
+      run: |-
+        uv sync --all-packages
         uv run poe check
-
-        uv run poe test'
+        uv run poe test
   build:
+    needs: [pre-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.plan).runners }}
     runs-on: ${{ matrix.runner }}
-    needs:
-    - pre-build
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
     - uses: astral-sh/setup-uv@v5
     - name: Set up Python
-      run: 'uv python install ${{ fromJSON(inputs.plan).python_version }}
-
-        uv tool install ${{ inputs.uvr_version && format(''uv-release-monorepo=={0}'',
-        inputs.uvr_version) || ''uv-release-monorepo'' }}
-
-        '
+      run: |
+        uv python install ${{ fromJSON(inputs.plan).python_version }}
+        uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
     - name: Build packages
       env:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
-      run: uvr-steps build-all --plan "$UVR_PLAN" --runner '${{ matrix.runner }}'
+      run: uvr-steps build-all --plan "$UVR_PLAN" --runner '${{ matrix.runner 
+        }}'
     - uses: actions/upload-artifact@v4
       with:
         name: wheels-${{ matrix.runner }}
         path: dist/*.whl
         if-no-files-found: error
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJSON(inputs.plan).runners }}
-  publish:
-    runs-on: ubuntu-latest
-    needs:
-    - build
+        include: ${{ fromJSON(inputs.plan).publish_matrix }}
     steps:
     - uses: actions/download-artifact@v4
       with:
@@ -90,34 +99,28 @@ jobs:
         body: ${{ matrix.body }}
         files: dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl
         make_latest: ${{ matrix.make_latest }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(inputs.plan).publish_matrix }}
+
   finalize:
     runs-on: ubuntu-latest
-    needs:
-    - publish
+    needs: [publish]
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
     - uses: astral-sh/setup-uv@v5
     - name: Set up
-      run: 'uv python install ${{ fromJSON(inputs.plan).python_version }}
-
-        uv tool install ${{ inputs.uvr_version && format(''uv-release-monorepo=={0}'',
-        inputs.uvr_version) || ''uv-release-monorepo'' }}
-
-        '
+      run: |
+        uv python install ${{ fromJSON(inputs.plan).python_version }}
+        uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
     - name: Finalize release
       env:
         UVR_PLAN: ${{ inputs.plan }}
       run: uvr-steps finalize --plan "$UVR_PLAN"
+
   post-release:
     runs-on: ubuntu-latest
-    needs:
-    - finalize
+    needs: [finalize]
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -125,23 +128,16 @@ jobs:
     - name: Export plan context
       env:
         UVR_PLAN: ${{ inputs.plan }}
-      run: 'echo "UVR_CHANGED=$(echo "$UVR_PLAN" | jq -r ''.changed | keys | join("
-        ")'')" >> "$GITHUB_ENV"
-
+      run: |
+        echo "UVR_CHANGED=$(echo "$UVR_PLAN" | jq -r '.changed | keys | join(" ")')" >> "$GITHUB_ENV"
         echo "UVR_PLAN=$UVR_PLAN" >> "$GITHUB_ENV"
-
-        '
     - id: pypi-download
       name: Download wheel for PyPI
-      run: 'VERSION=$(echo "$UVR_PLAN" | python3 -c "import sys,json; p=json.load(sys.stdin);
-        print(p[\"changed\"][\"uv-release-monorepo\"][\"version\"])")
-
+      run: |-
+        VERSION=$(echo "$UVR_PLAN" | python3 -c "import sys,json; p=json.load(sys.stdin); print(p[\"changed\"][\"uv-release-monorepo\"][\"version\"])")
         TAG="uv-release-monorepo/v${VERSION}"
-
         mkdir -p dist
-
-        gh release download "$TAG" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl"
-        --dir dist'
+        gh release download "$TAG" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist
       if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
     - id: pypi-publish
       name: Publish to PyPI
