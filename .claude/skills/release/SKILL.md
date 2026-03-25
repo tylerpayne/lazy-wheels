@@ -123,11 +123,7 @@ uvr status                       # should show no changed packages
 gh release list --limit 15       # confirm per-package releases exist
 ```
 
-If `uv-release-monorepo` was part of this release, verify PyPI publish:
-
-```bash
-gh run list --workflow=publish.yml --limit=1
-```
+If `uv-release-monorepo` was part of this release, check the post-release job logs to confirm PyPI publish succeeded.
 
 ## Example
 
@@ -178,12 +174,12 @@ gh workflow run release.yml
 ```
 
 ### PyPI publish failed
-The `publish.yml` workflow triggers on GitHub release events for `uv-release-monorepo/v*` tags. Check:
+PyPI publishing runs as a `post-release` hook in the release workflow. Check the post-release job logs:
 ```bash
-gh run list --workflow=publish.yml --limit=5
+gh run list --workflow=release.yml --limit=5
 gh run view <RUN_ID> --log-failed
 ```
-Ensure trusted publishing is configured on PyPI for this repository.
+Ensure trusted publishing is configured on PyPI for this repository and that `id-token: write` is in the workflow permissions.
 
 ### Rolling back a bad release
 GitHub releases can be deleted, but published PyPI packages cannot be un-published. If a broken version was published:
