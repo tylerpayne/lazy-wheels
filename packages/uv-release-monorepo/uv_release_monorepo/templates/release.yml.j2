@@ -62,13 +62,7 @@ jobs:
       - name: Set up Python
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          if [ -d packages/uv-release-monorepo ]; then
-            uv tool install ./packages/uv-release-monorepo
-          elif [ -n '${{ inputs.uvr_version }}' ]; then
-            uv tool install 'uv-release-monorepo==${{ inputs.uvr_version }}'
-          else
-            uv tool install uv-release-monorepo
-          fi
+          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
       - name: Build packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -148,13 +142,7 @@ jobs:
       - name: Set up
         run: |
           uv python install ${{ fromJSON(inputs.plan).python_version }}
-          if [ -d packages/uv-release-monorepo ]; then
-            uv tool install ./packages/uv-release-monorepo
-          elif [ -n '${{ inputs.uvr_version }}' ]; then
-            uv tool install 'uv-release-monorepo==${{ inputs.uvr_version }}'
-          else
-            uv tool install uv-release-monorepo
-          fi
+          uv tool install ${{ inputs.uvr_version && format('uv-release-monorepo=={0}', inputs.uvr_version) || 'uv-release-monorepo' }}
       - name: Finalize release
         env:
           UVR_PLAN: ${{ inputs.plan }}
