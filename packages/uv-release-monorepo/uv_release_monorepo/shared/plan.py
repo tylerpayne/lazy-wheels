@@ -558,19 +558,12 @@ class ReleasePlanner:
         else:
             bump_hint = "  2. Bump to a new version: uv version <new-version> --directory <pkg>\n"
 
-        delete_cmds = "\n".join(
-            f"     gh release delete {t} --yes && "
-            f"git tag -d {t} && git push --delete origin {t}"
-            for t in conflicts
-        )
         fatal(
             f"These tags/releases already exist and would conflict:\n"
             f"{lines}\n\n"
             f"To resolve, either:\n"
             f"{post_hint}"
             f"{bump_hint}"
-            f"  3. Delete the conflicting tags/releases (last resort):\n"
-            f"{delete_cmds}"
         )
 
     @staticmethod
