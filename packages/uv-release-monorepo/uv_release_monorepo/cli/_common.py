@@ -7,7 +7,7 @@ from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import NoReturn
 
-from ..toml import get_uvr_matrix, load_pyproject
+from ..shared.toml import get_uvr_matrix, load_pyproject
 
 __version__ = pkg_version("uv-release-monorepo")
 

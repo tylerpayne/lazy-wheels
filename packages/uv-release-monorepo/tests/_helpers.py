@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from uv_release_monorepo.cli import __version__, cmd_init
-from uv_release_monorepo.models import MatrixEntry, PackageInfo, ReleasePlan
+from uv_release_monorepo.shared.models import MatrixEntry, PackageInfo, ReleasePlan
 
 
 def _write_workspace_repo(root: Path, package_names: list[str]) -> None:

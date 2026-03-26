@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uv_release_monorepo.models import (
+from uv_release_monorepo.shared.models import (
     MatrixEntry,
     PackageInfo,
     ReleasePlan,
@@ -57,9 +57,9 @@ class TestReleasePlan:
             matrix=[MatrixEntry(package="pkg-alpha", runner="ubuntu-latest")],
         )
 
-    def test_schema_version_defaults_to_5(self) -> None:
+    def test_schema_version_defaults_to_6(self) -> None:
         plan = self._make_plan()
-        assert plan.schema_version == 5
+        assert plan.schema_version == 6
 
     def test_round_trip_json(self) -> None:
         plan = self._make_plan()

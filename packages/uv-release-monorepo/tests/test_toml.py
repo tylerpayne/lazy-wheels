@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tomlkit
 
-from uv_release_monorepo.toml import (
+from uv_release_monorepo.shared.toml import (
     get_all_dependency_strings,
     get_project_name,
     get_project_version,

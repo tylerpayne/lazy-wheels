@@ -16,7 +16,6 @@ dependencies = [
 [project.scripts]
 uv-release-monorepo = "uv_release_monorepo.cli:cli"
 uvr = "uv_release_monorepo.cli:cli"
-uvr-steps = "uv_release_monorepo.workflow_steps:main"
 
 [build-system]
 requires = ["hatchling"]

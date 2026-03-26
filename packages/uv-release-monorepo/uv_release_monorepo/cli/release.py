@@ -6,9 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
-from ..graph import topo_layers
-from ..models import JOB_ORDER, ReleasePlan, ReleaseWorkflow, _NOOP_STEPS
-from ..versions import version_from_tag
+from ..shared.graph import topo_layers
+from ..shared.models import JOB_ORDER, ReleasePlan, ReleaseWorkflow, _NOOP_STEPS
+from ..shared.versions import version_from_tag
 from ._common import __version__, _fatal, _read_matrix
 from ._yaml import _load_yaml
 
@@ -16,7 +16,7 @@ from ._yaml import _load_yaml
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
     """Merge --skip and --skip-to into a single set of job names to skip."""
     skipped: set[str] = set(args.skip or [])
-    if args.skip_to:
+    if getattr(args, "skip_to", None):
         idx = JOB_ORDER.index(args.skip_to)
         skipped |= set(JOB_ORDER[:idx])
     return skipped
@@ -86,7 +86,6 @@ def _print_plan(
 
         print(f"  run   {job}")
 
-        # Show build order inline under the build job
         if job == "build":
             if plan.reuse_run_id:
                 print(f"{_D}artifacts from run {plan.reuse_run_id}")
@@ -111,12 +110,10 @@ def _print_plan(
                         for e in pkgs:
                             print(f"{_D}    {e.package} ({e.version})")
 
-        # Show publish entries inline under publish
         if job == "publish" and plan.publish_matrix:
             for entry in plan.publish_matrix:
                 print(f"{_D}{entry.tag}")
 
-        # Show version bumps inline under finalize
         if job == "finalize" and plan.bumps:
             for name, bump in sorted(plan.bumps.items()):
                 print(f"{_D}{name}  -> {bump.new_version}.dev0")
@@ -125,27 +122,34 @@ def _print_plan(
 
 
 def cmd_release(args: argparse.Namespace) -> None:
-    """Generate a release plan and optionally dispatch the executor workflow."""
-    # Late import to allow patching via ``uv_release_monorepo.cli.build_plan``.
+    """Plan and execute a release (locally or via CI)."""
     import uv_release_monorepo.cli as _cli
 
     import subprocess
 
+    where = getattr(args, "where", "ci")
+
+    # --plan: execute a pre-computed plan locally
+    if getattr(args, "plan", None):
+        plan = ReleasePlan.model_validate_json(args.plan)
+        _cli.ReleaseExecutor(plan).run()
+        return
+
+    # For CI mode, ensure clean worktree and workflow exists
     root = Path.cwd()
-
-    # Ensure clean worktree
-    result = subprocess.run(
-        ["git", "status", "--porcelain"], capture_output=True, text=True
-    )
-    if result.stdout.strip():
-        _fatal(
-            "Working tree is not clean. Commit or stash your changes first.\n"
-            + result.stdout
+    if where == "ci":
+        result = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True
         )
+        if result.stdout.strip():
+            _fatal(
+                "Working tree is not clean. Commit or stash your changes first.\n"
+                + result.stdout
+            )
 
-    workflow_path = root / args.workflow_dir / "release.yml"
-    if not workflow_path.exists():
-        _fatal("No release workflow found. Run `uvr init` first.")
+        workflow_path = root / args.workflow_dir / "release.yml"
+        if not workflow_path.exists():
+            _fatal("No release workflow found. Run `uvr init` first.")
 
     # Compute and validate skip/reuse
     skipped = _compute_skipped(args)
@@ -156,21 +160,22 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Read stored matrix from pyproject.toml
     package_runners = _read_matrix(root)
 
-    # Build the plan locally (suppress pipeline output — we print our own summary)
+    # Build the plan locally (suppress discovery output)
     import io
     import sys
 
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
-        plan, pin_changes = _cli.build_plan(
+        plan, pin_changes = _cli.ReleasePlanner(
             _cli.PlanConfig(
                 rebuild_all=args.rebuild_all,
                 matrix=package_runners,
                 uvr_version=__version__,
-                python_version=args.python_version,
+                python_version=getattr(args, "python_version", "3.12"),
+                ci_publish=(where == "ci"),
             )
-        )
+        ).plan()
     finally:
         sys.stdout = old_stdout
 
@@ -178,29 +183,27 @@ def cmd_release(args: argparse.Namespace) -> None:
         print("Nothing changed since last release. Use --rebuild-all to rebuild all.")
         return
 
-    # Auto-skip hook jobs that only have the default no-op step
-    _HOOK_PHASES = ["pre-build", "post-build", "pre-release", "post-release"]
-    workflow_doc = _load_yaml(root / args.workflow_dir / "release.yml")
-    model = ReleaseWorkflow.model_validate(workflow_doc)
-    jobs_dict = model.model_dump(by_alias=True, exclude_none=True).get("jobs", {})
-    for phase in _HOOK_PHASES:
-        job = jobs_dict.get(phase, {})
-        if job.get("steps") == _NOOP_STEPS:
-            skipped.add(phase)
+    # Dry run: print summary and exit
+    if getattr(args, "dry_run", False):
+        _print_plan(plan, skipped)
+        return
+
+    # Auto-skip hook jobs that only have the default no-op step (CI mode)
+    if where == "ci":
+        _HOOK_PHASES = ["pre-build", "post-build", "pre-release", "post-release"]
+        workflow_doc = _load_yaml(root / args.workflow_dir / "release.yml")
+        model = ReleaseWorkflow.model_validate(workflow_doc)
+        jobs_dict = model.model_dump(by_alias=True, exclude_none=True).get("jobs", {})
+        for phase in _HOOK_PHASES:
+            job = jobs_dict.get(phase, {})
+            if job.get("steps") == _NOOP_STEPS:
+                skipped.add(phase)
 
     # Set skip/reuse fields on the plan
     if skipped:
         plan.skip = sorted(skipped)
     if reuse_run:
         plan.reuse_run_id = reuse_run
-
-    # Precompute the install spec for CI.
-    # Don't pin to a .dev version -- it won't exist on PyPI.
-    if ".dev" in plan.uvr_version:
-        plan.uvr_version = ""
-        plan.uvr_install = "uv-release-monorepo"
-    else:
-        plan.uvr_install = f"uv-release-monorepo=={plan.uvr_version}"
 
     # Print human-readable summary
     _print_plan(plan, skipped)
@@ -228,7 +231,7 @@ def cmd_release(args: argparse.Namespace) -> None:
             return
         if answer != "y":
             return
-        from ..pipeline import write_dep_pins
+        from ..shared.plan import write_dep_pins
 
         written = write_dep_pins(plan)
         for pc in written:
@@ -247,8 +250,19 @@ def cmd_release(args: argparse.Namespace) -> None:
         print(json.dumps(plan.model_dump(), indent=2))
         print()
 
-    # Build the dispatch command
-    import subprocess
+    if where == "local":
+        # Execute locally
+        _cli.ReleaseExecutor(plan).run()
+        return
+
+    # CI mode: dispatch to GitHub Actions
+    # Precompute the install spec for CI
+    if ".dev" in plan.uvr_version:
+        plan.uvr_version = ""
+        plan.uvr_install = "uv-release-monorepo"
+    else:
+        plan.uvr_install = f"uv-release-monorepo=={plan.uvr_version}"
+
     import time
 
     plan_json = plan.model_dump_json()
@@ -261,8 +275,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         f"plan={plan_json}",
     ]
 
-    # Prompt for confirmation before dispatching (skip with --yes)
-    if not args.yes:
+    if not getattr(args, "yes", False):
         print()
         print("Dispatch release")
         print("----------------")
@@ -283,7 +296,6 @@ def cmd_release(args: argparse.Namespace) -> None:
     if result.returncode != 0:
         _fatal("Failed to trigger workflow")
 
-    # Wait for the run to be created and fetch its URL
     print("Waiting for workflow run...")
     time.sleep(2)
 

@@ -21,7 +21,7 @@ from pydantic import (
 
 @dataclass
 class PlanConfig:
-    """Configuration for build_plan().
+    """Configuration for ReleasePlanner.
 
     Groups the parameters needed to generate a release plan. Uses dataclass
     rather than BaseModel because this is internal configuration, not
@@ -32,12 +32,15 @@ class PlanConfig:
         matrix: Per-package runner configuration from the workflow file.
         uvr_version: The uvr version to embed in the plan.
         python_version: Python version for CI builds.
+        ci_publish: If True (default), plan targets CI execution.
+            If False, plan targets local execution.
     """
 
     rebuild_all: bool
     matrix: dict[str, list[str]]
     uvr_version: str
     python_version: str = "3.12"
+    ci_publish: bool = True
 
 
 class PackageInfo(BaseModel):
@@ -102,6 +105,23 @@ class BumpPlan(BaseModel):
     """
 
     new_version: str
+
+
+class PlanCommand(BaseModel):
+    """A single shell command in the release plan.
+
+    The planner pre-computes every command; the executor just runs them
+    via ``subprocess.run()``.
+
+    Attributes:
+        args: Command and arguments, e.g. ``["git", "tag", "pkg/v1.0.0"]``.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    args: list[str]
+    label: str = ""
+    check: bool = True
 
 
 class MatrixEntry(BaseModel):
@@ -228,7 +248,7 @@ _BUILD_STEPS: list[dict] = [
     {
         "name": "Build packages",
         "env": {"GH_TOKEN": "${{ github.token }}", "UVR_PLAN": "${{ inputs.plan }}"},
-        "run": "uvr-steps build-all --plan \"$UVR_PLAN\" --runner '${{ matrix.runner }}'",
+        "run": "uvr build --plan \"$UVR_PLAN\" --runner '${{ matrix.runner }}'",
     },
     {
         "uses": "actions/upload-artifact@v4",
@@ -269,7 +289,7 @@ _FINALIZE_STEPS: list[dict] = [
     {
         "name": "Finalize release",
         "env": {"UVR_PLAN": "${{ inputs.plan }}"},
-        "run": 'uvr-steps finalize --plan "$UVR_PLAN"',
+        "run": 'uvr finalize --plan "$UVR_PLAN"',
     },
 ]
 
@@ -482,7 +502,7 @@ class ReleasePlan(BaseModel):
     commands, change detection, or version arithmetic.
     """
 
-    schema_version: int = 5
+    schema_version: int = 6
     uvr_version: str
     uvr_install: str = "uv-release-monorepo"
     python_version: str = "3.12"
@@ -498,3 +518,8 @@ class ReleasePlan(BaseModel):
     ci_publish: bool = False
     skip: list[str] = Field(default_factory=list)
     reuse_run_id: str = ""
+
+    # Pre-computed command sequences for the executor
+    build_commands: dict[str, list[PlanCommand]] = Field(default_factory=dict)
+    publish_commands: list[PlanCommand] = Field(default_factory=list)
+    finalize_commands: list[PlanCommand] = Field(default_factory=list)

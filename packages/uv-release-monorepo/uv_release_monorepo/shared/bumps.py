@@ -6,10 +6,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-from ..models import PackageInfo, PublishedPackage, VersionBump
-from ..versions import bump_patch, make_dev, strip_dev, version_from_tag
-from ..deps import rewrite_pyproject
-from ..shell import fatal, git, run, step
+from .models import PackageInfo, PublishedPackage, VersionBump
+from .versions import bump_patch, make_dev, strip_dev, version_from_tag
+from .deps import rewrite_pyproject
+from .shell import fatal, git, run, step
 
 
 def collect_published_state(

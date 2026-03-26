@@ -18,8 +18,8 @@ def _section(title: str) -> None:
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Show the current workspace status: packages, runners, and what has changed."""
-    from uv_release_monorepo.pipeline import (
-        detect_changes,
+    from uv_release_monorepo.shared.changes import detect_changes
+    from uv_release_monorepo.shared.discovery import (
         discover_packages,
         get_baseline_tags,
     )
@@ -99,7 +99,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"  {dest.relative_to(root)}")
     try:
         from uv_release_monorepo.cli._yaml import _load_yaml
-        from uv_release_monorepo.models import ReleaseWorkflow
+        from uv_release_monorepo.shared.models import ReleaseWorkflow
 
         import warnings
 

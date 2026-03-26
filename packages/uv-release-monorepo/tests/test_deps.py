@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from uv_release_monorepo.deps import dep_canonical_name, pin_dep, rewrite_pyproject
+from uv_release_monorepo.shared.deps import (
+    dep_canonical_name,
+    pin_dep,
+    rewrite_pyproject,
+)
 
 
 class TestDepCanonicalName:

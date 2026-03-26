@@ -9,10 +9,10 @@ from pathlib import Path
 from packaging.utils import canonicalize_name
 
 
-from ..graph import topo_sort
-from ..models import PackageInfo
-from ..shell import fatal, run, step
-from ..versions import version_from_tag
+from .graph import topo_sort
+from .models import PackageInfo
+from .shell import fatal, run, step
+from .versions import version_from_tag
 
 
 def fetch_unchanged_wheels(

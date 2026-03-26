@@ -13,13 +13,34 @@ from uv_release_monorepo.cli import cmd_release
 from tests._helpers import _make_plan, _write_workspace_repo
 
 
+def _release_args(**overrides: object) -> argparse.Namespace:
+    """Create default release command args."""
+    defaults: dict[str, object] = dict(
+        where="ci",
+        rebuild_all=False,
+        yes=False,
+        dry_run=False,
+        no_push=False,
+        plan=None,
+        workflow_dir=".github/workflows",
+        python_version="3.12",
+        skip=None,
+        skip_to=None,
+        reuse_run=None,
+        reuse_release=False,
+        json=False,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
 class TestCmdRelease:
     """Tests for cmd_release()."""
 
-    @patch("uv_release_monorepo.cli.build_plan")
+    @patch("uv_release_monorepo.cli.ReleasePlanner")
     def test_release_exits_early_when_nothing_changed(
         self,
-        mock_build_plan: MagicMock,
+        mock_planner_cls: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -28,36 +49,24 @@ class TestCmdRelease:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        # Create the workflow file so cmd_release doesn't fail on missing workflow
         from uv_release_monorepo.cli import cmd_init
 
         cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
-        mock_build_plan.return_value = (
+        mock_planner_cls.return_value.plan.return_value = (
             _make_plan(changed=[], unchanged=["pkg-alpha"]),
             [],
         )
 
-        args = argparse.Namespace(
-            rebuild_all=False,
-            yes=False,
-            workflow_dir=".github/workflows",
-            python_version="3.12",
-            skip=None,
-            skip_to=None,
-            reuse_run=None,
-            reuse_release=False,
-            json=False,
-        )
-        cmd_release(args)
+        cmd_release(_release_args())
 
         output = capsys.readouterr().out
         assert "Nothing changed" in output
 
-    @patch("uv_release_monorepo.cli.build_plan")
+    @patch("uv_release_monorepo.cli.ReleasePlanner")
     def test_release_prints_human_summary(
         self,
-        mock_build_plan: MagicMock,
+        mock_planner_cls: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -71,22 +80,11 @@ class TestCmdRelease:
         cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         plan = _make_plan(changed=["pkg-alpha"])
-        mock_build_plan.return_value = plan, []
+        mock_planner_cls.return_value.plan.return_value = (plan, [])
 
         monkeypatch.setattr("builtins.input", lambda _: "n")
 
-        args = argparse.Namespace(
-            rebuild_all=False,
-            yes=False,
-            workflow_dir=".github/workflows",
-            python_version="3.12",
-            skip=None,
-            skip_to=None,
-            reuse_run=None,
-            reuse_release=False,
-            json=False,
-        )
-        cmd_release(args)
+        cmd_release(_release_args())
 
         output = capsys.readouterr().out
         assert "Packages" in output
@@ -95,10 +93,10 @@ class TestCmdRelease:
         assert "changed" in output
 
     @patch("subprocess.run")
-    @patch("uv_release_monorepo.cli.build_plan")
+    @patch("uv_release_monorepo.cli.ReleasePlanner")
     def test_release_dispatches_with_yes_flag(
         self,
-        mock_build_plan: MagicMock,
+        mock_planner_cls: MagicMock,
         mock_subprocess_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -112,36 +110,21 @@ class TestCmdRelease:
         cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         plan = _make_plan(changed=["pkg-alpha"])
-        mock_build_plan.return_value = plan, []
+        mock_planner_cls.return_value.plan.return_value = (plan, [])
 
         def _fake_run(cmd, **kwargs):
-            # git status --porcelain returns empty (clean tree)
             if cmd[0] == "git":
                 return MagicMock(returncode=0, stdout="")
-            # gh commands return success
             return MagicMock(returncode=0, stdout="[]")
 
         mock_subprocess_run.side_effect = _fake_run
 
-        args = argparse.Namespace(
-            rebuild_all=False,
-            yes=True,
-            workflow_dir=".github/workflows",
-            python_version="3.12",
-            skip=None,
-            skip_to=None,
-            reuse_run=None,
-            reuse_release=False,
-            json=False,
-        )
-        cmd_release(args)
+        cmd_release(_release_args(yes=True))
 
-        # Verify gh workflow run was called with -f plan=...
         calls = [c for c in mock_subprocess_run.call_args_list]
         trigger_call = calls[1][0][0]  # second call (first is git status)
         assert "gh" in trigger_call
         assert "workflow" in trigger_call
         assert "run" in trigger_call
-        # Find -f plan= argument
         joined = " ".join(str(a) for a in trigger_call)
         assert "plan=" in joined

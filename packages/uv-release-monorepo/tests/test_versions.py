@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uv_release_monorepo.versions import (
+from uv_release_monorepo.shared.versions import (
     base_version,
     bump_dev,
     bump_patch,

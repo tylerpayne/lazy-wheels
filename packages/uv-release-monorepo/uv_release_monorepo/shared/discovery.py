@@ -6,10 +6,10 @@ import glob as _glob
 from pathlib import Path
 
 
-from ..deps import dep_canonical_name
-from ..models import PackageInfo
-from ..shell import fatal, git, step
-from ..toml import (
+from .deps import dep_canonical_name
+from .models import PackageInfo
+from .shell import fatal, git, step
+from .toml import (
     get_all_dependency_strings,
     get_project_name,
     get_project_version,

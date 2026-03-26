@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..toml import get_uvr_matrix, load_pyproject, save_pyproject, set_uvr_matrix
+from ..shared.toml import get_uvr_matrix, load_pyproject, save_pyproject, set_uvr_matrix
 from ._common import _fatal, _print_matrix_status
 
 

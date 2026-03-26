@@ -7,9 +7,9 @@ from collections.abc import Mapping
 from packaging.utils import canonicalize_name
 
 
-from ..models import PackageInfo
+from .models import PackageInfo
 from pathlib import Path
-from ..shell import fatal, gh, git, step
+from .shell import fatal, gh, git, step
 
 
 def generate_release_notes(

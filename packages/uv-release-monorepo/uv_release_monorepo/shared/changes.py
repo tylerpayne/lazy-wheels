@@ -8,8 +8,8 @@ from collections.abc import Mapping
 from packaging.utils import canonicalize_name
 
 
-from ..models import PackageInfo
-from ..shell import fatal, gh, git, step
+from .models import PackageInfo
+from .shell import fatal, gh, git, step
 
 
 def detect_changes(

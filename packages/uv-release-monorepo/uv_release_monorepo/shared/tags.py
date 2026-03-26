@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 
-from ..models import PackageInfo, VersionBump
-from ..shell import git, step
+from .models import PackageInfo, VersionBump
+from .shell import git, step
 
 
 def tag_changed_packages(changed: dict[str, PackageInfo]) -> None:

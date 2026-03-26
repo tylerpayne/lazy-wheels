@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from uv_release_monorepo.graph import topo_layers, topo_sort
-from uv_release_monorepo.models import PackageInfo
+from uv_release_monorepo.shared.graph import topo_layers, topo_sort
+from uv_release_monorepo.shared.models import PackageInfo
 
 
 class TestTopoSort:

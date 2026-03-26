@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..models import ReleaseWorkflow
-from ..toml import load_pyproject
+from ..shared.models import ReleaseWorkflow
+from ..shared.toml import load_pyproject
 from ._common import _fatal
 from ._yaml import _load_yaml, _write_yaml
 

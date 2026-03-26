@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uv_release_monorepo.models import ReleaseWorkflow
+from uv_release_monorepo.shared.models import ReleaseWorkflow
 
 
 def _default_workflow() -> dict:
@@ -65,7 +65,7 @@ def test_workflow_hook_jobs_have_noop_steps() -> None:
 def test_workflow_core_jobs_have_executor_steps() -> None:
     doc = _default_workflow()
     build_steps = doc["jobs"]["build"]["steps"]
-    assert any("uvr-steps build-all" in str(s.get("run", "")) for s in build_steps)
+    assert any("uvr build" in str(s.get("run", "")) for s in build_steps)
 
     publish_steps = doc["jobs"]["publish"]["steps"]
     assert any(
@@ -74,4 +74,4 @@ def test_workflow_core_jobs_have_executor_steps() -> None:
     )
 
     finalize_steps = doc["jobs"]["finalize"]["steps"]
-    assert any("uvr-steps finalize" in str(s.get("run", "")) for s in finalize_steps)
+    assert any("uvr finalize" in str(s.get("run", "")) for s in finalize_steps)
