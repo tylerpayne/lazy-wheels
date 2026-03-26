@@ -971,6 +971,15 @@ class TestBumpVersions:
 class TestBuildPlan:
     """Tests for build_plan()."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_tag_checks(self) -> None:  # type: ignore[return]
+        """Suppress git/gh calls in _check_tag_conflicts."""
+        with (
+            patch("uv_release_monorepo.shared.plan.git", return_value=""),
+            patch("uv_release_monorepo.shared.shell.gh", return_value="[]"),
+        ):
+            yield
+
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
     @patch("uv_release_monorepo.shared.plan.find_release_tags")

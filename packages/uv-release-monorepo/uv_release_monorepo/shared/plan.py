@@ -486,34 +486,47 @@ class ReleasePlanner:
         changed: dict[str, PackageInfo],
         bumps: dict[str, BumpPlan],
     ) -> None:
-        """Verify that no tags the plan will create already exist."""
-        from .shell import fatal
+        """Verify that no tags or releases the plan will create already exist."""
+        import json as _json
 
+        from .shell import fatal, gh
+
+        # Collect all tags the plan will create
         planned_tags: list[str] = []
-
-        # Release tags (only for local — CI publish action creates them)
-        if not self.config.ci_publish:
-            for name, info in changed.items():
-                planned_tags.append(f"{name}/v{info.version}")
-
-        # Baseline tags
+        for name, info in changed.items():
+            planned_tags.append(f"{name}/v{info.version}")
         for name, bump in bumps.items():
             planned_tags.append(f"{name}/v{bump.new_version}-base")
 
-        # Check which already exist
-        existing = set(git("tag", "--list", check=False).splitlines())
-        conflicts = [t for t in planned_tags if t in existing]
+        # Check git tags
+        existing_tags = set(git("tag", "--list", check=False).splitlines())
+        tag_conflicts = [t for t in planned_tags if t in existing_tags]
 
+        # Check GitHub releases (release tags created by publish action)
+        existing_releases: set[str] = set()
+        raw = gh("release", "list", "--json", "tagName", "--limit", "1000", check=False)
+        if raw:
+            try:
+                for entry in _json.loads(raw):
+                    existing_releases.add(entry["tagName"])
+            except (_json.JSONDecodeError, KeyError):
+                pass
+        release_tags = [f"{n}/v{changed[n].version}" for n in changed]
+        release_conflicts = [t for t in release_tags if t in existing_releases]
+
+        conflicts = sorted(set(tag_conflicts + release_conflicts))
         if conflicts:
-            lines = "\n".join(f"  {t}" for t in sorted(conflicts))
+            lines = "\n".join(f"  {t}" for t in conflicts)
+            fix_cmds = []
+            for t in conflicts:
+                if t in existing_releases:
+                    fix_cmds.append(f"  gh release delete {t} --yes")
+                if t in existing_tags:
+                    fix_cmds.append(f"  git tag -d {t} && git push --delete origin {t}")
             fatal(
-                f"These tags already exist and would conflict with the release:\n"
+                f"These tags/releases already exist and would conflict:\n"
                 f"{lines}\n"
-                f"Delete them first:\n"
-                + "\n".join(
-                    f"  git tag -d {t} && git push --delete origin {t}"
-                    for t in sorted(conflicts)
-                )
+                f"Delete them first:\n" + "\n".join(fix_cmds)
             )
 
     @staticmethod
