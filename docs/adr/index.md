@@ -11,6 +11,7 @@
 * [0005 - Replace lazy-wheels with uv-release-monorepo](0005-replace-lazy-wheels-with-uv-release-monorepo.md)
 * [0006 - Use Post-Release Hook for PyPI Publishing](0006-use-post-release-hook-for-pypi-publishing.md)
 * [0007 - Use YAML File as Source of Truth for Workflow Configuration](0007-use-yaml-file-as-source-of-truth-for-workflow-configuration.md)
+* [0008 - Support Dev, Pre, and Post Releases with Base Tags](0008-support-dev-pre-and-post-releases-with-base-tags.md)
 
 ## Rejected Records
 
