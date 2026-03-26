@@ -16,7 +16,7 @@ from ._common import (
     _read_matrix,
 )
 from ._yaml import _MISSING, _yaml_delete, _yaml_get, _yaml_set
-from .init import cmd_init
+from .init import cmd_init, cmd_validate
 from .install import _find_latest_release_tag, _parse_install_spec, cmd_install
 from .release import cmd_release
 from .run import cmd_run
@@ -45,6 +45,7 @@ __all__ = [
     "cmd_run",
     "cmd_runners",
     "cmd_status",
+    "cmd_validate",
     "execute_plan",
     "run_pipeline",
 ]
@@ -77,6 +78,17 @@ def cli() -> None:
         help="Overwrite release.yml without preserving existing hooks.",
     )
     init_parser.set_defaults(func=cmd_init)
+
+    # validate subcommand
+    validate_parser = subparsers.add_parser(
+        "validate", help="Validate an existing release.yml."
+    )
+    validate_parser.add_argument(
+        "--workflow-dir",
+        default=".github/workflows",
+        help="Directory containing the workflow file. (default: %(default)s)",
+    )
+    validate_parser.set_defaults(func=cmd_validate)
 
     # runners subcommand
     runners_parser = subparsers.add_parser(
