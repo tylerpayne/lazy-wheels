@@ -99,23 +99,25 @@ def _print_plan(
             if plan.reuse_run_id:
                 print(f"{_D}artifacts from run {plan.reuse_run_id}")
             elif plan.matrix:
-                # Group by topo layer to show build order
                 layers = topo_layers(plan.changed)
                 max_layer = max(layers.values()) if layers else 0
-                for layer in range(max_layer + 1):
-                    pkgs_in_layer = sorted(n for n, lv in layers.items() if lv == layer)
-                    if not pkgs_in_layer:
-                        continue
-                    entries = {e.package: e for e in plan.matrix}
-                    names = ", ".join(pkgs_in_layer)
-                    if max_layer > 0:
-                        print(f"{_D}layer {layer}: {names}")
-                    for pkg in pkgs_in_layer:
-                        entry = entries.get(pkg)
-                        if entry:
-                            print(
-                                f"{_D}  {entry.package}  on  {entry.runner}  ({entry.version})"
-                            )
+                by_runner: dict[str, list] = {}
+                for me in plan.matrix:
+                    by_runner.setdefault(me.runner, []).append(me)
+                for runner, runner_entries in sorted(by_runner.items()):
+                    print(f"{_D}{runner}")
+                    for layer in range(max_layer + 1):
+                        pkgs = [
+                            e
+                            for e in runner_entries
+                            if layers.get(e.package, 0) == layer
+                        ]
+                        if not pkgs:
+                            continue
+                        if max_layer > 0:
+                            print(f"{_D}  layer {layer}")
+                        for e in pkgs:
+                            print(f"{_D}    {e.package} ({e.version})")
 
         # Show publish entries inline under publish
         if job == "publish" and plan.publish_matrix:
