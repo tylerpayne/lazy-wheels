@@ -91,15 +91,17 @@ def _print_plan(
 
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
-    _D = "          "  # detail indent
-    print(f"  {'STATUS'.ljust(4)}  JOB")
+    _sw = 6  # width of "STATUS" / "skip" / "run"
+    _jw = max(len(j) for j in JOB_ORDER)
+    _D = " " * (2 + _sw + 2 + _jw + 2)  # detail indent past job column
+    print(f"  {'STATUS'.ljust(_sw)}  JOB")
     for job in JOB_ORDER:
         if job in skipped:
             reason = "no-op" if job in _HOOK_PHASES else "user --skip"
-            print(f"  skip  {job}  ({reason})")
+            print(f"  {'skip'.ljust(_sw)}  {job.ljust(_jw)}  ({reason})")
             continue
 
-        print(f"  run   {job}")
+        print(f"  {'run'.ljust(_sw)}  {job}")
 
         if job == "build":
             if plan.reuse_run_id:
