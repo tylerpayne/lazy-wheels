@@ -63,28 +63,30 @@ def _print_plan(
     all_names = sorted({*plan.changed, *plan.unchanged})
     if all_names:
         nw = max(len(n) for n in all_names)
-        # Compute version strings and column width
-        ver_strs: dict[str, str] = {}
+        # Column 3: current pyproject version, Column 4: release/reuse version
+        cur_strs: dict[str, str] = {}
+        rel_strs: dict[str, str] = {}
         for name in all_names:
             if name in plan.changed:
-                ver_strs[name] = plan.changed[name].version
+                cur_strs[name] = plan.current_versions.get(
+                    name, plan.changed[name].version
+                )
+                rel_strs[name] = plan.changed[name].version
             else:
-                ver_strs[name] = plan.unchanged[name].version
-        vw = max(len(v) for v in ver_strs.values())
+                cur_strs[name] = plan.unchanged[name].version
+                tag = plan.release_tags.get(name)
+                rel_strs[name] = version_from_tag(tag) if tag else "none"
+        cw = max(len(v) for v in cur_strs.values())
         for name in all_names:
             if name in plan.changed:
-                tag = plan.release_tags.get(name)
-                last_release = version_from_tag(tag) if tag else "none"
                 print(
                     f"  changed    {name.ljust(nw)}  "
-                    f"{ver_strs[name].ljust(vw)}  (last release: {last_release})"
+                    f"{cur_strs[name].ljust(cw)}  -> {rel_strs[name]}"
                 )
             else:
-                tag = plan.release_tags.get(name)
-                last_ver = version_from_tag(tag) if tag else "none"
                 print(
                     f"  unchanged  {name.ljust(nw)}  "
-                    f"{ver_strs[name].ljust(vw)}  (reuse last release: {last_ver})"
+                    f"{cur_strs[name].ljust(cw)}  (reuse {rel_strs[name]})"
                 )
 
     # -- Pipeline (job-by-job with details inline) --

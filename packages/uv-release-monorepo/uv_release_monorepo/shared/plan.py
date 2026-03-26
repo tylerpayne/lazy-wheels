@@ -62,6 +62,9 @@ class ReleasePlanner:
             name: info for name, info in packages.items() if name not in changed_names
         }
 
+        # Save current pyproject versions before transformation
+        current_versions = {name: info.version for name, info in changed.items()}
+
         # Compute release versions based on release_type
         changed = self._compute_release_versions(changed, release_tags)
 
@@ -106,6 +109,7 @@ class ReleasePlanner:
             release_type=self.config.release_type,
             changed=changed,
             unchanged=unchanged,
+            current_versions=current_versions,
             release_tags=release_tags,
             matrix=matrix_entries,
             runners=unique_runners,
