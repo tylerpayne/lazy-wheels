@@ -62,6 +62,7 @@ def _print_plan(
     _section("Packages")
     all_names = sorted({*plan.changed, *plan.unchanged})
     if all_names:
+        sw = len("unchanged")  # status column width
         nw = max(len(n) for n in all_names)
         # Column 3: current pyproject version, Column 4: release/reuse version
         cur_strs: dict[str, str] = {}
@@ -75,19 +76,21 @@ def _print_plan(
             else:
                 cur_strs[name] = plan.unchanged[name].version
                 tag = plan.release_tags.get(name)
-                rel_strs[name] = version_from_tag(tag) if tag else "none"
+                ver = version_from_tag(tag) if tag else "—"
+                rel_strs[name] = ver
         cw = max(len(v) for v in cur_strs.values())
+
+        # Header
+        print(
+            f"  {'STATUS'.ljust(sw)}  {'PACKAGE'.ljust(nw)}  "
+            f"{'CURRENT'.ljust(cw)}  RELEASE"
+        )
         for name in all_names:
-            if name in plan.changed:
-                print(
-                    f"  changed    {name.ljust(nw)}  "
-                    f"{cur_strs[name].ljust(cw)}  -> {rel_strs[name]}"
-                )
-            else:
-                print(
-                    f"  unchanged  {name.ljust(nw)}  "
-                    f"{cur_strs[name].ljust(cw)}  (reuse {rel_strs[name]})"
-                )
+            status = "changed" if name in plan.changed else "unchanged"
+            print(
+                f"  {status.ljust(sw)}  {name.ljust(nw)}  "
+                f"{cur_strs[name].ljust(cw)}  {rel_strs[name]}"
+            )
 
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
