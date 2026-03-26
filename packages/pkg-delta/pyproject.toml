@@ -5,7 +5,7 @@ description = "Dummy package delta - depends on alpha (sibling of beta)"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "pkg-alpha>=0.1.11",
+    "pkg-alpha>=0.1.10",
 ]
 
 [build-system]
