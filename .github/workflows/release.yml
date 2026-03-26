@@ -38,7 +38,7 @@ jobs:
     - name: Set up Python
       run: |
         uv python install ${{ fromJSON(inputs.plan).python_version }}
-        uv tool install ${{ fromJSON(inputs.plan).uvr_install }}
+        uv tool install ./packages/uv-release-monorepo
     - name: Build packages
       env:
         GH_TOKEN: ${{ github.token }}
@@ -105,7 +105,7 @@ jobs:
     - name: Set up Python
       run: |
         uv python install ${{ fromJSON(inputs.plan).python_version }}
-        uv tool install ${{ fromJSON(inputs.plan).uvr_install }}
+        uv tool install ./packages/uv-release-monorepo
     - name: Finalize release
       env:
         UVR_PLAN: ${{ inputs.plan }}
