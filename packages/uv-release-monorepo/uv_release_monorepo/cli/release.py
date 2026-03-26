@@ -80,7 +80,7 @@ def _print_plan(
         # Header
         print(
             f"  {'STATUS'.ljust(sw)}  {'PACKAGE'.ljust(nw)}  "
-            f"{'CURRENT'.ljust(cw)}  RELEASE"
+            f"{'CURRENT'.ljust(cw)}  WILL RELEASE"
         )
         for name in all_names:
             status = "changed" if name in plan.changed else "unchanged"
