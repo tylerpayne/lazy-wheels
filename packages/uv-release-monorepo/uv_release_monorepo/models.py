@@ -252,11 +252,17 @@ def _needs_validator(*required: str):
 
 
 def _frozen(default: Any) -> AfterValidator:
-    """AfterValidator that rejects any value != default."""
+    """AfterValidator that warns when a value differs from the expected default."""
+    import warnings
 
     def _check(v: Any) -> Any:
         if v != default:
-            raise ValueError("immutable")
+            warnings.warn(
+                "core job field was modified from its default -- "
+                "this may break the release pipeline",
+                UserWarning,
+                stacklevel=2,
+            )
         return v
 
     return AfterValidator(_check)
