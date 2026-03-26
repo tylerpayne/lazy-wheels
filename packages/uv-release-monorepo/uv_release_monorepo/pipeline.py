@@ -764,9 +764,7 @@ def build_plan(
                 tag.split("/v")[-1] if tag and "/v" in tag else info.version
             )
 
-    # Apply dep pin updates locally so they're baked into the released wheels.
-    # CI only needs to apply the version bump; it never touches dep pins.
-    step("Updating dep pins")
+    # Check dep pins without writing — caller is responsible for writing.
     pin_updates: list[str] = []
     for name in changed_names:
         info = packages[name]
@@ -776,15 +774,10 @@ def build_plan(
             if dep in published_versions
         }
         changes = update_dep_pins(
-            Path(info.path) / "pyproject.toml", dep_versions, write=not dry_run
+            Path(info.path) / "pyproject.toml", dep_versions, write=False
         )
         if changes:
             pin_updates.append(name)
-            print(f"  {info.path}/pyproject.toml")
-            for old, new in changes:
-                print(f"    {old} → {new}")
-    if not pin_updates:
-        print("  (none needed)")
 
     # Pre-compute version bumps. Dep pins are already applied locally above.
     bumps: dict[str, BumpPlan] = {}
@@ -841,6 +834,37 @@ def build_plan(
         ci_publish=True,
     )
     return plan, pin_updates
+
+
+def write_dep_pins(plan: ReleasePlan) -> list[tuple[str, list[tuple[str, str]]]]:
+    """Write pending dep pin updates to disk.
+
+    Returns list of (package_name, [(old_spec, new_spec), ...]) for each
+    package whose pyproject.toml was modified.
+    """
+    # Compute published versions from the plan
+    published_versions: dict[str, str] = {}
+    for name, info in plan.changed.items():
+        published_versions[name] = info.version
+    for name in plan.unchanged:
+        tag = plan.release_tags.get(name)
+        published_versions[name] = (
+            tag.split("/v")[-1] if tag and "/v" in tag else plan.unchanged[name].version
+        )
+
+    result: list[tuple[str, list[tuple[str, str]]]] = []
+    for name, info in plan.changed.items():
+        dep_versions = {
+            dep: published_versions[dep]
+            for dep in info.deps
+            if dep in published_versions
+        }
+        changes = update_dep_pins(
+            Path(info.path) / "pyproject.toml", dep_versions, write=True
+        )
+        if changes:
+            result.append((name, changes))
+    return result
 
 
 def apply_bumps(plan: ReleasePlan) -> dict[str, VersionBump]:

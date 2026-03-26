@@ -186,9 +186,23 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Print human-readable summary
     _print_plan(plan, skipped, pin_updates)
 
-    # Block dispatch if pins were updated
+    # Prompt to write dep pins if needed
     if pin_updates:
-        print("Commit pin updates before releasing:")
+        try:
+            answer = input("Write dep pin updates? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if answer != "y":
+            return
+        from ..pipeline import write_dep_pins
+
+        written = write_dep_pins(plan)
+        for name, changes in written:
+            for old, new in changes:
+                print(f"  {name}: {old} -> {new}")
+        print()
+        print("Commit pin updates before dispatching:")
         print("  git add -A && git commit -m 'chore: update dep pins' && git push")
         print("  uvr release")
         return
