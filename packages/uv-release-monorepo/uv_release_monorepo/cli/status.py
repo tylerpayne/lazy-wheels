@@ -19,7 +19,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     from uv_release_monorepo.pipeline import (
         detect_changes,
         discover_packages,
-        find_dev_baselines,
+        get_baseline_tags,
     )
 
     root = Path.cwd()
@@ -47,10 +47,8 @@ def cmd_status(args: argparse.Namespace) -> None:
         sys.stdout = captured
         try:
             pipeline_pkgs = discover_packages()
-            dev_baselines = find_dev_baselines(pipeline_pkgs)
-            all_dirty = set(
-                detect_changes(pipeline_pkgs, dev_baselines, rebuild_all=False)
-            )
+            baselines = get_baseline_tags(pipeline_pkgs)
+            all_dirty = set(detect_changes(pipeline_pkgs, baselines, rebuild_all=False))
         finally:
             sys.stdout = old_stdout
 

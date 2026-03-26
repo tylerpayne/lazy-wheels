@@ -145,7 +145,7 @@ def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]
         # Find the first tag that is NOT a -dev baseline
         found = None
         for tag in tags.splitlines():
-            if not tag.endswith("-dev"):
+            if not tag.endswith("-dev") and not tag.endswith("-base"):
                 found = tag
                 break
         release_tags[name] = found
@@ -154,38 +154,53 @@ def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]
     return release_tags
 
 
-def find_dev_baselines(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
-    """Find the dev baseline tag for each package.
+def get_baseline_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
+    """Derive baseline tags from each package's pyproject.toml version.
 
-    After each release, a {package-name}/v{next_version}-dev tag is created
-    on the version bump commit. This tag serves as the diff baseline for the
-    next release — everything after it is "real work."
-
-    Falls back to the release tag if no -dev tag exists (backward compat).
+    The baseline tag is ``{name}/v{version}-base`` where *version* comes from
+    pyproject.toml.  Falls back to ``-dev`` tags (backward compat with older
+    repos), then to a git-search fallback for very old repos.
 
     Args:
         packages: Map of package name → PackageInfo.
 
     Returns:
-        Map of package name to its dev baseline tag, or None if no tag exists.
+        Map of package name to its baseline tag, or None if no tag exists.
     """
-    step("Finding dev baselines")
+    step("Finding baselines")
 
     baselines: dict[str, str | None] = {}
-    for name in packages:
-        # First, look for -dev baseline tags
-        dev_tags = git(
-            "tag", "--list", f"{name}/v*-dev", "--sort=-v:refname", check=False
-        )
-        if dev_tags:
-            baselines[name] = dev_tags.splitlines()[0]
+    for name, info in packages.items():
+        # 1. Derive from version: {name}/v{version}-base
+        base_tag = f"{name}/v{info.version}-base"
+        result = git("tag", "--list", base_tag, check=False)
+        if result.strip():
+            baselines[name] = base_tag
         else:
-            # Fall back to release tag (backward compat with repos that
-            # don't have -dev tags yet)
-            release_tags = git(
-                "tag", "--list", f"{name}/v*", "--sort=-v:refname", check=False
-            )
-            baselines[name] = release_tags.splitlines()[0] if release_tags else None
+            # 2. Backward compat: try -dev tag for the same version
+            dev_tag = f"{name}/v{info.version}-dev"
+            result = git("tag", "--list", dev_tag, check=False)
+            if result.strip():
+                baselines[name] = dev_tag
+            else:
+                # 3. Very old repos: search for any release tag
+                release_tags = git(
+                    "tag",
+                    "--list",
+                    f"{name}/v*",
+                    "--sort=-v:refname",
+                    check=False,
+                )
+                if release_tags:
+                    # Filter out -dev and -base tags
+                    found = None
+                    for tag in release_tags.splitlines():
+                        if not tag.endswith("-dev") and not tag.endswith("-base"):
+                            found = tag
+                            break
+                    baselines[name] = found
+                else:
+                    baselines[name] = None
         print(f"  {name}: {baselines[name] or '<none>'}")
 
     return baselines
@@ -193,7 +208,7 @@ def find_dev_baselines(packages: dict[str, PackageInfo]) -> dict[str, str | None
 
 def detect_changes(
     packages: dict[str, PackageInfo],
-    dev_baselines: Mapping[str, str | None],
+    baselines: Mapping[str, str | None],
     rebuild_all: bool,
 ) -> list[str]:
     """Determine which packages need to be rebuilt.
@@ -201,17 +216,17 @@ def detect_changes(
     A package is "dirty" and needs rebuilding if:
     1. rebuild_all is True (rebuild everything)
     2. No previous baseline tag exists for the package (first release)
-    3. Any file in the package directory changed since its dev baseline
-    4. Root pyproject.toml or uv.lock changed since its dev baseline
+    3. Any file in the package directory changed since its baseline
+    4. Root pyproject.toml or uv.lock changed since its baseline
     5. Any of its dependencies are dirty (transitive dirtiness)
 
-    The dev baseline tag ({pkg}/v{version}-dev) is placed on the version
+    The baseline tag ({pkg}/v{version}-base) is placed on the version
     bump commit after each release, so only real work after the bump
     shows up in the diff.
 
     Args:
         packages: Map of package name → PackageInfo.
-        dev_baselines: Map of package name → dev baseline tag (or None).
+        baselines: Map of package name → baseline tag (or None).
         rebuild_all: If True, mark all packages as dirty.
 
     Returns:
@@ -224,9 +239,9 @@ def detect_changes(
         print("  Force rebuild: all packages marked dirty")
     else:
         dirty: set[str] = set()
-        # Check each package for direct changes since its dev baseline
+        # Check each package for direct changes since its baseline
         for name, info in packages.items():
-            baseline = dev_baselines.get(name)
+            baseline = baselines.get(name)
             if not baseline:
                 # First release for this package
                 dirty.add(name)
@@ -445,19 +460,19 @@ def tag_changed_packages(changed: dict[str, PackageInfo]) -> None:
         print(f"  {tag}")
 
 
-def tag_dev_baselines(bumped: dict[str, VersionBump]) -> None:
-    """Create dev baseline tags for each bumped package.
+def tag_baselines(bumped: dict[str, VersionBump]) -> None:
+    """Create baseline tags for each bumped package.
 
     These tags mark the version bump commit as the diff baseline for the
-    next release. Format: {package-name}/v{new_version}-dev.
+    next release. Format: {package-name}/v{new_version}-base.
 
     Args:
         bumped: Map of package names to VersionBump (old → new versions).
     """
-    step("Creating dev baseline tags")
+    step("Creating baseline tags")
 
     for name, bump in bumped.items():
-        tag = f"{name}/v{bump.new}-dev"
+        tag = f"{name}/v{bump.new}-base"
         git("tag", tag)
         print(f"  {tag}")
 
@@ -650,8 +665,8 @@ def run_release(
     # Phase 1: Discovery
     packages = discover_packages()
     release_tags = find_release_tags(packages)
-    dev_baselines = find_dev_baselines(packages)
-    changed_names = detect_changes(packages, dev_baselines, rebuild_all)
+    baselines = get_baseline_tags(packages)
+    changed_names = detect_changes(packages, baselines, rebuild_all)
 
     if not changed_names:
         fatal(
@@ -701,7 +716,7 @@ def run_release(
     tag_changed_packages(release_changed)
     bumped = bump_versions(published_state)
     commit_bumps(release_changed, bumped)
-    tag_dev_baselines(bumped)
+    tag_baselines(bumped)
 
     if push:
         step("Pushing commits and tags.")
@@ -738,8 +753,8 @@ def build_plan(
     """
     packages = discover_packages()
     release_tags = find_release_tags(packages)
-    dev_baselines = find_dev_baselines(packages)
-    changed_names = detect_changes(packages, dev_baselines, rebuild_all)
+    baselines = get_baseline_tags(packages)
+    changed_names = detect_changes(packages, baselines, rebuild_all)
 
     changed = {name: packages[name] for name in changed_names}
     unchanged = {
@@ -929,7 +944,7 @@ def execute_plan(plan: ReleasePlan, *, push: bool = True) -> None:
     tag_changed_packages(plan.changed)
     bumped = apply_bumps(plan)
     commit_bumps(plan.changed, bumped)
-    tag_dev_baselines(bumped)
+    tag_baselines(bumped)
 
     if push:
         step("Pushing commits and tags.")

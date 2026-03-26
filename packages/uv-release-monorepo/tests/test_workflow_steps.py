@@ -83,7 +83,7 @@ def test_execute_publish_releases_calls_publish(mock_publish: MagicMock) -> None
 
 
 @patch("uv_release_monorepo.workflow_steps.git")
-@patch("uv_release_monorepo.workflow_steps.tag_dev_baselines")
+@patch("uv_release_monorepo.workflow_steps.tag_baselines")
 @patch("uv_release_monorepo.workflow_steps.commit_bumps")
 @patch("uv_release_monorepo.workflow_steps.apply_bumps")
 @patch("uv_release_monorepo.workflow_steps.tag_changed_packages")
@@ -108,7 +108,7 @@ def test_execute_finalize_calls_sequence(
 
 
 @patch("uv_release_monorepo.workflow_steps.git")
-@patch("uv_release_monorepo.workflow_steps.tag_dev_baselines")
+@patch("uv_release_monorepo.workflow_steps.tag_baselines")
 @patch("uv_release_monorepo.workflow_steps.commit_bumps")
 @patch("uv_release_monorepo.workflow_steps.apply_bumps")
 @patch("uv_release_monorepo.workflow_steps.tag_changed_packages")
@@ -136,7 +136,7 @@ def test_execute_finalize_ci_publish_skips_tags_and_pushes(
 
 
 @patch("uv_release_monorepo.workflow_steps.git")
-@patch("uv_release_monorepo.workflow_steps.tag_dev_baselines")
+@patch("uv_release_monorepo.workflow_steps.tag_baselines")
 @patch("uv_release_monorepo.workflow_steps.commit_bumps")
 @patch("uv_release_monorepo.workflow_steps.apply_bumps")
 @patch("uv_release_monorepo.workflow_steps.tag_changed_packages")

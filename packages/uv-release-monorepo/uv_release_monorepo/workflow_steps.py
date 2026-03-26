@@ -13,8 +13,8 @@ from .pipeline import (
     fetch_unchanged_wheels,
     publish_release,
     run_release,
+    tag_baselines,
     tag_changed_packages,
-    tag_dev_baselines,
 )
 from .shell import git
 
@@ -81,7 +81,7 @@ def execute_finalize(plan_json: str) -> None:
         tag_changed_packages(plan.changed)
     bumped = apply_bumps(plan)
     commit_bumps(plan.changed, bumped)
-    tag_dev_baselines(bumped)
+    tag_baselines(bumped)
     if plan.ci_publish:
         git("push")
         git("push", "--tags")
