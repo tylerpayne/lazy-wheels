@@ -200,8 +200,18 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     # Prompt to write dep pins if needed
     if pin_changes:
+        print()
+        print("Packages need to pin new dependencies")
+        print("--------------------------------------")
+        print("The following commands will be run:")
+        print()
+        print("  1. Write updated pins to pyproject.toml files")
+        print("  2. git add -A")
+        print("  3. git commit -m 'chore: update dependency pins'")
+        print("  4. git push")
+        print()
         try:
-            answer = input("Write dependency pin updates? [y/N] ").strip().lower()
+            answer = input("Proceed? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return
@@ -211,10 +221,10 @@ def cmd_release(args: argparse.Namespace) -> None:
 
         written = write_dep_pins(plan)
         for name, changes in written:
-            for old, new in changes:
-                print(f"  {name}: {old} -> {new}")
+            for _old, new in changes:
+                print(f"  {name}: {_old} -> {new}")
         print()
-        print("Commit pin updates before dispatching:")
+        print("Pin updates written. Commit and re-run:")
         print(
             "  git add -A && git commit -m 'chore: update dependency pins' && git push"
         )
@@ -226,17 +236,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         print(json.dumps(plan.model_dump(), indent=2))
         print()
 
-    # Prompt for confirmation before dispatching (skip with --yes)
-    if not args.yes:
-        try:
-            answer = input("Dispatch release? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        if answer != "y":
-            return
-
-    # Dispatch via gh
+    # Build the dispatch command
     import subprocess
     import time
 
@@ -249,6 +249,24 @@ def cmd_release(args: argparse.Namespace) -> None:
         "-f",
         f"plan={plan_json}",
     ]
+
+    # Prompt for confirmation before dispatching (skip with --yes)
+    if not args.yes:
+        print()
+        print("Dispatch release")
+        print("----------------")
+        print(f"  gh workflow run release.yml -f plan=<{len(plan_json)} bytes>")
+        if plan.skip:
+            print(f"  skip: {', '.join(plan.skip)}")
+        print()
+        try:
+            answer = input("Run this command? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if answer != "y":
+            return
+
     print(f"Dispatching release for: {', '.join(sorted(plan.changed))}")
     result = subprocess.run(cmd)
     if result.returncode != 0:

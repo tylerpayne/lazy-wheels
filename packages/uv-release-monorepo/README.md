@@ -5,7 +5,12 @@ Push-button releases for [uv](https://github.com/astral-sh/uv) monorepos. Rebuil
 ## Quick Start
 
 ```bash
+# Install as a uv tool
 uv tool install uv-release-monorepo
+# Or via pip
+# pip install uv-release-monorepo
+# Or as uv dev dependency
+# uv add --dev uv-release-monorepo
 uvr init
 uvr release
 ```
