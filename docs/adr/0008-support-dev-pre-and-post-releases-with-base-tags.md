@@ -72,7 +72,8 @@ pyproject: 1.0.1.dev3            uvr release --pre a  tag: v1.0.1a1  (auto-incre
 pyproject: 1.0.1.dev4            (auto-bump)          tag: v1.0.1.dev4-base
 pyproject: 1.0.1.dev4            uvr release          tag: v1.0.1
 pyproject: 1.0.2.dev0            (auto-bump)          tag: v1.0.2.dev0-base
-pyproject: 1.0.2.dev0            uvr release --post   tag: v1.0.1.post0
+  (user checks out v1.0.1 tag, pyproject is 1.0.1)
+pyproject: 1.0.1                 uvr release --post   tag: v1.0.1.post0
 pyproject: 1.0.1.post0.dev0     (auto-bump)          tag: v1.0.1.post0.dev0-base
 pyproject: 1.0.1.post0.dev0     uvr release --post   tag: v1.0.1.post1  (auto-incremented)
 pyproject: 1.0.1.post1.dev0     (auto-bump)          tag: v1.0.1.post1.dev0-base
@@ -86,7 +87,7 @@ pyproject: 1.0.1.post1.dev0     (auto-bump)          tag: v1.0.1.post1.dev0-base
 - Good, because `--dev` releases require zero version changes (publish as-is)
 - Bad, because renaming `-dev` to `-base` requires migrating existing repos (backward compat fallback mitigates this)
 - Bad, because post-release flow creates compound versions (`1.0.0.post0.dev0`) that look unusual
-- Bad, because `uvr release --post` after a patch bump (`1.0.2.dev0`) targets the *previous* final version, which requires looking up the last final release tag
+- Bad, because `uvr release --post` requires the pyproject version to be a plain final release (no `.dev`, no `a/b/rc`) — user must check out a release tag first. This is correct per PEP 440 (post-releases are tied to final releases only).
 
 ## Links
 
