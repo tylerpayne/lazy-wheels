@@ -8,7 +8,7 @@ from pathlib import Path
 from ..models import ReleaseWorkflow
 from ..toml import load_pyproject
 from ._common import _fatal
-from .workflow import _load_yaml, _write_yaml
+from ._yaml import _load_yaml, _write_yaml
 
 
 def cmd_init(args: argparse.Namespace) -> None:

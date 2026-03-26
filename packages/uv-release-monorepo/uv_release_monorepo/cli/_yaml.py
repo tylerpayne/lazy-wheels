@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from io import StringIO
+from pathlib import Path
 from typing import Any
 
 _MISSING = object()
@@ -90,3 +92,32 @@ def _yaml_delete(doc: dict | list, keys: list[str]) -> bool:
             del node[last]
             return True
     return False
+
+
+def _load_yaml(path: Path) -> dict:
+    """Load a YAML file using ruamel.yaml (preserves order, quotes, comments)."""
+    from ruamel.yaml import YAML
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.width = 2**31
+    with open(path) as f:
+        doc = yaml.load(f)
+    return doc or {}
+
+
+def _dump_yaml(doc: Any) -> str:
+    """Serialize a dict to YAML string using ruamel.yaml."""
+    from ruamel.yaml import YAML
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.width = 2**31  # effectively infinite -- never line-wrap
+    stream = StringIO()
+    yaml.dump(doc, stream)
+    return stream.getvalue()
+
+
+def _write_yaml(path: Path, doc: dict) -> None:
+    """Write a dict to a YAML file using ruamel.yaml."""
+    path.write_text(_dump_yaml(doc))

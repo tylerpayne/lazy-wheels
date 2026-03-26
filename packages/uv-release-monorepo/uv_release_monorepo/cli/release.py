@@ -9,7 +9,7 @@ from pathlib import Path
 from ..graph import topo_layers
 from ..models import JOB_ORDER, ReleasePlan, ReleaseWorkflow, _NOOP_STEPS
 from ._common import __version__, _fatal, _read_matrix
-from .workflow import _load_yaml
+from ._yaml import _load_yaml
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
