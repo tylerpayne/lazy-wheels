@@ -63,28 +63,29 @@ def _print_plan(
     all_names = sorted({*plan.changed, *plan.unchanged})
     if all_names:
         nw = max(len(n) for n in all_names)
-        # Compute version column width for alignment
+        # Compute version strings and column width
         ver_strs: dict[str, str] = {}
         for name in all_names:
             if name in plan.changed:
                 ver_strs[name] = plan.changed[name].version
             else:
-                tag = plan.release_tags.get(name)
-                ver_strs[name] = f"reuse from {tag or '(no prior release)'}"
+                ver_strs[name] = plan.unchanged[name].version
         vw = max(len(v) for v in ver_strs.values())
         for name in all_names:
             if name in plan.changed:
-                info = plan.changed[name]
                 tag = plan.release_tags.get(name)
                 last_release = version_from_tag(tag) if tag else "none"
                 print(
                     f"  changed    {name.ljust(nw)}  "
-                    f"{info.version.ljust(vw)}  (last release: {last_release})"
+                    f"{ver_strs[name].ljust(vw)}  (last release: {last_release})"
                 )
             else:
                 tag = plan.release_tags.get(name)
-                source = tag or "(no prior release)"
-                print(f"  unchanged  {name.ljust(nw)}  reuse from {source}")
+                last_ver = version_from_tag(tag) if tag else "none"
+                print(
+                    f"  unchanged  {name.ljust(nw)}  "
+                    f"{ver_strs[name].ljust(vw)}  (reuse last release: {last_ver})"
+                )
 
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
