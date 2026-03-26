@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ..graph import topo_layers
 from ..models import JOB_ORDER, ReleasePlan, ReleaseWorkflow, _NOOP_STEPS
 from ._common import __version__, _fatal, _read_matrix
 from .workflow import _load_yaml
@@ -87,13 +88,28 @@ def _print_plan(plan: ReleasePlan, skipped: set[str], pin_updates: list[str]) ->
 
         print(f"  run   {job}")
 
-        # Show build matrix inline under the build job
+        # Show build order inline under the build job
         if job == "build":
             if plan.reuse_run_id:
                 print(f"{_D}artifacts from run {plan.reuse_run_id}")
             elif plan.matrix:
-                for entry in plan.matrix:
-                    print(f"{_D}{entry.package}  on  {entry.runner}  ({entry.version})")
+                # Group by topo layer to show build order
+                layers = topo_layers(plan.changed)
+                max_layer = max(layers.values()) if layers else 0
+                for layer in range(max_layer + 1):
+                    pkgs_in_layer = sorted(n for n, lv in layers.items() if lv == layer)
+                    if not pkgs_in_layer:
+                        continue
+                    entries = {e.package: e for e in plan.matrix}
+                    names = ", ".join(pkgs_in_layer)
+                    if max_layer > 0:
+                        print(f"{_D}layer {layer}: {names}")
+                    for pkg in pkgs_in_layer:
+                        entry = entries.get(pkg)
+                        if entry:
+                            print(
+                                f"{_D}  {entry.package}  on  {entry.runner}  ({entry.version})"
+                            )
 
         # Show publish entries inline under publish
         if job == "publish" and plan.publish_matrix:
