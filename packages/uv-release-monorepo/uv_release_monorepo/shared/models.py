@@ -279,7 +279,7 @@ _PUBLISH_STEPS: list[dict] = [
             "tag_name": "${{ matrix.tag }}",
             "name": "${{ matrix.title }}",
             "body": "${{ matrix.body }}",
-            "files": "${{ matrix.dist_name }}-${{ matrix.version }}*.whl",
+            "files": "dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl",
             "make_latest": "${{ matrix.make_latest }}",
         },
     },
