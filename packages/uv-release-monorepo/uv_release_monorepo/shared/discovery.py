@@ -101,7 +101,7 @@ def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]
 
     The release tag is the most recent ``{name}/v{version}`` tag whose
     version is less than or equal to the package's current base version.
-    Baseline tags (``-base``, legacy ``-dev``) are excluded.
+    Baseline tags (``-base``) are excluded.
 
     Args:
         packages: Map of package name -> PackageInfo.
@@ -119,7 +119,7 @@ def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]
         tags = git("tag", "--list", f"{name}/v*", "--sort=-v:refname", check=False)
         found = None
         for tag in tags.splitlines():
-            if tag.endswith("-base") or tag.endswith("-dev"):
+            if tag.endswith("-base"):
                 continue
             # Extract version and check it's a real release at or below current
             tag_ver_str = tag.split("/v", 1)[-1]
