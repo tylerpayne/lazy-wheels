@@ -28,14 +28,17 @@ Hook jobs (pre-build, post-build, pre-release, post-release) are no-ops by defau
 ## Key commands
 
 ```bash
-uvr init                    # generate release.yml
-uvr validate                # check release.yml against the model
-uvr release                 # detect changes, show plan, dispatch
-uvr release --rebuild-all   # rebuild everything
-uvr release --skip-to post-release --reuse-release  # re-run a specific job
+uvr init                        # generate release.yml
+uvr validate                    # check release.yml against the model
+uvr release                     # detect changes, show plan, dispatch to CI
+uvr release --where local       # build and publish locally
+uvr release --dry-run           # preview without making changes
+uvr release --dev               # publish a .devN release
+uvr release --pre a             # publish an alpha pre-release
+uvr release --rebuild-all       # rebuild everything
 uvr runners my-pkg --add macos-14   # add a build runner
-uvr status                  # show current config
-uvr install my-pkg          # install from GitHub releases
+uvr status                      # show current config
+uvr install my-pkg              # install from GitHub releases
 ```
 
 ## Documentation

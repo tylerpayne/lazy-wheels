@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.8.0] - 2026-03-26
+
 ### Added
 - Add `--dev`, `--pre {a,b,rc}`, and `--post` flags to `uvr release` for PEP 440 dev, pre, and post releases (ADR-0008)
 - Add `uvr build`, `uvr finalize`, `uvr set-version`, and `uvr pin-deps` subcommands (previously separate `uvr-ci` entry point)
