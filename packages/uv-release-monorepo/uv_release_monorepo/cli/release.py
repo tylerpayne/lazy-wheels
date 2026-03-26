@@ -74,9 +74,9 @@ def _print_plan(
                 source = tag or "(no prior release)"
                 print(f"  unchanged  {name.ljust(w)}  reuse from {source}")
 
-    # -- Dep pins --
+    # -- Dependency pins --
     if pin_changes:
-        _section("Dep pins")
+        _section("Dependency pins")
         for name, changes in pin_changes:
             print(f"  {name}")
             for old, new in changes:
@@ -197,7 +197,7 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Prompt to write dep pins if needed
     if pin_changes:
         try:
-            answer = input("Write dep pin updates? [y/N] ").strip().lower()
+            answer = input("Write dependency pin updates? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return
@@ -211,7 +211,9 @@ def cmd_release(args: argparse.Namespace) -> None:
                 print(f"  {name}: {old} -> {new}")
         print()
         print("Commit pin updates before dispatching:")
-        print("  git add -A && git commit -m 'chore: update dep pins' && git push")
+        print(
+            "  git add -A && git commit -m 'chore: update dependency pins' && git push"
+        )
         print("  uvr release")
         return
 
