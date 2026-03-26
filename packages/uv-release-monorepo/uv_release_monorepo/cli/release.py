@@ -92,8 +92,8 @@ def _print_plan(
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
     _D = "          "  # detail indent
+    print(f"  {'STATUS'.ljust(4)}  JOB")
     for job in JOB_ORDER:
-        print()
         if job in skipped:
             reason = "no-op" if job in _HOOK_PHASES else "user --skip"
             print(f"  skip  {job}  ({reason})")
@@ -110,7 +110,6 @@ def _print_plan(
                 by_runner: dict[str, list] = {}
                 for me in plan.matrix:
                     by_runner.setdefault(me.runner, []).append(me)
-                # Column width for package names in build section
                 all_build_pkgs = [e.package for e in plan.matrix]
                 bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
                 for runner, runner_entries in sorted(by_runner.items()):
