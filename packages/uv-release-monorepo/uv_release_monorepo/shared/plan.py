@@ -515,22 +515,63 @@ class ReleasePlanner:
         release_conflicts = [t for t in release_tags if t in existing_releases]
 
         conflicts = sorted(set(tag_conflicts + release_conflicts))
-        if conflicts:
-            lines = "\n".join(f"  {t}" for t in conflicts)
-            delete_cmds = "\n".join(
-                f"     gh release delete {t} --yes && "
-                f"git tag -d {t} && git push --delete origin {t}"
-                for t in conflicts
-            )
-            fatal(
-                f"These tags/releases already exist and would conflict:\n"
-                f"{lines}\n\n"
-                f"To resolve, either:\n"
-                f"  1. Use --post to publish a post-release of the existing version\n"
-                f"  2. Bump to a new version: uv version <new-version> --directory <pkg>\n"
-                f"  3. Delete the conflicting tags/releases (last resort):\n"
-                f"{delete_cmds}"
-            )
+        if not conflicts:
+            return
+
+        lines = "\n".join(f"  {t}" for t in conflicts)
+
+        # Compute what --post would produce for each conflicting release
+        post_versions = []
+        for t in conflicts:
+            if t in existing_releases:
+                ver = version_from_tag(t)
+                post_ver = make_post(
+                    ver, next_post_number(list(existing_releases), t.split("/v")[0])
+                )
+                post_versions.append(f"  {t.split('/v')[0]}: {post_ver}")
+
+        post_hint = ""
+        if post_versions:
+            post_detail = "\n".join(post_versions)
+            post_hint = f"  1. Use --post to publish a post-release:\n{post_detail}\n"
+        else:
+            post_hint = "  1. Use --post to publish a post-release\n"
+
+        # Compute bump commands for each conflicting package
+        bump_cmds = []
+        for t in conflicts:
+            if t in existing_releases:
+                ver = version_from_tag(t)
+                next_ver = make_dev(bump_patch(ver))
+                pkg_name = t.split("/v")[0]
+                pkg_path = (
+                    changed[pkg_name].path
+                    if pkg_name in changed
+                    else f"packages/{pkg_name}"
+                )
+                bump_cmds.append(f"     uv version {next_ver} --directory {pkg_path}")
+
+        bump_hint = ""
+        if bump_cmds:
+            bump_detail = "\n".join(bump_cmds)
+            bump_hint = f"  2. Bump past the conflict:\n{bump_detail}\n"
+        else:
+            bump_hint = "  2. Bump to a new version: uv version <new-version> --directory <pkg>\n"
+
+        delete_cmds = "\n".join(
+            f"     gh release delete {t} --yes && "
+            f"git tag -d {t} && git push --delete origin {t}"
+            for t in conflicts
+        )
+        fatal(
+            f"These tags/releases already exist and would conflict:\n"
+            f"{lines}\n\n"
+            f"To resolve, either:\n"
+            f"{post_hint}"
+            f"{bump_hint}"
+            f"  3. Delete the conflicting tags/releases (last resort):\n"
+            f"{delete_cmds}"
+        )
 
     @staticmethod
     def _published_versions(
