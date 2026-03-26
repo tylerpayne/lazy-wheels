@@ -202,7 +202,7 @@ requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
 
 [[package]]
 name = "pkg-delta"
-version = "0.2.5.dev0"
+version = "0.2.5"
 source = { editable = "packages/pkg-delta" }
 dependencies = [
     { name = "pkg-alpha" },
@@ -213,7 +213,7 @@ requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
 
 [[package]]
 name = "pkg-gamma"
-version = "0.1.18.dev0"
+version = "0.1.18"
 source = { editable = "packages/pkg-gamma" }
 dependencies = [
     { name = "pkg-beta" },
@@ -614,7 +614,7 @@ wheels = [
 
 [[package]]
 name = "uv-release-monorepo"
-version = "0.7.1.dev0"
+version = "0.7.1"
 source = { editable = "packages/uv-release-monorepo" }
 dependencies = [
     { name = "packaging" },

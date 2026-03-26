@@ -18,6 +18,7 @@ from .tags import tag_baselines, tag_changed_packages
 from ..shell import fatal, git, step
 
 
+# TODO: What is this method? It runs in CI, right? Is it the build step? The publish step? Feels like maybe we can remove this method?
 def run_release(
     *,
     rebuild_all: bool = False,
@@ -65,7 +66,10 @@ def run_release(
     # Strip .dev for version comparison since that's the release version
     release_changed = {
         name: PackageInfo(
-            path=info.path, version=strip_dev(info.version), deps=info.deps
+            # Why strip dev?
+            path=info.path,
+            version=strip_dev(info.version),
+            deps=info.deps,
         )
         for name, info in changed.items()
     }

@@ -148,6 +148,7 @@ def check_for_existing_wheels(changed: dict[str, PackageInfo]) -> None:
     """
     step("Checking for duplicate versions")
 
+    # TODO: Be smarter. We should be checking specific release tags based on our PackageInfo
     existing_wheels = get_existing_wheels()
     if not existing_wheels:
         print("  No existing releases found")

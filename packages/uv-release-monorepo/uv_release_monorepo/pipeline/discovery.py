@@ -96,6 +96,7 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     return packages
 
 
+# TODO: Why are we finding _latest_ release tags? We need to find tags relative to the packageinfo
 def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]:
     """Find the most recent release tag for each package.
 
@@ -117,6 +118,7 @@ def find_release_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]
         # Find the first tag that is NOT a -dev baseline
         found = None
         for tag in tags.splitlines():
+            # TODO: what is not tag.endswith("-dev"), that's an error. We onlu use -base now
             if not tag.endswith("-dev") and not tag.endswith("-base"):
                 found = tag
                 break
@@ -149,6 +151,7 @@ def get_baseline_tags(packages: dict[str, PackageInfo]) -> dict[str, str | None]
         if result.strip():
             baselines[name] = base_tag
         else:
+            # TODO: NO BACKWARDS COMPAT, KILL IT
             # 2. Backward compat: try -dev tag for the same version
             dev_tag = f"{name}/v{info.version}-dev"
             result = git("tag", "--list", dev_tag, check=False)

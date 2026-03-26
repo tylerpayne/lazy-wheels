@@ -31,6 +31,7 @@ def build_plan(
     matrix: dict[str, list[str]],
     uvr_version: str,
     python_version: str = "3.12",
+    # It's just a plan, what is a dry_run?
     dry_run: bool = False,
 ) -> tuple[ReleasePlan, list[tuple[str, list[tuple[str, str]]]]]:
     """Run discovery locally and return a ReleasePlan and pin change details.
@@ -150,6 +151,7 @@ def build_plan(
     return plan, pin_changes
 
 
+# TODO: Use a structured response, not nested tuples
 def write_dep_pins(plan: ReleasePlan) -> list[tuple[str, list[tuple[str, str]]]]:
     """Write pending dep pin updates via ``uv add --package PKG --frozen DEP>=VER``.
 

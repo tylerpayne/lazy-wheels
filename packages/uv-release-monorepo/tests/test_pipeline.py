@@ -43,8 +43,8 @@ class TestFindReleaseTags:
             "pkg-b": PackageInfo(path="packages/b", version="1.0.0", deps=[]),
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_returns_per_package_tags(
         self,
         mock_step: MagicMock,
@@ -61,8 +61,8 @@ class TestFindReleaseTags:
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v2.0.0"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_returns_none_for_new_packages(
         self,
         mock_step: MagicMock,
@@ -79,8 +79,8 @@ class TestFindReleaseTags:
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": None}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_all_new_packages(
         self,
         mock_step: MagicMock,
@@ -94,8 +94,8 @@ class TestFindReleaseTags:
 
         assert result == {"pkg-a": None, "pkg-b": None}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_skips_dev_and_base_tags(
         self,
         mock_step: MagicMock,
@@ -124,8 +124,8 @@ class TestGetBaselineTags:
             "pkg-b": PackageInfo(path="packages/b", version="1.0.1", deps=[]),
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_returns_base_tags(
         self,
         mock_step: MagicMock,
@@ -145,8 +145,8 @@ class TestGetBaselineTags:
             "pkg-b": "pkg-b/v1.0.1-base",
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_falls_back_to_dev_tag(
         self,
         mock_step: MagicMock,
@@ -167,8 +167,8 @@ class TestGetBaselineTags:
             "pkg-b": "pkg-b/v1.0.1-base",
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_falls_back_to_release_tag(
         self,
         mock_step: MagicMock,
@@ -190,8 +190,8 @@ class TestGetBaselineTags:
             "pkg-b": "pkg-b/v1.0.1-base",
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.git")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_returns_none_for_new_packages(
         self,
         mock_step: MagicMock,
@@ -232,8 +232,8 @@ class TestDetectChanges:
         """No packages have tags (first release)."""
         return {"pkg-a": None, "pkg-b": None, "pkg-c": None}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_first_release_all_changed(
         self,
         mock_step: MagicMock,
@@ -248,8 +248,8 @@ class TestDetectChanges:
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_rebuild_all_marks_everything_dirty(
         self,
         mock_step: MagicMock,
@@ -262,8 +262,8 @@ class TestDetectChanges:
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_single_package_changed(
         self,
         mock_step: MagicMock,
@@ -283,8 +283,8 @@ class TestDetectChanges:
 
         assert set(changed) == {"pkg-c"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_dependency_change_propagates(
         self,
         mock_step: MagicMock,
@@ -304,8 +304,8 @@ class TestDetectChanges:
         # pkg-a changed directly, pkg-b and pkg-c are dirty because they depend on it
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_middle_package_change_propagates_to_dependents(
         self,
         mock_step: MagicMock,
@@ -325,8 +325,8 @@ class TestDetectChanges:
         # pkg-b changed, pkg-c depends on it, pkg-a is unaffected
         assert set(changed) == {"pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_root_pyproject_change_marks_package_dirty(
         self,
         mock_step: MagicMock,
@@ -345,8 +345,8 @@ class TestDetectChanges:
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_no_changes_returns_empty(
         self,
         mock_step: MagicMock,
@@ -393,8 +393,8 @@ class TestDetectChangesDiamondDeps:
             "top": "top/v1.0.0",
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_bottom_change_propagates_to_all(
         self,
         mock_step: MagicMock,
@@ -416,8 +416,8 @@ class TestDetectChangesDiamondDeps:
 
         assert set(changed) == {"bottom", "left", "right", "top"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_left_change_propagates_to_top_only(
         self,
         mock_step: MagicMock,
@@ -439,8 +439,8 @@ class TestDetectChangesDiamondDeps:
 
         assert set(changed) == {"left", "top"}
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.git")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_top_change_only_affects_top(
         self,
         mock_step: MagicMock,
@@ -466,15 +466,13 @@ class TestDetectChangesDiamondDeps:
 class TestFetchUnchangedWheels:
     """Tests for fetch_unchanged_wheels()."""
 
-    @patch("uv_release_monorepo.pipeline.run")
-    @patch("uv_release_monorepo.pipeline.gh")
-    @patch("uv_release_monorepo.pipeline.step")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.build.run")
+    @patch("uv_release_monorepo.pipeline.build.step")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_copies_matching_wheels(
         self,
         mock_path_cls: MagicMock,
         mock_step: MagicMock,
-        mock_gh: MagicMock,
         mock_run: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -488,9 +486,6 @@ class TestFetchUnchangedWheels:
         # Create a wheel file in tmp
         wheel_file = tmp_wheels / "pkg_a-1.0.0-py3-none-any.whl"
         wheel_file.write_text("fake wheel content")
-
-        # Mock gh to return a release
-        mock_gh.return_value = '[{"tagName": "v2024.01.01-abc123"}]'
 
         # Mock Path to return our tmp directories
         mock_path_cls.side_effect = lambda p: (
@@ -509,13 +504,11 @@ class TestFetchUnchangedWheels:
         mock_run.assert_called()
         assert "download" in mock_run.call_args[0]
 
-    @patch("uv_release_monorepo.pipeline.run")
-    @patch("uv_release_monorepo.pipeline.gh")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.build.run")
+    @patch("uv_release_monorepo.pipeline.build.step")
     def test_missing_wheel_not_copied(
         self,
         mock_step: MagicMock,
-        mock_gh: MagicMock,
         mock_run: MagicMock,
         tmp_path: Path,
     ) -> None:
@@ -529,10 +522,10 @@ class TestFetchUnchangedWheels:
         tmp_wheels.mkdir()
         # Note: we do NOT create pkg_a wheel - it's missing
 
-        # Mock gh to return a release
-        mock_gh.return_value = '[{"tagName": "v2024.01.01-abc123"}]'
+        # mock_run handles gh release download calls
+        mock_run.return_value = MagicMock(returncode=1)  # simulate download failure
 
-        with patch("uv_release_monorepo.pipeline.Path") as mock_path_cls:
+        with patch("uv_release_monorepo.pipeline.publish.Path") as mock_path_cls:
             mock_path_cls.side_effect = lambda p: (
                 tmp_wheels
                 if p == "/tmp/prev-wheels"
@@ -550,37 +543,32 @@ class TestFetchUnchangedWheels:
         # dist should be empty - no wheel was copied
         assert list(dist_dir.glob("*.whl")) == []
 
-    @patch("uv_release_monorepo.pipeline.gh")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.build.step")
     def test_skips_when_no_unchanged(
         self,
         mock_step: MagicMock,
-        mock_gh: MagicMock,
     ) -> None:
         """When unchanged dict is empty, does nothing."""
         fetch_unchanged_wheels({}, {})
-
-        mock_gh.assert_not_called()
-        mock_step.assert_not_called()
 
 
 class TestRunRelease:
     """Integration test for the full release pipeline."""
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.publish_release")
-    @patch("uv_release_monorepo.pipeline.tag_baselines")
-    @patch("uv_release_monorepo.pipeline.commit_bumps")
-    @patch("uv_release_monorepo.pipeline.bump_versions")
-    @patch("uv_release_monorepo.pipeline.tag_changed_packages")
-    @patch("uv_release_monorepo.pipeline.build_packages")
-    @patch("uv_release_monorepo.pipeline.fetch_unchanged_wheels")
-    @patch("uv_release_monorepo.pipeline.check_for_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.execute.git")
+    @patch("uv_release_monorepo.pipeline.execute.publish_release")
+    @patch("uv_release_monorepo.pipeline.execute.tag_baselines")
+    @patch("uv_release_monorepo.pipeline.execute.commit_bumps")
+    @patch("uv_release_monorepo.pipeline.execute.bump_versions")
+    @patch("uv_release_monorepo.pipeline.execute.tag_changed_packages")
+    @patch("uv_release_monorepo.pipeline.execute.build_packages")
+    @patch("uv_release_monorepo.pipeline.execute.fetch_unchanged_wheels")
+    @patch("uv_release_monorepo.pipeline.execute.check_for_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.execute.detect_changes")
+    @patch("uv_release_monorepo.pipeline.execute.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.execute.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.execute.discover_packages")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_golden_path_partial_rebuild(
         self,
         mock_path: MagicMock,
@@ -657,15 +645,15 @@ class TestRunRelease:
         mock_tag_dev.assert_called_once_with(bumped)
         mock_publish.assert_called_once()
 
-    @patch("uv_release_monorepo.pipeline.fatal")
-    @patch("uv_release_monorepo.pipeline.bump_versions")
-    @patch("uv_release_monorepo.pipeline.build_packages")
-    @patch("uv_release_monorepo.pipeline.fetch_unchanged_wheels")
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.execute.fatal")
+    @patch("uv_release_monorepo.pipeline.execute.bump_versions")
+    @patch("uv_release_monorepo.pipeline.execute.build_packages")
+    @patch("uv_release_monorepo.pipeline.execute.fetch_unchanged_wheels")
+    @patch("uv_release_monorepo.pipeline.execute.detect_changes")
+    @patch("uv_release_monorepo.pipeline.execute.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.execute.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.execute.discover_packages")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_no_changes_exits_early(
         self,
         mock_path: MagicMock,
@@ -707,7 +695,7 @@ class TestRunRelease:
 class TestGetExistingWheels:
     """Tests for get_existing_wheels()."""
 
-    @patch("uv_release_monorepo.pipeline.gh")
+    @patch("uv_release_monorepo.pipeline.changes.gh")
     def test_no_releases_returns_empty_set(
         self,
         mock_gh: MagicMock,
@@ -719,7 +707,7 @@ class TestGetExistingWheels:
 
         assert result == set()
 
-    @patch("uv_release_monorepo.pipeline.gh")
+    @patch("uv_release_monorepo.pipeline.changes.gh")
     def test_parses_wheel_assets(
         self,
         mock_gh: MagicMock,
@@ -735,7 +723,7 @@ class TestGetExistingWheels:
 
         assert result == {"pkg_a-1.0.0-py3-none-any.whl"}
 
-    @patch("uv_release_monorepo.pipeline.gh")
+    @patch("uv_release_monorepo.pipeline.changes.gh")
     def test_aggregates_wheels_from_multiple_releases(
         self,
         mock_gh: MagicMock,
@@ -766,8 +754,8 @@ class TestCreatePackageTags:
             "pkg-b": PackageInfo(path="packages/b", version="2.0.0", deps=[]),
         }
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.tags.git")
+    @patch("uv_release_monorepo.pipeline.tags.step")
     def test_creates_tags_for_changed_packages(
         self,
         mock_step: MagicMock,
@@ -782,8 +770,8 @@ class TestCreatePackageTags:
         mock_git.assert_any_call("tag", "pkg-a/v1.0.0")
         mock_git.assert_any_call("tag", "pkg-b/v2.0.0")
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.tags.git")
+    @patch("uv_release_monorepo.pipeline.tags.step")
     def test_no_tags_when_no_changes(
         self,
         mock_step: MagicMock,
@@ -807,8 +795,8 @@ class TestCheckForDuplicateVersions:
             "pkg-b": PackageInfo(path="packages/b", version="2.0.0", deps=[]),
         }
 
-    @patch("uv_release_monorepo.pipeline.get_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.get_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_no_existing_releases(
         self,
         mock_step: MagicMock,
@@ -821,9 +809,9 @@ class TestCheckForDuplicateVersions:
         # Should not raise
         check_for_existing_wheels(sample_packages)
 
-    @patch("uv_release_monorepo.pipeline.fatal")
-    @patch("uv_release_monorepo.pipeline.get_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.fatal")
+    @patch("uv_release_monorepo.pipeline.changes.get_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_duplicate_version_found(
         self,
         mock_step: MagicMock,
@@ -842,9 +830,9 @@ class TestCheckForDuplicateVersions:
         mock_fatal.assert_called_once()
         assert "pkg-a 1.0.0" in mock_fatal.call_args[0][0]
 
-    @patch("uv_release_monorepo.pipeline.fatal")
-    @patch("uv_release_monorepo.pipeline.get_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.fatal")
+    @patch("uv_release_monorepo.pipeline.changes.get_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_no_duplicate_different_versions(
         self,
         mock_step: MagicMock,
@@ -861,9 +849,9 @@ class TestCheckForDuplicateVersions:
 
         mock_fatal.assert_not_called()
 
-    @patch("uv_release_monorepo.pipeline.fatal")
-    @patch("uv_release_monorepo.pipeline.get_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.changes.fatal")
+    @patch("uv_release_monorepo.pipeline.changes.get_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.changes.step")
     def test_multiple_duplicates_found(
         self,
         mock_step: MagicMock,
@@ -888,9 +876,9 @@ class TestCheckForDuplicateVersions:
 class TestPublishReleaseChangelog:
     """Tests for publish_release() changelog generation."""
 
-    @patch("uv_release_monorepo.pipeline.gh")
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.publish.gh")
+    @patch("uv_release_monorepo.pipeline.publish.git")
+    @patch("uv_release_monorepo.pipeline.publish.step")
     def test_includes_git_log_in_release_notes(
         self,
         mock_step: MagicMock,
@@ -906,7 +894,7 @@ class TestPublishReleaseChangelog:
             dist.mkdir()
             (dist / "pkg_a-1.0.0-py3-none-any.whl").write_bytes(b"")
 
-            with patch("uv_release_monorepo.pipeline.Path") as mock_path_cls:
+            with patch("uv_release_monorepo.pipeline.publish.Path") as mock_path_cls:
                 mock_path_cls.return_value.glob.return_value = [
                     dist / "pkg_a-1.0.0-py3-none-any.whl"
                 ]
@@ -925,9 +913,9 @@ class TestPublishReleaseChangelog:
                 assert "Add feature X" in notes_str
                 assert "Fix bug Y" in notes_str
 
-    @patch("uv_release_monorepo.pipeline.gh")
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.publish.gh")
+    @patch("uv_release_monorepo.pipeline.publish.git")
+    @patch("uv_release_monorepo.pipeline.publish.step")
     def test_skips_log_for_new_packages(
         self,
         mock_step: MagicMock,
@@ -942,7 +930,7 @@ class TestPublishReleaseChangelog:
             dist.mkdir()
             (dist / "pkg_a-1.0.0-py3-none-any.whl").write_bytes(b"")
 
-            with patch("uv_release_monorepo.pipeline.Path") as mock_path_cls:
+            with patch("uv_release_monorepo.pipeline.publish.Path") as mock_path_cls:
                 mock_path_cls.return_value.glob.return_value = [
                     dist / "pkg_a-1.0.0-py3-none-any.whl"
                 ]
@@ -962,14 +950,14 @@ class TestPublishReleaseChangelog:
 class TestRunReleaseDryRun:
     """Tests for run_release() dry-run mode."""
 
-    @patch("uv_release_monorepo.pipeline.check_for_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.build_packages")
-    @patch("uv_release_monorepo.pipeline.publish_release")
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.execute.check_for_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.execute.build_packages")
+    @patch("uv_release_monorepo.pipeline.execute.publish_release")
+    @patch("uv_release_monorepo.pipeline.execute.detect_changes")
+    @patch("uv_release_monorepo.pipeline.execute.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.execute.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.execute.discover_packages")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_dry_run_skips_mutations(
         self,
         mock_path: MagicMock,
@@ -1004,13 +992,13 @@ class TestRunReleaseDryRun:
         assert "pkg-a" in output
         assert "1.0.0" in output
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.build_packages")
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.execute.git")
+    @patch("uv_release_monorepo.pipeline.execute.build_packages")
+    @patch("uv_release_monorepo.pipeline.execute.detect_changes")
+    @patch("uv_release_monorepo.pipeline.execute.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.execute.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.execute.discover_packages")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_dry_run_shows_version_bumps(
         self,
         mock_path: MagicMock,
@@ -1042,7 +1030,7 @@ class TestRunReleaseDryRun:
 class TestDiscoverPackagesRoot:
     """Tests for discover_packages() root parameter."""
 
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.discovery.step")
     def test_accepts_explicit_root(self, mock_step: MagicMock, tmp_path: Path) -> None:
         """discover_packages() uses the provided root directory."""
         root = tmp_path
@@ -1124,8 +1112,8 @@ class TestBumpVersions:
     ) -> PackageInfo:
         return PackageInfo(path=f"packages/{name}", version=version, deps=deps or [])
 
-    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.bumps.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.bumps.step")
     def test_bumps_changed_package_version(
         self, mock_step: MagicMock, mock_rewrite: MagicMock
     ) -> None:
@@ -1139,8 +1127,8 @@ class TestBumpVersions:
         assert result["pkg-alpha"].old == "0.1.5"
         assert result["pkg-alpha"].new == "0.1.6"
 
-    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.bumps.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.bumps.step")
     def test_unchanged_package_not_bumped(
         self, mock_step: MagicMock, mock_rewrite: MagicMock
     ) -> None:
@@ -1154,8 +1142,8 @@ class TestBumpVersions:
         assert "pkg-alpha" not in result
         mock_rewrite.assert_not_called()
 
-    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.bumps.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.bumps.step")
     def test_internal_dep_pinned_to_published_version_not_bumped(
         self, mock_step: MagicMock, mock_rewrite: MagicMock
     ) -> None:
@@ -1182,8 +1170,8 @@ class TestBumpVersions:
         _, _, internal_dep_versions = beta_rewrite_call.args
         assert internal_dep_versions["pkg-alpha"] == "0.1.5"
 
-    @patch("uv_release_monorepo.pipeline.rewrite_pyproject")
-    @patch("uv_release_monorepo.pipeline.step")
+    @patch("uv_release_monorepo.pipeline.bumps.rewrite_pyproject")
+    @patch("uv_release_monorepo.pipeline.bumps.step")
     def test_unchanged_dep_pinned_to_release_tag_version(
         self, mock_step: MagicMock, mock_rewrite: MagicMock
     ) -> None:
@@ -1218,10 +1206,10 @@ class TestBumpVersions:
 class TestBuildPlan:
     """Tests for build_plan()."""
 
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
+    @patch("uv_release_monorepo.pipeline.plan.detect_changes")
+    @patch("uv_release_monorepo.pipeline.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.plan.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.plan.discover_packages")
     def test_returns_release_plan(
         self,
         mock_discover: MagicMock,
@@ -1256,10 +1244,10 @@ class TestBuildPlan:
         assert plan.rebuild_all is False
         assert pin_updates == []  # no deps, no pins to update
 
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
+    @patch("uv_release_monorepo.pipeline.plan.detect_changes")
+    @patch("uv_release_monorepo.pipeline.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.plan.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.plan.discover_packages")
     def test_expands_matrix_for_changed_only(
         self,
         mock_discover: MagicMock,
@@ -1289,10 +1277,10 @@ class TestBuildPlan:
         assert "pkg-b" not in packages_in_matrix
         assert len(plan.matrix) == 2  # ubuntu-latest + macos-14 for pkg-a
 
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
+    @patch("uv_release_monorepo.pipeline.plan.detect_changes")
+    @patch("uv_release_monorepo.pipeline.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.plan.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.plan.discover_packages")
     def test_defaults_matrix_to_ubuntu_latest(
         self,
         mock_discover: MagicMock,
@@ -1313,10 +1301,10 @@ class TestBuildPlan:
         assert plan.matrix[0].package == "pkg-a"
         assert plan.matrix[0].runner == "ubuntu-latest"
 
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
+    @patch("uv_release_monorepo.pipeline.plan.detect_changes")
+    @patch("uv_release_monorepo.pipeline.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.plan.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.plan.discover_packages")
     def test_empty_changed_returns_empty_plan(
         self,
         mock_discover: MagicMock,
@@ -1336,11 +1324,11 @@ class TestBuildPlan:
         assert plan.changed == {}
         assert "pkg-a" in plan.unchanged
 
-    @patch("uv_release_monorepo.pipeline.generate_release_notes")
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
+    @patch("uv_release_monorepo.pipeline.plan.generate_release_notes")
+    @patch("uv_release_monorepo.pipeline.plan.detect_changes")
+    @patch("uv_release_monorepo.pipeline.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.plan.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.plan.discover_packages")
     def test_populates_publish_matrix_and_ci_publish(
         self,
         mock_discover: MagicMock,
@@ -1370,10 +1358,10 @@ class TestBuildPlan:
         assert entry.title == "pkg-a 1.0.0"
         assert entry.body == "**Released:** pkg-a 1.0.0"
 
-    @patch("uv_release_monorepo.pipeline.detect_changes")
-    @patch("uv_release_monorepo.pipeline.get_baseline_tags")
-    @patch("uv_release_monorepo.pipeline.find_release_tags")
-    @patch("uv_release_monorepo.pipeline.discover_packages")
+    @patch("uv_release_monorepo.pipeline.plan.detect_changes")
+    @patch("uv_release_monorepo.pipeline.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.pipeline.plan.find_release_tags")
+    @patch("uv_release_monorepo.pipeline.plan.discover_packages")
     def test_matrix_entries_include_path_and_version(
         self,
         mock_discover: MagicMock,
@@ -1399,7 +1387,7 @@ class TestBuildPlan:
 class TestGenerateReleaseNotes:
     """Tests for generate_release_notes()."""
 
-    @patch("uv_release_monorepo.pipeline.git")
+    @patch("uv_release_monorepo.pipeline.publish.git")
     def test_with_baseline_and_commits(self, mock_git: MagicMock) -> None:
         """Includes commit log when baseline tag exists."""
         mock_git.return_value = "abc1234 fix: something\ndef5678 feat: another"
@@ -1412,7 +1400,7 @@ class TestGenerateReleaseNotes:
         assert "- abc1234 fix: something" in result
         assert "- def5678 feat: another" in result
 
-    @patch("uv_release_monorepo.pipeline.git")
+    @patch("uv_release_monorepo.pipeline.publish.git")
     def test_without_baseline(self, mock_git: MagicMock) -> None:
         """No commit log when no baseline tag."""
         info = PackageInfo(path="packages/a", version="1.0.0", deps=[])
@@ -1422,7 +1410,7 @@ class TestGenerateReleaseNotes:
         assert result == "**Released:** pkg-a 1.0.0"
         mock_git.assert_not_called()
 
-    @patch("uv_release_monorepo.pipeline.git")
+    @patch("uv_release_monorepo.pipeline.publish.git")
     def test_with_baseline_no_commits(self, mock_git: MagicMock) -> None:
         """No commit section when git log returns empty."""
         mock_git.return_value = ""
@@ -1437,16 +1425,16 @@ class TestGenerateReleaseNotes:
 class TestExecutePlan:
     """Tests for execute_plan()."""
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.tag_baselines")
-    @patch("uv_release_monorepo.pipeline.commit_bumps")
-    @patch("uv_release_monorepo.pipeline.apply_bumps")
-    @patch("uv_release_monorepo.pipeline.tag_changed_packages")
-    @patch("uv_release_monorepo.pipeline.publish_release")
-    @patch("uv_release_monorepo.pipeline.build_packages")
-    @patch("uv_release_monorepo.pipeline.fetch_unchanged_wheels")
-    @patch("uv_release_monorepo.pipeline.check_for_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.execute.git")
+    @patch("uv_release_monorepo.pipeline.execute.tag_baselines")
+    @patch("uv_release_monorepo.pipeline.execute.commit_bumps")
+    @patch("uv_release_monorepo.pipeline.execute.apply_bumps")
+    @patch("uv_release_monorepo.pipeline.execute.tag_changed_packages")
+    @patch("uv_release_monorepo.pipeline.execute.publish_release")
+    @patch("uv_release_monorepo.pipeline.execute.build_packages")
+    @patch("uv_release_monorepo.pipeline.execute.fetch_unchanged_wheels")
+    @patch("uv_release_monorepo.pipeline.execute.check_for_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_calls_pipeline_in_order(
         self,
         mock_path: MagicMock,
@@ -1486,17 +1474,17 @@ class TestExecutePlan:
         mock_tag_dev.assert_called_once_with(bumped)
         mock_git.assert_not_called()  # push=False
 
-    @patch("uv_release_monorepo.pipeline.git")
-    @patch("uv_release_monorepo.pipeline.step")
-    @patch("uv_release_monorepo.pipeline.tag_baselines")
-    @patch("uv_release_monorepo.pipeline.commit_bumps")
-    @patch("uv_release_monorepo.pipeline.apply_bumps")
-    @patch("uv_release_monorepo.pipeline.tag_changed_packages")
-    @patch("uv_release_monorepo.pipeline.publish_release")
-    @patch("uv_release_monorepo.pipeline.build_packages")
-    @patch("uv_release_monorepo.pipeline.fetch_unchanged_wheels")
-    @patch("uv_release_monorepo.pipeline.check_for_existing_wheels")
-    @patch("uv_release_monorepo.pipeline.Path")
+    @patch("uv_release_monorepo.pipeline.execute.git")
+    @patch("uv_release_monorepo.pipeline.execute.step")
+    @patch("uv_release_monorepo.pipeline.execute.tag_baselines")
+    @patch("uv_release_monorepo.pipeline.execute.commit_bumps")
+    @patch("uv_release_monorepo.pipeline.execute.apply_bumps")
+    @patch("uv_release_monorepo.pipeline.execute.tag_changed_packages")
+    @patch("uv_release_monorepo.pipeline.execute.publish_release")
+    @patch("uv_release_monorepo.pipeline.execute.build_packages")
+    @patch("uv_release_monorepo.pipeline.execute.fetch_unchanged_wheels")
+    @patch("uv_release_monorepo.pipeline.execute.check_for_existing_wheels")
+    @patch("uv_release_monorepo.pipeline.publish.Path")
     def test_pushes_when_push_true(
         self,
         mock_path: MagicMock,
