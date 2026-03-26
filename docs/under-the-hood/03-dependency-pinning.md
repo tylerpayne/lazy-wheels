@@ -2,7 +2,7 @@
 
 How internal dependency constraints are computed and written before a release.
 
-See [How it works](../guide/09-architecture.md) for the user-facing explanation.
+See [How it works](../user-guide/09-architecture.md) for the user-facing explanation.
 
 ## Source files
 

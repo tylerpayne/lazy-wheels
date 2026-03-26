@@ -68,3 +68,6 @@ uvr release --skip-to post-release --reuse-release -y
 ```
 
 Or dispatch manually via the GitHub Actions UI with the original plan JSON and `skip` set to all jobs except `post-release`.
+---
+
+**Under the hood:** [CI execution internals](../under-the-hood/07-ci-execution.md)

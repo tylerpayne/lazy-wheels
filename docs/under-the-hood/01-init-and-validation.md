@@ -2,7 +2,7 @@
 
 How `uvr init` scaffolds the workflow and `uvr validate` checks it.
 
-See [Set up your first release](../guide/01-setup.md) for usage.
+See [Set up your first release](../user-guide/01-setup.md) for usage.
 
 ## Source files
 

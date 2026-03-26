@@ -2,7 +2,7 @@
 
 How `uvr-steps` dispatches commands in GitHub Actions and what each CI step does.
 
-See [How it works](../guide/09-architecture.md) for the high-level flow.
+See [How it works](../user-guide/09-architecture.md) for the high-level flow.
 
 ## Source files
 

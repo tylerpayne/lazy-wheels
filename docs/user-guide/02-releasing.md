@@ -72,3 +72,6 @@ uvr release --json
 ```
 
 Useful for debugging or piping to other tools.
+---
+
+**Under the hood:** [Change detection internals](../under-the-hood/02-change-detection.md)

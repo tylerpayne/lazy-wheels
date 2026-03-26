@@ -65,3 +65,6 @@ uvr validate
 ```
 
 Errors for invalid structure, warnings for modified core job fields.
+---
+
+**Under the hood:** [Workflow model internals](../under-the-hood/05-workflow-model.md)

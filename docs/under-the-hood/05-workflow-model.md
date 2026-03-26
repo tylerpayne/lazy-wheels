@@ -2,7 +2,7 @@
 
 The Pydantic model hierarchy that represents `.github/workflows/release.yml`.
 
-See [Add CI hooks](../guide/04-hooks.md) and [How it works](../guide/09-architecture.md) for usage.
+See [Add CI hooks](../user-guide/04-hooks.md) and [How it works](../user-guide/09-architecture.md) for usage.
 
 ## Source files
 

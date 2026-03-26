@@ -2,6 +2,8 @@
 
 Task-oriented guides for using uvr. Each guide covers one thing you want to do.
 
+For implementation details, see the companion [Under the Hood](../under-the-hood/README.md) docs.
+
 ## Getting Started
 
 1. [Set up your first release](01-setup.md)

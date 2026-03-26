@@ -36,3 +36,6 @@ latest = "my-main-package"
 ## Where to put the config
 
 All uvr config lives in the workspace root `pyproject.toml` under `[tool.uvr.config]`.
+---
+
+**Under the hood:** [Change detection internals](../under-the-hood/02-change-detection.md)

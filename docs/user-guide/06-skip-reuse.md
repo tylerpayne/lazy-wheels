@@ -58,3 +58,6 @@ Common when fixing a PyPI publish configuration.
 ## Important: skip/reuse requires matching plan
 
 `uvr release` always runs `build_plan()` which detects current changes. If the repo has new commits since the original release, the plan will include them. For an exact re-dispatch of the original plan, use the GitHub Actions UI directly with the original plan JSON.
+---
+
+**Under the hood:** [Release plan internals](../under-the-hood/06-release-plan.md)

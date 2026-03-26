@@ -3,7 +3,7 @@
 The `ReleasePlan` model is the single artifact passed from the local CLI to CI.
 It encodes everything the executor needs with zero git access.
 
-See [How it works](../guide/09-architecture.md) and [Skip jobs and reuse artifacts](../guide/06-skip-reuse.md) for usage.
+See [How it works](../user-guide/09-architecture.md) and [Skip jobs and reuse artifacts](../user-guide/06-skip-reuse.md) for usage.
 
 ## Source files
 

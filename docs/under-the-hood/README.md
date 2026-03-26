@@ -1,7 +1,7 @@
 # Internals
 
 Under-the-hood documentation for uvr developers. Each file maps to one or more
-[user guide](../guide/README.md) topics and explains the code paths, data models,
+[user guide](../user-guide/README.md) topics and explains the code paths, data models,
 and design decisions behind them.
 
 ## Contents

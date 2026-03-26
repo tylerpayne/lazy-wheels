@@ -48,3 +48,6 @@ uvr release
 ```bash
 uvr status
 ```
+---
+
+**Under the hood:** [Init and validation internals](../under-the-hood/01-init-and-validation.md)

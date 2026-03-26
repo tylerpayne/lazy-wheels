@@ -53,3 +53,6 @@ Each runner gets its own build job that builds all assigned packages in topologi
             layer 0
               my-native-pkg (1.2.3)
 ```
+---
+
+**Under the hood:** [Build matrix internals](../under-the-hood/04-build-matrix.md)

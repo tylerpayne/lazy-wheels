@@ -3,7 +3,7 @@
 How the build matrix is expanded, how packages are grouped by runner and
 topological layer, and how `uvr-steps build-all` executes builds in CI.
 
-See [Configure build runners](../guide/03-runners.md) for usage.
+See [Configure build runners](../user-guide/03-runners.md) for usage.
 
 ## Source files
 
