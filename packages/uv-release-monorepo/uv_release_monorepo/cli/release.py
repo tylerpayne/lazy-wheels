@@ -77,7 +77,9 @@ def _print_plan(plan: ReleasePlan, skipped: set[str], pin_updates: list[str]) ->
 
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
+    _D = "          "  # detail indent
     for job in JOB_ORDER:
+        print()
         if job in skipped:
             reason = "no-op" if job in _HOOK_PHASES else "user --skip"
             print(f"  skip  {job}  ({reason})")
@@ -88,22 +90,20 @@ def _print_plan(plan: ReleasePlan, skipped: set[str], pin_updates: list[str]) ->
         # Show build matrix inline under the build job
         if job == "build":
             if plan.reuse_run_id:
-                print(f"        artifacts from run {plan.reuse_run_id}")
+                print(f"{_D}artifacts from run {plan.reuse_run_id}")
             elif plan.matrix:
                 for entry in plan.matrix:
-                    print(
-                        f"        {entry.package}  on  {entry.runner}  ({entry.version})"
-                    )
+                    print(f"{_D}{entry.package}  on  {entry.runner}  ({entry.version})")
 
         # Show publish entries inline under publish
         if job == "publish" and plan.publish_matrix:
             for entry in plan.publish_matrix:
-                print(f"        {entry.package}  {entry.version}  -> {entry.tag}")
+                print(f"{_D}{entry.package}  {entry.version}  -> {entry.tag}")
 
         # Show version bumps inline under finalize
         if job == "finalize" and plan.bumps:
             for name, bump in sorted(plan.bumps.items()):
-                print(f"        {name}  -> {bump.new_version}.dev0")
+                print(f"{_D}{name}  -> {bump.new_version}.dev0")
 
     print()
 
