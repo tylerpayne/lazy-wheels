@@ -53,7 +53,6 @@ def _section(title: str) -> None:
 def _print_plan(
     plan: ReleasePlan,
     skipped: set[str],
-    pin_changes: list[tuple[str, list[tuple[str, str]]]],
 ) -> None:
     """Print a human-readable summary of the release plan."""
     _HOOK_PHASES = {"pre-build", "post-build", "pre-release", "post-release"}
@@ -73,14 +72,6 @@ def _print_plan(
                 tag = plan.release_tags.get(name)
                 source = tag or "(no prior release)"
                 print(f"  unchanged  {name.ljust(w)}  reuse from {source}")
-
-    # -- Dependency pins --
-    if pin_changes:
-        _section("Dependency pins")
-        for name, changes in pin_changes:
-            print(f"  {name}")
-            for old, new in changes:
-                print(f"    {old} -> {new}")
 
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
@@ -196,7 +187,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         plan.uvr_install = f"uv-release-monorepo=={plan.uvr_version}"
 
     # Print human-readable summary
-    _print_plan(plan, skipped, pin_changes)
+    _print_plan(plan, skipped)
 
     # Prompt to write dep pins if needed
     if pin_changes:
