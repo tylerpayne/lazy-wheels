@@ -718,8 +718,8 @@ def build_plan(
     uvr_version: str,
     python_version: str = "3.12",
     dry_run: bool = False,
-) -> tuple[ReleasePlan, list[str]]:
-    """Run discovery locally and return a ReleasePlan and list of pin-updated packages.
+) -> tuple[ReleasePlan, list[tuple[str, list[tuple[str, str]]]]]:
+    """Run discovery locally and return a ReleasePlan and pin change details.
 
     Applies internal dep pin updates to local pyproject.toml files so the
     correct constraints are baked into the released wheels. The caller should
@@ -764,8 +764,8 @@ def build_plan(
                 tag.split("/v")[-1] if tag and "/v" in tag else info.version
             )
 
-    # Check dep pins without writing — caller is responsible for writing.
-    pin_updates: list[str] = []
+    # Check dep pins without writing -- caller is responsible for writing.
+    pin_changes: list[tuple[str, list[tuple[str, str]]]] = []
     for name in changed_names:
         info = packages[name]
         dep_versions = {
@@ -777,7 +777,7 @@ def build_plan(
             Path(info.path) / "pyproject.toml", dep_versions, write=False
         )
         if changes:
-            pin_updates.append(name)
+            pin_changes.append((name, changes))
 
     # Pre-compute version bumps. Dep pins are already applied locally above.
     bumps: dict[str, BumpPlan] = {}
@@ -833,7 +833,7 @@ def build_plan(
         publish_matrix=publish_entries,
         ci_publish=True,
     )
-    return plan, pin_updates
+    return plan, pin_changes
 
 
 def write_dep_pins(plan: ReleasePlan) -> list[tuple[str, list[tuple[str, str]]]]:

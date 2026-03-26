@@ -50,7 +50,11 @@ def _section(title: str) -> None:
     print("-" * len(title))
 
 
-def _print_plan(plan: ReleasePlan, skipped: set[str], pin_updates: list[str]) -> None:
+def _print_plan(
+    plan: ReleasePlan,
+    skipped: set[str],
+    pin_changes: list[tuple[str, list[tuple[str, str]]]],
+) -> None:
     """Print a human-readable summary of the release plan."""
     _HOOK_PHASES = {"pre-build", "post-build", "pre-release", "post-release"}
 
@@ -71,10 +75,12 @@ def _print_plan(plan: ReleasePlan, skipped: set[str], pin_updates: list[str]) ->
                 print(f"  unchanged  {name.ljust(w)}  reuse from {source}")
 
     # -- Dep pins --
-    if pin_updates:
-        _section("Dep pins updated")
-        for name in pin_updates:
-            print(f"  {plan.changed[name].path}/pyproject.toml")
+    if pin_changes:
+        _section("Dep pins")
+        for name, changes in pin_changes:
+            print(f"  {name}")
+            for old, new in changes:
+                print(f"    {old} -> {new}")
 
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
@@ -150,7 +156,7 @@ def cmd_release(args: argparse.Namespace) -> None:
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
-        plan, pin_updates = _cli.build_plan(
+        plan, pin_changes = _cli.build_plan(
             rebuild_all=args.rebuild_all,
             matrix=package_runners,
             uvr_version=__version__,
@@ -184,10 +190,10 @@ def cmd_release(args: argparse.Namespace) -> None:
         plan.uvr_version = ""
 
     # Print human-readable summary
-    _print_plan(plan, skipped, pin_updates)
+    _print_plan(plan, skipped, pin_changes)
 
     # Prompt to write dep pins if needed
-    if pin_updates:
+    if pin_changes:
         try:
             answer = input("Write dep pin updates? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
