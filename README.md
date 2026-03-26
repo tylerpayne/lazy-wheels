@@ -13,7 +13,7 @@ uvr turns the whole thing into one command. It diffs against the last release, w
 ```bash
 uv tool install uv-release-monorepo   # install the CLI
 uvr init                               # generate .github/workflows/release.yml
-uvr release                            # detect changes → print plan → confirm → dispatch
+uvr release                            # detect changes -> print plan -> confirm -> dispatch
 ```
 
 You need [uv](https://github.com/astral-sh/uv), a GitHub repo with Actions enabled, a `pyproject.toml` with `[tool.uv.workspace]` members defined, and the [GitHub CLI](https://cli.github.com/) (`gh`) if you want to dispatch from the terminal.
@@ -28,7 +28,15 @@ uvr release -y           # skip prompt, dispatch immediately
 uvr release --rebuild-all  # rebuild everything regardless of changes
 ```
 
-uvr scans your workspace, diffs each package against its last dev baseline tag, and builds only what's new — plus anything downstream in the dependency graph. By default, `uvr release` prints the plan as JSON and asks for confirmation before dispatching via `gh`.
+uvr scans your workspace, diffs each package against its last dev baseline tag, and builds only what's new — plus anything downstream in the dependency graph. `uvr release` prints a human-readable summary and asks for confirmation before dispatching via `gh`.
+
+### Skip jobs and reuse artifacts
+
+```bash
+uvr release --skip-to post-release --reuse-release   # re-run only post-release
+uvr release --skip build --reuse-run 12345678         # reuse wheels from a previous run
+uvr release --skip pre-build                          # skip just the pre-build hook
+```
 
 ### Filter packages
 
@@ -45,88 +53,56 @@ If `include` is set, only listed packages are considered. `exclude` filters out 
 ### Build for multiple architectures
 
 ```bash
-uvr init -m my-native-pkg ubuntu-latest macos-14
+uvr runners my-native-pkg --add ubuntu-latest
+uvr runners my-native-pkg --add macos-14
 ```
 
-Each `-m` assigns one or more GitHub Actions runners to a package. Re-run `uvr init` to update runners; existing entries are preserved.
+Each `--add` assigns a runner to a package. Use `--remove` and `--clear` to manage runners. Runner config is stored in `[tool.uvr.matrix]` in your workspace root `pyproject.toml`.
 
-### Edit the workflow
+### Customize the workflow
 
-`uvr workflow` and `uvr hooks` use jq-style dot paths to read and write any key in `release.yml`:
+`uvr init` generates `release.yml` from the `ReleaseWorkflow` model with all 7 pipeline jobs. Edit the file directly to customize hook jobs — add steps, set environment, change runners. Run `uvr init` to validate.
 
-```bash
-# Read
-uvr workflow .permissions
-uvr workflow .jobs.post-release.environment
+### Example: pre-build checks and PyPI publish
 
-# Set scalar
-uvr workflow .permissions.id-token --set write
+Edit `.github/workflows/release.yml` directly:
 
-# Set complex (heredoc)
-uvr workflow .permissions --set <<EOF
-contents: write
-id-token: write
-EOF
-
-# Remove key / clear collection
-uvr workflow .permissions --remove id-token
-uvr workflow .jobs.build.tags --clear
+```yaml
+  pre-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: astral-sh/setup-uv@v5
+      with:
+        python-version: ${{ fromJSON(inputs.plan).python_version }}
+    - name: Lint, typecheck, and test
+      run: |
+        uv sync --all-packages
+        uv run poe check
+        uv run poe test
 ```
 
-`uvr hooks PHASE` is shorthand for `uvr workflow .jobs.PHASE`:
+For post-release PyPI publishing:
 
-```bash
-uvr hooks pre-build .steps                    # list steps
-uvr hooks post-release .environment --set pypi
-uvr hooks pre-build .steps --append '{name: Test, run: pytest}'
+```yaml
+  post-release:
+    runs-on: ubuntu-latest
+    needs: [finalize]
+    environment: pypi
+    steps:
+    - name: Download wheel
+      if: fromJSON(inputs.plan).changed['my-package'] != null
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UVR_PLAN: ${{ inputs.plan }}
+      run: |
+        VERSION=$(echo "$UVR_PLAN" | python3 -c "import sys,json; print(json.load(sys.stdin)['changed']['my-package']['version'])")
+        mkdir -p dist
+        gh release download "my-package/v${VERSION}" --pattern "my_package-*.whl" --dir dist
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      if: fromJSON(inputs.plan).changed['my-package'] != null
 ```
 
-### Example: full CI pipeline setup
-
-Starting from a fresh `uvr init`, add pre-build checks and a post-release PyPI publish:
-
-```bash
-# Gate releases on lint + tests
-uvr hooks pre-build .steps --append <<EOF
-id: setup-uv
-name: Set up uv and Python
-uses: astral-sh/setup-uv@v5
-with: {python-version: "\${{ fromJSON(inputs.plan).python_version }}"}
-EOF
-
-uvr hooks pre-build .steps --append <<EOF
-id: check
-name: Lint, typecheck, and test
-run: |
-  uv sync --all-packages
-  uv run poe check
-  uv run poe test
-EOF
-
-# Publish to PyPI after release
-uvr hooks post-release .steps --append <<EOF
-id: pypi-download
-name: Download wheel for PyPI
-if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
-env: {GH_TOKEN: "\${{ github.token }}"}
-run: |
-  VERSION=$(echo "\$UVR_PLAN" | python3 -c "import sys,json; p=json.load(sys.stdin); print(p['changed']['uv-release-monorepo']['version'])")
-  TAG="uv-release-monorepo/v\${VERSION}"
-  mkdir -p dist
-  gh release download "\$TAG" --repo "\${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist
-EOF
-
-uvr hooks post-release .steps --append <<EOF
-id: pypi-publish
-name: Publish to PyPI
-if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
-uses: pypa/gh-action-pypi-publish@release/v1
-EOF
-
-# Set workflow permissions and job environment for trusted publishing
-uvr workflow .permissions.id-token --set write
-uvr hooks post-release .environment --set pypi
-```
+Add `id-token: write` to the top-level permissions for trusted publishing.
 
 ### Install packages from GitHub releases
 
@@ -148,11 +124,15 @@ uvr status
 
 `uvr release` runs on your machine. It scans the workspace, detects which packages changed since their last dev baseline tag, precomputes release notes, expands the build matrix, and serializes a `ReleasePlan` JSON. After you confirm, that plan is dispatched to GitHub Actions — the workflow is a pure executor that makes no decisions of its own.
 
-On CI, three jobs run in sequence:
+On CI, seven jobs run in sequence:
 
-1. **build** — A matrix job builds each changed package on its configured runners and uploads wheels as artifacts.
-2. **publish** — A matrix job creates one GitHub release per changed package using `softprops/action-gh-release`, attaching the built wheels.
-3. **finalize** — Bumps patch versions, commits, tags dev baselines, and pushes.
+1. **pre-build** — Hook job for tests, linting, etc. (no-op by default, auto-skipped)
+2. **build** — Builds changed packages in topo order per runner, uploads wheels
+3. **post-build** — Hook job (no-op by default, auto-skipped)
+4. **pre-release** — Hook job (no-op by default, auto-skipped)
+5. **publish** — Creates one GitHub release per changed package with wheels attached
+6. **finalize** — Bumps patch versions, commits, tags dev baselines, and pushes
+7. **post-release** — Hook job for PyPI publish, notifications, etc. (no-op by default, auto-skipped)
 
 For the full internals — tag structure, version bumping, CI hooks — see the [guide](docs/guide.md).
 
