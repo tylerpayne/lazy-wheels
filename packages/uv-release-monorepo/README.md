@@ -134,4 +134,4 @@ On CI, seven jobs run in sequence:
 6. **finalize** — Bumps patch versions, commits, tags dev baselines, and pushes
 7. **post-release** — Hook job for PyPI publish, notifications, etc. (no-op by default, auto-skipped)
 
-For the full internals — tag structure, version bumping, CI hooks — see the [guide](../../docs/guide.md).
+For the full internals — tag structure, version bumping, CI hooks — see the [user guide](../../docs/guide/README.md).
