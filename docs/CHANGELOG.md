@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.9.0] - 2026-03-27
+
+### Added
+- Add self-hosted runner support — runners are now label sets (e.g. `uvr runners pkg --add "self-hosted,linux,x64"`)
+- Add tag and release conflict detection — planner validates no planned tags/releases already exist before dispatching
+- Add `--where local` platform check — errors when changed packages have runners for a different OS
+- Add HEAD-vs-remote sync check before CI dispatch
+
+### Changed
+- **BREAKING**: Remove hook jobs from workflow model — `uvr init` generates only `build`, `release`, `finalize`; users add their own jobs by editing `release.yml`
+- **BREAKING**: Remove `uvr set-version` subcommand — planner emits `uv version` commands instead
+- **BREAKING**: Change runner type from `str` to `list[str]` in `MatrixEntry`, `ReleasePlan`, and `[tool.uvr.matrix]`
+- **BREAKING**: Require `org/repo/pkg` format for `uvr install` (bare package names no longer accepted)
+- Change `uvr status` to an alias for `uvr release --dry-run`
+- Improve dry-run output: column headers, current → release version display, version rewrite visibility in build section
+- Rewrite README with usage-focused sections
+
+### Removed
+- Remove `uvr set-version` subcommand (use `uv version` directly)
+- Remove hook job classes (`HookJob`, `PreBuildJob`, `PostBuildJob`, `PreReleaseJob`, `PostReleaseJob`)
+- Remove `_NOOP_STEPS` constant and auto-skip logic for no-op hooks
+
+### Fixed
+- Fix publish workflow `files:` pattern missing `dist/` prefix — wheels not attached to GitHub releases
+- Fix conflict error suggesting deletion as first option — now shows `--post` and version bump first
+
 ## [v0.8.0] - 2026-03-26
 
 ### Added
