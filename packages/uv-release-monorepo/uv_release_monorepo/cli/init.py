@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import copy
 import subprocess
-import tempfile
 from pathlib import Path
 
 from ..shared.models import FROZEN_FIELDS, ReleaseWorkflow
@@ -92,10 +91,8 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
 def _step_key(step: dict) -> str | None:
     """Return a stable identity for a workflow step, or None if unidentifiable."""
-    if "name" in step:
-        return f"name:{step['name']}"
-    if "uses" in step:
-        return f"uses:{step['uses']}"
+    if "id" in step:
+        return step["id"]
     return None
 
 
@@ -194,35 +191,36 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
         print("Already up to date.")
         return
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yml", prefix="release-upgraded-", delete=False
-    ) as tmp:
-        tmp.write(merged_text)
-        tmp_path = Path(tmp.name)
+    rel_dest = str(dest.relative_to(root))
 
-    try:
-        subprocess.run(
-            ["git", "diff", "--no-index", "--color", str(dest), str(tmp_path)],
+    if getattr(args, "yes", False):
+        # Non-interactive: apply all changes
+        dest.write_text(merged_text)
+        print(f"\u2713 Upgraded {rel_dest}")
+    else:
+        # Interactive: overwrite, let user pick hunks, then restore
+        dest.write_text(merged_text)
+        result = subprocess.run(["git", "add", "-p", "--", str(dest)])
+        # Read what the user staged
+        staged = subprocess.run(
+            ["git", "show", f":{rel_dest}"],
+            capture_output=True,
+            text=True,
         )
+        # Restore working copy and unstage
+        subprocess.run(["git", "checkout", "--", str(dest)], capture_output=True)
+        subprocess.run(["git", "reset", "HEAD", "--", str(dest)], capture_output=True)
 
-        if getattr(args, "yes", False):
-            dest.write_text(merged_text)
-            print(f"\n\u2713 Upgraded {dest.relative_to(root)}")
-        else:
-            print()
-            try:
-                answer = input("Apply these changes? [y/N] ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                print("\nAborted.")
-                return
-            if answer == "y":
-                dest.write_text(merged_text)
-                print(f"\u2713 Upgraded {dest.relative_to(root)}")
-            else:
-                print("No changes applied.")
-                return
-    finally:
-        tmp_path.unlink(missing_ok=True)
+        if result.returncode != 0 or not staged.stdout:
+            print("No changes applied.")
+            return
+
+        if staged.stdout.rstrip() == existing_text.rstrip():
+            print("No changes applied.")
+            return
+
+        dest.write_text(staged.stdout)
+        print(f"\u2713 Upgraded {rel_dest}")
 
     # Validate the result
     import warnings

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -163,20 +164,23 @@ class TestUpgrade:
         upgraded = _load_yaml(wf)
         assert upgraded["jobs"]["build"]["env"]["MY_VAR"] == "hello"
 
+    @patch("uv_release_monorepo.cli.init.subprocess.run")
     def test_declined_no_changes(
         self,
+        mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         wf = _init_and_get_path(tmp_path, monkeypatch)
         doc = _load_yaml(wf)
-        doc["jobs"]["finalize"]["steps"] = [{"run": "echo tampered"}]
+        doc["jobs"]["finalize"]["steps"].append({"id": "extra", "run": "echo extra"})
         from uv_release_monorepo.cli._yaml import _write_yaml
 
         _write_yaml(wf, doc)
         original = wf.read_text()
 
-        monkeypatch.setattr("builtins.input", lambda _: "n")
+        # Simulate git add -p returning 1 (user quit), git show returning nothing
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
         cmd_upgrade(_upgrade_args(yes=False))
 
         assert wf.read_text() == original

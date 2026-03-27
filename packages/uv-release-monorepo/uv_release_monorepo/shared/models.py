@@ -204,9 +204,14 @@ class Job(BaseModel):
 # Shorthand for plan access in GitHub Actions expressions
 _P = "fromJSON(inputs.plan)"
 
-_CHECKOUT_STEP: dict = {"uses": "actions/checkout@v4", "with": {"fetch-depth": 0}}
-_SETUP_UV_STEP: dict = {"uses": "astral-sh/setup-uv@v5"}
+_CHECKOUT_STEP: dict = {
+    "id": "checkout",
+    "uses": "actions/checkout@v4",
+    "with": {"fetch-depth": 0},
+}
+_SETUP_UV_STEP: dict = {"id": "setup-uv", "uses": "astral-sh/setup-uv@v5"}
 _SETUP_PYTHON_STEP: dict = {
+    "id": "setup-python",
     "name": "Set up Python",
     "run": (
         f"uv python install ${{{{ {_P}.python_version }}}}\n"
@@ -214,6 +219,7 @@ _SETUP_PYTHON_STEP: dict = {
     ),
 }
 _EXPORT_PLAN_STEP: dict = {
+    "id": "export-plan",
     "name": "Export plan context",
     "env": {"UVR_PLAN": "${{ inputs.plan }}"},
     "run": (
@@ -229,11 +235,13 @@ _BUILD_STEPS: list[dict] = [
     _SETUP_UV_STEP,
     _SETUP_PYTHON_STEP,
     {
+        "id": "build",
         "name": "Build packages",
         "env": {"GH_TOKEN": "${{ github.token }}", "UVR_PLAN": "${{ inputs.plan }}"},
         "run": "uvr build --runner '${{ toJSON(matrix.runner) }}'",
     },
     {
+        "id": "upload",
         "uses": "actions/upload-artifact@v4",
         "with": {
             "name": "wheels-${{ join(matrix.runner, '-') }}",
@@ -245,6 +253,7 @@ _BUILD_STEPS: list[dict] = [
 
 _PUBLISH_STEPS: list[dict] = [
     {
+        "id": "download",
         "uses": "actions/download-artifact@v4",
         "with": {
             "pattern": "wheels-*",
@@ -254,6 +263,7 @@ _PUBLISH_STEPS: list[dict] = [
         },
     },
     {
+        "id": "publish",
         "uses": "softprops/action-gh-release@v2",
         "with": {
             "tag_name": "${{ matrix.tag }}",
@@ -270,6 +280,7 @@ _FINALIZE_STEPS: list[dict] = [
     _SETUP_UV_STEP,
     _SETUP_PYTHON_STEP,
     {
+        "id": "finalize",
         "name": "Finalize release",
         "env": {"UVR_PLAN": "${{ inputs.plan }}"},
         "run": "uvr finalize",
