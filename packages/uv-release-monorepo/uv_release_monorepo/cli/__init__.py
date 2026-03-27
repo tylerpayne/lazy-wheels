@@ -18,10 +18,11 @@ from ._common import (
     _resolve_plan_json,
 )
 from ._yaml import _MISSING, _yaml_delete, _yaml_get, _yaml_set
-from .init import cmd_init, cmd_validate
+from .init import cmd_init, cmd_upgrade, cmd_validate
 from .install import _find_latest_release_tag, _parse_install_spec, cmd_install
 from .release import cmd_release
 from .runners import cmd_runners
+from .skill import cmd_skill_init
 
 __all__ = [
     "_MISSING",
@@ -46,6 +47,7 @@ __all__ = [
     "cmd_install",
     "cmd_release",
     "cmd_runners",
+    "cmd_upgrade",
     "cmd_validate",
 ]
 
@@ -64,6 +66,7 @@ Commands:
   install       Install a package from GitHub releases (org/repo/pkg)
   init          Scaffold the GitHub Actions workflow
   validate      Validate an existing release.yml
+  skill init    Copy Claude Code skills into your project
 
 CI steps (used by the release workflow):
   build         Build packages for a runner
@@ -273,12 +276,31 @@ Run 'uvr <command> --help' for details on a specific command.
         default=".github/workflows",
         help="Directory to write the workflow file (default: %(default)s).",
     )
-    init_parser.add_argument(
+    _init_mut = init_parser.add_mutually_exclusive_group()
+    _init_mut.add_argument(
         "--force",
         action="store_true",
         help="Overwrite release.yml without preserving existing hooks.",
     )
-    init_parser.set_defaults(func=cmd_init)
+    _init_mut.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Upgrade frozen template fields in an existing release.yml.",
+    )
+    init_parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Apply upgrade without confirmation prompt.",
+    )
+
+    def _cmd_init_dispatch(a: argparse.Namespace) -> None:
+        if getattr(a, "upgrade", False):
+            cmd_upgrade(a)
+        else:
+            cmd_init(a)
+
+    init_parser.set_defaults(func=_cmd_init_dispatch)
 
     # validate
     validate_parser = subparsers.add_parser("validate", help=_H)
@@ -288,6 +310,28 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Workflow directory (default: %(default)s).",
     )
     validate_parser.set_defaults(func=cmd_validate)
+
+    # skill (subcommand group)
+    skill_parser = subparsers.add_parser(
+        "skill",
+        help=_H,
+        description="Manage Claude Code skills bundled with uvr.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    skill_sub = skill_parser.add_subparsers(
+        dest="skill_command", required=True, title=argparse.SUPPRESS, metavar=""
+    )
+    skill_init_parser = skill_sub.add_parser(
+        "init",
+        help="Copy Claude skills to .claude/skills/",
+        description="Copy bundled Claude Code skills into your project.",
+    )
+    skill_init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing skill files.",
+    )
+    skill_init_parser.set_defaults(func=cmd_skill_init)
 
     # -- CI steps ------------------------------------------------------
 

@@ -98,6 +98,16 @@ class TestFinalRelease:
         assert not v.is_prerelease
         assert not v.is_postrelease
 
+    def test_strips_pre_suffix(self) -> None:
+        """Final release from a pre-release branch strips the pre suffix."""
+        release, _ = _release_and_bump(_planner(), "1.0.1rc1.dev0")
+        assert _pep440(release) == Version("1.0.1")
+
+    def test_strips_post_suffix(self) -> None:
+        """Final release from a post-release branch strips the post suffix."""
+        release, _ = _release_and_bump(_planner(), "1.0.1.post0.dev0")
+        assert _pep440(release) == Version("1.0.1")
+
 
 # ---------------------------------------------------------------------------
 # Dev releases

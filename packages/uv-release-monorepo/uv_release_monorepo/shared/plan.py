@@ -30,7 +30,6 @@ from .versions import (
     make_pre,
     next_post_number,
     next_pre_number,
-    strip_dev,
     version_from_tag,
 )
 from .changes import detect_changes
@@ -147,7 +146,7 @@ class ReleasePlanner:
     ) -> dict[str, PackageInfo]:
         """Compute the release version for each changed package.
 
-        - final: strip .dev suffix → clean X.Y.Z
+        - final: strip all suffixes (dev, pre, post) → clean X.Y.Z
         - dev: keep as-is (publish the .devN version)
         - pre: rewrite to X.Y.Z{a,b,rc}N (auto-increment N from existing tags)
         - post: rewrite to X.Y.Z.postN (auto-increment N from existing tags)
@@ -195,10 +194,10 @@ class ReleasePlanner:
                     path=info.path, version=version, deps=info.deps
                 )
         else:
-            # final: strip .dev suffix
+            # final: strip all suffixes (dev, pre, post) → clean X.Y.Z
             for name, info in changed.items():
                 result[name] = PackageInfo(
-                    path=info.path, version=strip_dev(info.version), deps=info.deps
+                    path=info.path, version=base_version(info.version), deps=info.deps
                 )
 
         return result

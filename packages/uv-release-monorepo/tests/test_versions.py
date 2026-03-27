@@ -18,6 +18,7 @@ from uv_release_monorepo.shared.versions import (
     next_pre_number,
     parse_version,
     strip_dev,
+    strip_version,
     tag_for_package,
     version_from_tag,
 )
@@ -157,6 +158,41 @@ class TestClassifiers:
         assert is_final("1.2.3.dev0") is True  # dev of a final
         assert is_final("1.2.3a0") is False
         assert is_final("1.2.3.post0") is False
+
+
+class TestStripVersion:
+    def test_dev_only(self) -> None:
+        assert strip_version("1.2.3.dev0", dev=True) == "1.2.3"
+
+    def test_pre_only(self) -> None:
+        assert strip_version("1.2.3a1", pre=True) == "1.2.3"
+
+    def test_post_only(self) -> None:
+        assert strip_version("1.2.3.post0", post=True) == "1.2.3"
+
+    def test_dev_and_pre(self) -> None:
+        assert strip_version("1.2.3rc1.dev0", dev=True, pre=True) == "1.2.3"
+
+    def test_dev_and_post(self) -> None:
+        assert strip_version("1.2.3.post0.dev0", dev=True, post=True) == "1.2.3"
+
+    def test_all(self) -> None:
+        assert (
+            strip_version("1.2.3.post0.dev0", dev=True, pre=True, post=True) == "1.2.3"
+        )
+
+    def test_no_flags_is_noop(self) -> None:
+        assert strip_version("1.2.3rc1.dev0") == "1.2.3rc1.dev0"
+
+    def test_dev_leaves_pre(self) -> None:
+        assert strip_version("1.2.3rc1.dev0", dev=True) == "1.2.3rc1"
+
+    def test_pre_alone_on_pre_dev_is_noop(self) -> None:
+        # pre regex requires suffix at end; .dev0 blocks it — use dev=True too
+        assert strip_version("1.2.3a1.dev0", pre=True) == "1.2.3a1.dev0"
+
+    def test_pre_alone_on_bare_pre(self) -> None:
+        assert strip_version("1.2.3a1", pre=True) == "1.2.3"
 
 
 class TestBaseVersion:

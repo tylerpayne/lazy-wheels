@@ -82,6 +82,39 @@ def is_final(version_str: str) -> bool:
     return not is_prerelease(v) and not is_postrelease(v)
 
 
+def strip_version(
+    version_str: str,
+    *,
+    dev: bool = False,
+    pre: bool = False,
+    post: bool = False,
+) -> str:
+    """Selectively strip PEP 440 suffixes from a version string.
+
+    Args:
+        version_str: The version to strip.
+        dev: Strip ``.devN`` suffix.
+        pre: Strip ``aN``, ``bN``, ``rcN`` suffix.
+        post: Strip ``.postN`` suffix.
+
+    Suffixes are stripped in order: dev, post, pre (innermost-out).
+
+    Examples:
+        strip_version("1.2.3rc1.dev0", dev=True) -> "1.2.3rc1"
+        strip_version("1.2.3rc1.dev0", dev=True, pre=True) -> "1.2.3"
+        strip_version("1.2.3.post0.dev0", dev=True, post=True) -> "1.2.3"
+        strip_version("1.2.3.post0.dev0", dev=True, pre=True, post=True) -> "1.2.3"
+    """
+    v = version_str
+    if dev:
+        v = re.sub(r"\.dev\d*$", "", v)
+    if post:
+        v = re.sub(r"\.post\d+$", "", v)
+    if pre:
+        v = re.sub(r"(a|b|rc)\d+$", "", v)
+    return v
+
+
 def base_version(version_str: str) -> str:
     """Strip all dev/pre/post suffixes to get the base X.Y.Z.
 
@@ -91,10 +124,7 @@ def base_version(version_str: str) -> str:
         "1.2.3.post0.dev0" -> "1.2.3"
         "1.2.3rc2" -> "1.2.3"
     """
-    v = strip_dev(version_str)
-    v = re.sub(r"\.post\d+$", "", v)
-    v = re.sub(r"(a|b|rc)\d+$", "", v)
-    return v
+    return strip_version(version_str, dev=True, pre=True, post=True)
 
 
 def make_pre(version_str: str, kind: str, n: int = 0) -> str:
