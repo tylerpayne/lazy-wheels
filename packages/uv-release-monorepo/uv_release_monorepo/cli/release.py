@@ -170,9 +170,12 @@ def cmd_release(args: argparse.Namespace) -> None:
     # --plan: execute a pre-computed plan locally
     raw_plan = getattr(args, "plan", None)
     if raw_plan:
+        from ..shared.hooks import load_hook
+
         plan_json = _resolve_plan_json(raw_plan)
         plan = ReleasePlan.model_validate_json(plan_json)
-        _cli.ReleaseExecutor(plan).run()
+        hook = load_hook(Path.cwd())
+        _cli.ReleaseExecutor(plan, hook).run()
         return
 
     # For CI mode, ensure clean worktree and workflow exists
@@ -228,22 +231,28 @@ def cmd_release(args: argparse.Namespace) -> None:
         "pre" if pre_kind else "final"
     )
 
+    # Load hook (if any) for pre_plan / post_plan
+    from ..shared.hooks import load_hook
+
+    hook = load_hook(root)
+
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
         dry_run = getattr(args, "dry_run", False) or json_only
-        plan, _pin_changes = _cli.ReleasePlanner(
-            _cli.PlanConfig(
-                rebuild_all=args.rebuild_all,
-                matrix=package_runners,
-                uvr_version=__version__,
-                python_version=getattr(args, "python_version", "3.12"),
-                ci_publish=(where == "ci"),
-                release_type=release_type,
-                pre_kind=pre_kind,
-                dry_run=dry_run,
-            )
-        ).plan()
+        config = _cli.PlanConfig(
+            rebuild_all=args.rebuild_all,
+            matrix=package_runners,
+            uvr_version=__version__,
+            python_version=getattr(args, "python_version", "3.12"),
+            ci_publish=(where == "ci"),
+            release_type=release_type,
+            pre_kind=pre_kind,
+            dry_run=dry_run,
+        )
+        if hook:
+            config = hook.pre_plan(config)
+        plan, _pin_changes = _cli.ReleasePlanner(config).plan()
     finally:
         sys.stdout = old_stdout
 
@@ -288,6 +297,10 @@ def cmd_release(args: argparse.Namespace) -> None:
         plan.skip = sorted(skipped)
     if reuse_run:
         plan.reuse_run_id = reuse_run
+
+    # Run post-plan hook if configured
+    if hook:
+        plan = hook.post_plan(plan)
 
     # --json: print only plan JSON to stdout and exit
     if getattr(args, "json", False):
@@ -334,7 +347,7 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     if where == "local":
         # Execute locally
-        _cli.ReleaseExecutor(plan).run()
+        _cli.ReleaseExecutor(plan, hook).run()
         return
 
     # CI mode: dispatch to GitHub Actions

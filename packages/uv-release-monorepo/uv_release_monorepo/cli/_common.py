@@ -7,7 +7,7 @@ from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import NoReturn
 
-from ..shared.toml import get_uvr_matrix, load_pyproject
+from ..shared.toml import get_uvr_hooks, get_uvr_matrix, load_pyproject
 
 __version__ = pkg_version("uv-release-monorepo")
 
@@ -18,6 +18,14 @@ def _read_matrix(root: Path) -> dict[str, list[list[str]]]:
     if not pyproject.exists():
         return {}
     return get_uvr_matrix(load_pyproject(pyproject))
+
+
+def _read_hooks(root: Path) -> dict[str, str]:
+    """Read [tool.uvr.hooks] from the workspace pyproject.toml."""
+    pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        return {}
+    return get_uvr_hooks(load_pyproject(pyproject))
 
 
 def _print_matrix_status(package_runners: dict[str, list[list[str]]]) -> None:

@@ -49,9 +49,26 @@ class TestReleasePlan:
             matrix=[MatrixEntry(package="pkg-alpha", runner=["ubuntu-latest"])],
         )
 
-    def test_schema_version_defaults_to_7(self) -> None:
+    def test_schema_version_defaults_to_8(self) -> None:
         plan = self._make_plan()
-        assert plan.schema_version == 7
+        assert plan.schema_version == 8
+
+    def test_extra_keys_survive_round_trip(self) -> None:
+        plan = self._make_plan()
+        data = plan.model_dump()
+        data["deploy_env"] = "staging"
+        data["custom_flags"] = {"notify": True}
+
+        restored = ReleasePlan.model_validate(data)
+        assert restored.model_extra is not None
+        assert restored.model_extra["deploy_env"] == "staging"
+
+        # JSON round-trip
+        json_str = restored.model_dump_json()
+        final = ReleasePlan.model_validate_json(json_str)
+        assert final.model_extra is not None
+        assert final.model_extra["deploy_env"] == "staging"
+        assert final.model_extra["custom_flags"] == {"notify": True}
 
     def test_round_trip_json(self) -> None:
         plan = self._make_plan()
