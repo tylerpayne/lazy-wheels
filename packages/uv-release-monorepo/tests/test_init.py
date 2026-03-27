@@ -170,17 +170,27 @@ class TestUpgrade:
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         wf = _init_and_get_path(tmp_path, monkeypatch)
         doc = _load_yaml(wf)
-        doc["jobs"]["finalize"]["steps"].append({"id": "extra", "run": "echo extra"})
+        # Tamper a matched step so the merge produces a real diff
+        for step in doc["jobs"]["finalize"]["steps"]:
+            if step.get("id") == "finalize":
+                step["run"] = "echo tampered"
         from uv_release_monorepo.cli._yaml import _write_yaml
 
         _write_yaml(wf, doc)
         original = wf.read_text()
 
-        # Simulate git add -p returning 1 (user quit), git show returning nothing
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        # Simulate git checkout -p reverting all hunks (restores original)
+        def fake_checkout_p(cmd, **kwargs):
+            if "checkout" in cmd and "-p" in cmd:
+                wf.write_text(original)
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = fake_checkout_p
         cmd_upgrade(_upgrade_args(yes=False))
 
         assert wf.read_text() == original
+        assert "No changes applied" in capsys.readouterr().out

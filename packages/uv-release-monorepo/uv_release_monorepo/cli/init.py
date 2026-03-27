@@ -193,34 +193,19 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
 
     rel_dest = str(dest.relative_to(root))
 
-    if getattr(args, "yes", False):
-        # Non-interactive: apply all changes
-        dest.write_text(merged_text)
-        print(f"\u2713 Upgraded {rel_dest}")
-    else:
-        # Interactive: overwrite, let user pick hunks, then restore
-        dest.write_text(merged_text)
-        result = subprocess.run(["git", "add", "-p", "--", str(dest)])
-        # Read what the user staged
-        staged = subprocess.run(
-            ["git", "show", f":{rel_dest}"],
-            capture_output=True,
-            text=True,
-        )
-        # Restore working copy and unstage
-        subprocess.run(["git", "checkout", "--", str(dest)], capture_output=True)
-        subprocess.run(["git", "reset", "HEAD", "--", str(dest)], capture_output=True)
+    # Write merged content over the file
+    dest.write_text(merged_text)
 
-        if result.returncode != 0 or not staged.stdout:
-            print("No changes applied.")
-            return
+    if not getattr(args, "yes", False):
+        # Interactive: let user revert hunks they don't want
+        subprocess.run(["git", "checkout", "-p", "--", str(dest)])
 
-        if staged.stdout.rstrip() == existing_text.rstrip():
-            print("No changes applied.")
-            return
+    final_text = dest.read_text()
+    if final_text.rstrip() == existing_text.rstrip():
+        print("No changes applied.")
+        return
 
-        dest.write_text(staged.stdout)
-        print(f"\u2713 Upgraded {rel_dest}")
+    print(f"\u2713 Upgraded {rel_dest}")
 
     # Validate the result
     import warnings
