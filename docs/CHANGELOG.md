@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.11.3] - 2026-03-27
+
+### Fixed
+- Fix layered builds resolving workspace sources instead of pre-built wheels — `uv build` now passes `--no-sources` for layer 1+ packages (#5)
+
 ## [v0.11.2] - 2026-03-27
 
 ### Changed
