@@ -90,12 +90,45 @@ def cmd_validate(args: argparse.Namespace) -> None:
         print(f"\u2713 {dest.relative_to(root)} is valid.")
 
 
+def _step_key(step: dict) -> str | None:
+    """Return a stable identity for a workflow step, or None if unidentifiable."""
+    if "name" in step:
+        return f"name:{step['name']}"
+    if "uses" in step:
+        return f"uses:{step['uses']}"
+    return None
+
+
+def _merge_steps(existing_steps: list[dict], fresh_steps: list[dict]) -> list[dict]:
+    """Merge fresh template steps into existing steps.
+
+    For each fresh step, if a matching step exists (by name or uses), update
+    it in place.  If no match, insert it at the position it appears in the
+    fresh template.  Existing steps not in the fresh template are preserved.
+    """
+    merged = copy.deepcopy(existing_steps)
+    existing_keys = {_step_key(s): i for i, s in enumerate(merged) if _step_key(s)}
+
+    insert_offset = 0
+    for fresh_idx, fresh_step in enumerate(fresh_steps):
+        key = _step_key(fresh_step)
+        if key and key in existing_keys:
+            idx = existing_keys[key]
+            merged[idx] = copy.deepcopy(fresh_step)
+        elif key:
+            # New step from template — insert at the corresponding position
+            pos = min(fresh_idx + insert_offset, len(merged))
+            merged.insert(pos, copy.deepcopy(fresh_step))
+            insert_offset += 1
+    return merged
+
+
 def _merge_frozen(existing: dict, fresh: dict) -> dict:
     """Merge fresh frozen fields into an existing workflow dict.
 
-    Returns a deep copy of *existing* with frozen fields (steps, strategy,
-    if-conditions) replaced by their fresh template values.  Everything else
-    — extra jobs, triggers, env, environment, concurrency, etc. — is preserved.
+    For scalar frozen fields (if, strategy, runs-on), replaces with the fresh
+    value.  For ``steps``, does a step-level merge: matching steps (by name
+    or uses) are updated, unmatched user steps are preserved.
     """
     merged = copy.deepcopy(existing)
 
@@ -104,7 +137,14 @@ def _merge_frozen(existing: dict, fresh: dict) -> dict:
             continue
         fresh_job = fresh.get("jobs", {}).get(job_name, {})
         for alias in frozen_aliases:
-            if alias in fresh_job:
+            if alias not in fresh_job:
+                continue
+            if alias == "steps":
+                merged["jobs"][job_name]["steps"] = _merge_steps(
+                    merged["jobs"][job_name].get("steps", []),
+                    fresh_job["steps"],
+                )
+            else:
                 merged["jobs"][job_name][alias] = copy.deepcopy(fresh_job[alias])
 
     # Update workflow_dispatch inputs (core contract)

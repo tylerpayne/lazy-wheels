@@ -86,12 +86,20 @@ class TestUpgrade:
         cmd_upgrade(_upgrade_args())
         assert "Already up to date" in capsys.readouterr().out
 
-    def test_replaces_frozen_steps(
+    def test_updates_matched_steps(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Steps matched by name are updated; unmatched user steps survive."""
         wf = _init_and_get_path(tmp_path, monkeypatch)
         doc = _load_yaml(wf)
-        doc["jobs"]["finalize"]["steps"] = [{"run": "echo tampered"}]
+        # Tamper a named step
+        for step in doc["jobs"]["finalize"]["steps"]:
+            if step.get("name") == "Finalize release":
+                step["run"] = "echo tampered"
+        # Add a custom user step
+        doc["jobs"]["finalize"]["steps"].append(
+            {"name": "My custom step", "run": "echo hello"}
+        )
         from uv_release_monorepo.cli._yaml import _write_yaml
 
         _write_yaml(wf, doc)
@@ -100,7 +108,11 @@ class TestUpgrade:
 
         upgraded = _load_yaml(wf)
         steps = upgraded["jobs"]["finalize"]["steps"]
-        assert any("Finalize" in str(s.get("name", "")) for s in steps)
+        # Matched step was restored
+        finalize_step = next(s for s in steps if s.get("name") == "Finalize release")
+        assert finalize_step["run"] != "echo tampered"
+        # Custom step preserved
+        assert any(s.get("name") == "My custom step" for s in steps)
 
     def test_preserves_extra_jobs(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
