@@ -56,6 +56,32 @@ uvr install myorg/myrepo/my-pkg           # latest release
 uvr install myorg/myrepo/my-pkg@1.2.3     # specific version
 ```
 
+## Hooks
+
+Customize the release pipeline with Python hooks. Subclass `ReleaseHook` and override the methods you need:
+
+```python
+from uv_release_monorepo import ReleaseHook, ReleasePlan
+
+class Hook(ReleaseHook):
+    def post_plan(self, plan: ReleasePlan) -> ReleasePlan:
+        data = plan.model_dump()
+        data["deploy_env"] = "staging"
+        return ReleasePlan.model_validate(data)
+```
+
+Configure in `pyproject.toml`:
+
+```toml
+[tool.uvr.hooks]
+file = "uvr_hooks.py"          # default class: Hook
+# or: file = "path/to/file.py:MyHook"
+```
+
+Or just drop a `uvr_hooks.py` with a `Hook` class at the workspace root — it's discovered automatically.
+
+**Hook points:** `pre_plan` / `post_plan` (local), `pre_build` / `post_build`, `pre_release` / `post_release`, `pre_finalize` / `post_finalize` (CI).
+
 ## How it works
 
 `uvr release` scans your workspace, diffs each package against its last baseline tag, walks the dependency graph, and builds a plan containing every shell command needed for the release. It dispatches this plan to GitHub Actions, which runs seven jobs:

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.15.0] - 2026-03-27
+
+### Added
+- Add `ReleaseHook` plugin system for extending the release pipeline with Python hooks — supports local hooks (`pre_plan`/`post_plan`) and CI hooks (`pre_build`/`post_build`/`pre_release`/`post_release`/`pre_finalize`/`post_finalize`) (ADR-0011)
+- Add `[tool.uvr.hooks]` config key and convention-based discovery (`uvr_hooks.py` at workspace root)
+- Export `ReleaseHook` and `ReleasePlan` from `uv_release_monorepo` package root
+
+### Changed
+- Replace `git` and `gh` subprocess calls with pygit2 and httpx for faster release planning (ADR-0012)
+- Change `uvr init --upgrade` to use three-way merge for combining template updates with user customizations (ADR-0013)
+- Bump `ReleasePlan` schema version to 8 — plans now preserve extra keys injected by hooks
+
 ## [v0.14.3] - 2026-03-27
 
 ### Changed
