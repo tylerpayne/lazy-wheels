@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-03-27
+
+### Changed
+- Move dependency pin writes from local two-pass flow to inline `uvr pin-deps` commands in the build plan (ADR-0009) — pins are only applied if the build succeeds
+
+### Fixed
+- Fix `set_version` and `pin_dependencies` crashing on pyproject.toml files without a `[project]` table
+
+## [v0.10.0] - 2026-03-27
+
+### Added
+- Add parallel builds within runners — packages at the same dependency depth build concurrently using topological layers
+
 ## [v0.9.0] - 2026-03-27
 
 ### Added

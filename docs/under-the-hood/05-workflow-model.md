@@ -8,7 +8,7 @@ See [Add CI hooks](../user-guide/04-hooks.md) and [How it works](../user-guide/0
 
 | Module | Key symbols |
 |--------|-------------|
-| `models.py` | `ReleaseWorkflow`, `WorkflowTrigger`, `WorkflowDispatch`, `WorkflowInput`, `WorkflowJobs`, `Job`, `HookJob`, `PreBuildJob`, `BuildJob`, `PostBuildJob`, `PreReleaseJob`, `PublishJob`, `FinalizeJob`, `PostReleaseJob`, `JOB_ORDER`, `_frozen`, `_needs_validator`, `_NOOP_STEPS`, `_P` |
+| `models.py` | `ReleaseWorkflow`, `WorkflowTrigger`, `WorkflowDispatch`, `WorkflowInput`, `WorkflowJobs`, `Job`, `BuildJob`, `ReleaseJob`, `FinalizeJob`, `JOB_ORDER`, `_frozen`, `_needs_validator`, `_P` |
 
 ## Top-level model: `ReleaseWorkflow`
 
@@ -61,39 +61,17 @@ any job without validation failures.
 The `_drop_empty_needs` serializer removes `needs: []` from output so the YAML
 is clean.
 
-### `HookJob`
-
-```python
-class HookJob(Job):
-    steps: list[dict] = Field(default_factory=lambda: list(_NOOP_STEPS))
-
-    @model_validator(mode="after")
-    def _ensure_steps(self) -> HookJob:
-        if not self.steps:
-            self.steps = list(_NOOP_STEPS)
-        return self
-```
-
-Hook jobs default to `_NOOP_STEPS` and enforce that steps is never empty (GitHub
-Actions requires at least one step per job). `_NOOP_STEPS` is:
-
-```python
-_NOOP_STEPS: list[dict] = [{"name": "Never", "run": "echo 'Never'"}]
-```
-
 ### Concrete job types
 
-| Class | Parent | Default `if` | `_needs_validator` |
-|-------|--------|-------------|-------------------|
-| `PreBuildJob` | `HookJob` | `!contains(plan.skip, 'pre-build')` | (none) |
-| `BuildJob` | `Job` | `!contains(plan.skip, 'build')` | `pre-build` |
-| `PostBuildJob` | `HookJob` | `always() && !failure() && !contains(plan.skip, 'post-build')` | `build` |
-| `PreReleaseJob` | `HookJob` | `always() && !failure() && !contains(plan.skip, 'pre-release')` | `post-build` |
-| `PublishJob` | `Job` | `always() && !failure() && !contains(plan.skip, 'publish')` | `pre-release` |
-| `FinalizeJob` | `Job` | `always() && !failure() && !contains(plan.skip, 'finalize')` | `publish` |
-| `PostReleaseJob` | `HookJob` | `always() && !failure() && !contains(plan.skip, 'post-release')` | `finalize` |
+There are three core job classes. All inherit directly from `Job`:
 
-The `always() && !failure()` pattern means hook and downstream jobs run even when
+| Class | Default `if` | `_needs_validator` |
+|-------|-------------|-------------------|
+| `BuildJob` | `!contains(plan.skip, 'build')` | (none) |
+| `ReleaseJob` | `always() && !failure() && !contains(plan.skip, 'publish')` | `build` |
+| `FinalizeJob` | `always() && !failure() && !contains(plan.skip, 'finalize')` | `publish` |
+
+The `always() && !failure()` pattern means downstream jobs run even when
 earlier jobs are skipped (via the `skip` list in the plan), but stop if a
 preceding job actually failed.
 
@@ -116,11 +94,11 @@ def _needs_validator(*required: str):
 Usage on each job class:
 
 ```python
-class BuildJob(Job):
-    _ensure_needs = _needs_validator("pre-build")
-
-class PostBuildJob(HookJob):
+class ReleaseJob(Job):
     _ensure_needs = _needs_validator("build")
+
+class FinalizeJob(Job):
+    _ensure_needs = _needs_validator("publish")
 ```
 
 If the user removes a `needs` entry from the YAML, validation silently adds it
@@ -128,7 +106,7 @@ back. This preserves the linear pipeline without breaking user customizations.
 
 ### `_frozen` fields
 
-Core jobs (`BuildJob`, `PublishJob`, `FinalizeJob`) use `_frozen` to protect
+Core jobs (`BuildJob`, `ReleaseJob`, `FinalizeJob`) use `_frozen` to protect
 fields that contain `${{ fromJSON(inputs.plan) }}` expressions. These are
 annotated with `Annotated[type, _frozen(default)]`:
 
@@ -147,8 +125,9 @@ warning behavior.
 
 ```python
 JOB_ORDER: list[str] = [
-    "pre-build", "build", "post-build",
-    "pre-release", "publish", "finalize", "post-release",
+    "build",
+    "publish",
+    "finalize",
 ]
 ```
 
@@ -157,23 +136,23 @@ before a given job) and by `_print_plan` to display the pipeline in order.
 
 ## `WorkflowJobs`
 
-Maps job names to their models, using `alias` to convert between Python
-attribute names (`pre_build`) and YAML keys (`pre-build`):
+Maps job names to their models. Only the three core jobs are declared as typed
+fields:
 
 ```python
 class WorkflowJobs(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    pre_build: PreBuildJob = Field(alias="pre-build", default_factory=PreBuildJob)
     build: BuildJob = Field(default_factory=BuildJob)
-    post_build: PostBuildJob = Field(alias="post-build", default_factory=PostBuildJob)
-    pre_release: PreReleaseJob = Field(alias="pre-release", default_factory=PreReleaseJob)
-    publish: PublishJob = Field(default_factory=PublishJob)
+    release: ReleaseJob = Field(default_factory=ReleaseJob)
     finalize: FinalizeJob = Field(default_factory=FinalizeJob)
-    post_release: PostReleaseJob = Field(alias="post-release", default_factory=PostReleaseJob)
 ```
 
-`extra="forbid"` here means the workflow cannot contain unknown job names.
+`extra="allow"` means the workflow **can** contain additional job names. Hook
+jobs (e.g., `pre-build`, `post-build`, `pre-release`, `post-release`) are not
+modeled as dedicated classes -- they are parsed as extra fields and stored as
+plain dicts. This lets users add arbitrary hook jobs in the YAML without
+requiring model changes.
 
 ## Serialization
 

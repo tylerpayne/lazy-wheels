@@ -1,6 +1,6 @@
 # uv-release-monorepo
 
-Push-button releases for [uv](https://github.com/astral-sh/uv) monorepos. Rebuilds only what changed, creates one GitHub release per package, handles version bumping.
+The missing CI release orchestrator for [uv](https://github.com/astral-sh/uv) workspaces. Rebuilds only what changed, creates one GitHub release per package, handles version bumping.
 
 ## Quick Start
 
