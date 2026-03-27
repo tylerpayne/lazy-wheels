@@ -186,12 +186,12 @@ wheels = [
 
 [[package]]
 name = "pkg-alpha"
-version = "0.1.7.dev0"
+version = "0.1.8.dev0"
 source = { editable = "packages/pkg-alpha" }
 
 [[package]]
 name = "pkg-beta"
-version = "0.1.7.dev0"
+version = "0.1.8.dev0"
 source = { editable = "packages/pkg-beta" }
 dependencies = [
     { name = "pkg-alpha" },
