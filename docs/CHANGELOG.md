@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.13.4] - 2026-03-27
+
+### Fixed
+- Fix `uvr build`/`uvr finalize` failing on Windows runners — `--plan` now falls back to the `UVR_PLAN` environment variable and supports `@file` input (#8)
+
+### Changed
+- Change workflow template to omit `--plan "$UVR_PLAN"` from build/finalize run commands — re-run `uvr init` to update existing workflows
+
 ## [v0.13.3] - 2026-03-27
 
 ### Fixed
