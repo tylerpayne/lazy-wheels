@@ -34,6 +34,6 @@ def test_release_with_plan_calls_executor(mock_executor_cls: MagicMock) -> None:
     cmd_release(args)
 
     mock_executor_cls.assert_called_once()
-    (called_plan,) = mock_executor_cls.call_args[0]
+    called_plan = mock_executor_cls.call_args[0][0]
     assert called_plan.changed == plan.changed
     mock_executor_cls.return_value.run.assert_called_once()
