@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.14.1] - 2026-03-27
+
+### Fixed
+- Fix `uvr init --upgrade` step matching to use all of id/name/uses for cross-matching between old and new templates
+- Fix `uvr init --upgrade` to block on uncommitted release.yml changes and handle quit gracefully
+- Remove special characters from CLI output
+
 ## [v0.14.0] - 2026-03-27
 
 ### Added
