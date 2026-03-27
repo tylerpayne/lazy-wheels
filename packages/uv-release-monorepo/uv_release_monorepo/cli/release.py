@@ -105,13 +105,17 @@ def _print_plan(
             elif plan.matrix:
                 layers = topo_layers(plan.changed)
                 max_layer = max(layers.values()) if layers else 0
+                import json as _json
+
                 by_runner: dict[str, list] = {}
                 for me in plan.matrix:
-                    by_runner.setdefault(me.runner, []).append(me)
+                    key = _json.dumps(me.runner)
+                    by_runner.setdefault(key, []).append(me)
                 all_build_pkgs = [e.package for e in plan.matrix]
                 bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
-                for runner, runner_entries in sorted(by_runner.items()):
-                    print(f"{_D}{runner}")
+                for runner_key, runner_entries in sorted(by_runner.items()):
+                    labels = _json.loads(runner_key)
+                    print(f"{_D}[{', '.join(labels)}]")
                     for layer in range(max_layer + 1):
                         pkgs = [
                             e
@@ -246,9 +250,9 @@ def cmd_release(args: argparse.Namespace) -> None:
         for pkg, runners in package_runners.items():
             if pkg not in plan.changed:
                 continue
-            for r in runners:
-                if not r.startswith(local_prefix):
-                    incompatible.append(f"  {pkg}: {r}")
+            for labels in runners:
+                if not any(label.startswith(local_prefix) for label in labels):
+                    incompatible.append(f"  {pkg}: [{', '.join(labels)}]")
         if incompatible:
             lines = "\n".join(incompatible)
             _fatal(

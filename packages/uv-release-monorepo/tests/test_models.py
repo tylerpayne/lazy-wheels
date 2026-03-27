@@ -36,9 +36,9 @@ class TestVersionBump:
 
 class TestMatrixEntry:
     def test_create(self) -> None:
-        entry = MatrixEntry(package="pkg-alpha", runner="ubuntu-latest")
+        entry = MatrixEntry(package="pkg-alpha", runner=["ubuntu-latest"])
         assert entry.package == "pkg-alpha"
-        assert entry.runner == "ubuntu-latest"
+        assert entry.runner == ["ubuntu-latest"]
 
 
 class TestReleasePlan:
@@ -54,7 +54,7 @@ class TestReleasePlan:
                 "pkg-alpha": "pkg-alpha/v0.1.4",
                 "pkg-beta": "pkg-beta/v0.1.9",
             },
-            matrix=[MatrixEntry(package="pkg-alpha", runner="ubuntu-latest")],
+            matrix=[MatrixEntry(package="pkg-alpha", runner=["ubuntu-latest"])],
         )
 
     def test_schema_version_defaults_to_6(self) -> None:
@@ -68,7 +68,7 @@ class TestReleasePlan:
         assert restored.changed["pkg-alpha"].version == "0.1.5"
         assert restored.unchanged["pkg-beta"].version == "0.2.0"
         assert restored.matrix[0].package == "pkg-alpha"
-        assert restored.matrix[0].runner == "ubuntu-latest"
+        assert restored.matrix[0].runner == ["ubuntu-latest"]
 
     def test_matrix_shape_matches_gha_include(self) -> None:
         """matrix entries serialize as dicts for GHA fromJSON."""
@@ -77,7 +77,7 @@ class TestReleasePlan:
         assert data["matrix"] == [
             {
                 "package": "pkg-alpha",
-                "runner": "ubuntu-latest",
+                "runner": ["ubuntu-latest"],
                 "path": "",
                 "version": "",
             }

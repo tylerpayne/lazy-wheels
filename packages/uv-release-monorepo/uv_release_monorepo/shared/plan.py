@@ -83,7 +83,10 @@ class ReleasePlanner:
 
         # Expand matrix
         matrix_entries = self._expand_matrix(changed_names, changed)
-        unique_runners = sorted(set(e.runner for e in matrix_entries))
+        unique_runners = sorted(
+            {tuple(e.runner) for e in matrix_entries}, key=lambda t: list(t)
+        )
+        runners_list: list[list[str]] = [list(t) for t in unique_runners]
 
         # Build publish matrix
         publish_entries = self._build_publish_matrix(
@@ -112,7 +115,7 @@ class ReleasePlanner:
             current_versions=current_versions,
             release_tags=release_tags,
             matrix=matrix_entries,
-            runners=unique_runners,
+            runners=runners_list,
             bumps=bumps,
             publish_matrix=publish_entries,
             ci_publish=self.config.ci_publish,
@@ -236,10 +239,13 @@ class ReleasePlanner:
         matrix_entries: list[MatrixEntry],
     ) -> dict[str, list[PlanCommand]]:
         """Generate build commands per runner."""
+        import json as _json
+
         all_packages = {**changed, **unchanged}
         by_runner: dict[str, set[str]] = {}
         for entry in matrix_entries:
-            by_runner.setdefault(entry.runner, set()).add(entry.package)
+            key = _json.dumps(entry.runner)
+            by_runner.setdefault(key, set()).add(entry.package)
 
         result: dict[str, list[PlanCommand]] = {}
         for runner, assigned in sorted(by_runner.items()):
@@ -625,7 +631,7 @@ class ReleasePlanner:
         entries: list[MatrixEntry] = []
         for name in sorted(changed_names):
             info = changed[name]
-            runners = self.config.matrix.get(name, ["ubuntu-latest"])
+            runners = self.config.matrix.get(name, [["ubuntu-latest"]])
             for runner in runners:
                 entries.append(
                     MatrixEntry(

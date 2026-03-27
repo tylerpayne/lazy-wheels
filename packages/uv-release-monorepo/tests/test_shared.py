@@ -1043,8 +1043,8 @@ class TestBuildPlan:
             PlanConfig(
                 rebuild_all=False,
                 matrix={
-                    "pkg-a": ["ubuntu-latest", "macos-14"],
-                    "pkg-b": ["ubuntu-latest"],
+                    "pkg-a": [["ubuntu-latest"], ["macos-14"]],
+                    "pkg-b": [["ubuntu-latest"]],
                 },
                 uvr_version="0.3.0",
             )
@@ -1080,7 +1080,7 @@ class TestBuildPlan:
 
         assert len(plan.matrix) == 1
         assert plan.matrix[0].package == "pkg-a"
-        assert plan.matrix[0].runner == "ubuntu-latest"
+        assert plan.matrix[0].runner == ["ubuntu-latest"]
 
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")

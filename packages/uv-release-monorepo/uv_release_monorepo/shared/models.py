@@ -38,7 +38,7 @@ class PlanConfig:
     """
 
     rebuild_all: bool
-    matrix: dict[str, list[str]]
+    matrix: dict[str, list[list[str]]]
     uvr_version: str
     python_version: str = "3.12"
     ci_publish: bool = True
@@ -131,7 +131,7 @@ class MatrixEntry(BaseModel):
     """A single (package, runner) pair in the build matrix."""
 
     package: str
-    runner: str
+    runner: list[str]
     path: str = ""
     version: str = ""
 
@@ -451,7 +451,7 @@ class ReleasePlan(BaseModel):
     current_versions: dict[str, str] = Field(default_factory=dict)
     release_tags: dict[str, str | None]
     matrix: list[MatrixEntry]
-    runners: list[str] = Field(default_factory=list)
+    runners: list[list[str]] = Field(default_factory=list)
     bumps: dict[str, BumpPlan] = Field(default_factory=dict)
     publish_matrix: list[PublishEntry] = Field(default_factory=list)
     ci_publish: bool = False

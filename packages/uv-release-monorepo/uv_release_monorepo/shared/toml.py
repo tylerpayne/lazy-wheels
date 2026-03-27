@@ -102,14 +102,26 @@ def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict:
     }
 
 
-def get_uvr_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[str]]:
-    """Extract [tool.uvr.matrix] as {package: [runner, ...]}."""
+def get_uvr_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
+    """Extract [tool.uvr.matrix] as {package: [[label, ...], ...]}."""
     raw = doc.get("tool", {}).get("uvr", {}).get("matrix", {})
-    return {k: list(v) for k, v in raw.items()}
+    result: dict[str, list[list[str]]] = {}
+    for k, v in raw.items():
+        runners: list[list[str]] = []
+        for entry in v:
+            if isinstance(entry, list):
+                runners.append(list(entry))
+            else:
+                # Bare string → single-label list for backward compat
+                runners.append([str(entry)])
+        result[k] = runners
+    return result
 
 
-def set_uvr_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[str]]) -> None:
-    """Write {package: [runner, ...]} into [tool.uvr.matrix]."""
+def set_uvr_matrix(
+    doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]
+) -> None:
+    """Write {package: [[label, ...], ...]} into [tool.uvr.matrix]."""
     if "tool" not in doc:
         doc["tool"] = tomlkit.table()
     tool = doc["tool"]
@@ -121,7 +133,10 @@ def set_uvr_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[str]]) -> N
     matrix_table = tomlkit.table()
     for pkg, runners in sorted(matrix.items()):
         arr = tomlkit.array()
-        for r in runners:
-            arr.append(r)
+        for labels in runners:
+            inner = tomlkit.array()
+            for label in labels:
+                inner.append(label)
+            arr.append(inner)
         matrix_table[pkg] = arr
     uvr["matrix"] = matrix_table

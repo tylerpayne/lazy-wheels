@@ -43,37 +43,40 @@ def cmd_runners(args: argparse.Namespace) -> None:
             print(f"'{pkg}' has no runners configured.")
         return
 
-    # --add
+    # --add (comma-separated labels become a single runner)
     if add_val is not None:
+        labels = [s.strip() for s in add_val.split(",")]
         runners = matrix.get(pkg, [])
-        if add_val in runners:
+        if labels in runners:
             print(f"'{add_val}' already in runners for '{pkg}'.")
             return
-        runners.append(add_val)
+        runners.append(labels)
         matrix[pkg] = runners
         set_uvr_matrix(doc, matrix)
         save_pyproject(pyproject, doc)
-        print(f"Added '{add_val}' to '{pkg}' runners.")
+        print(f"Added [{', '.join(labels)}] to '{pkg}' runners.")
         return
 
     # --remove
     if remove_val is not None:
+        labels = [s.strip() for s in remove_val.split(",")]
         runners = matrix.get(pkg, [])
-        if remove_val not in runners:
-            _fatal(f"'{remove_val}' not in runners for '{pkg}'")
-        runners.remove(remove_val)
+        if labels not in runners:
+            _fatal(f"[{', '.join(labels)}] not in runners for '{pkg}'")
+        runners.remove(labels)
         if runners:
             matrix[pkg] = runners
         else:
             del matrix[pkg]
         set_uvr_matrix(doc, matrix)
         save_pyproject(pyproject, doc)
-        print(f"Removed '{remove_val}' from '{pkg}' runners.")
+        print(f"Removed [{', '.join(labels)}] from '{pkg}' runners.")
         return
 
     # Read
     runners = matrix.get(pkg)
     if runners:
-        print(", ".join(runners))
+        for r in runners:
+            print(f"  [{', '.join(r)}]")
     else:
-        print(f"'{pkg}' has no runners configured (defaults to ubuntu-latest).")
+        print(f"'{pkg}' has no runners configured (defaults to [ubuntu-latest]).")

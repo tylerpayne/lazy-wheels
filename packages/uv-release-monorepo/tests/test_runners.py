@@ -36,7 +36,7 @@ class TestCmdRunners:
         cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
 
         result = _read_matrix(tmp_path)
-        assert result["pkg-alpha"] == ["ubuntu-latest"]
+        assert result["pkg-alpha"] == [["ubuntu-latest"]]
 
     def test_add_duplicate_ignored(
         self,
@@ -52,7 +52,7 @@ class TestCmdRunners:
         cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
 
         result = _read_matrix(tmp_path)
-        assert result["pkg-alpha"] == ["ubuntu-latest"]
+        assert result["pkg-alpha"] == [["ubuntu-latest"]]
         output = capsys.readouterr().out
         assert "already in runners" in output
 
@@ -68,7 +68,7 @@ class TestCmdRunners:
         cmd_runners(_runners_args(package="pkg-alpha", remove_value="ubuntu-latest"))
 
         result = _read_matrix(tmp_path)
-        assert result["pkg-alpha"] == ["macos-14"]
+        assert result["pkg-alpha"] == [["macos-14"]]
 
     def test_remove_last_runner_clears_package(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -142,6 +142,6 @@ class TestReadMatrix:
 
         result = _read_matrix(tmp_path)
         assert result == {
-            "pkg-a": ["ubuntu-latest"],
-            "pkg-b": ["ubuntu-latest", "macos-14"],
+            "pkg-a": [["ubuntu-latest"]],
+            "pkg-b": [["ubuntu-latest"], ["macos-14"]],
         }

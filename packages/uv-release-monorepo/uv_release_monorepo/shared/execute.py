@@ -21,10 +21,18 @@ class ReleaseExecutor:
     def build(self, *, runner: str | None = None) -> None:
         """Run build commands."""
         if runner:
-            self._run_commands(self.plan.build_commands.get(runner, []))
+            import json
+
+            # Runner comes as JSON string from CI matrix
+            try:
+                parsed = json.loads(runner)
+            except (json.JSONDecodeError, TypeError):
+                parsed = [runner]
+            key = json.dumps(parsed if isinstance(parsed, list) else [parsed])
+            self._run_commands(self.plan.build_commands.get(key, []))
         else:
-            for r in self.plan.runners:
-                self._run_commands(self.plan.build_commands.get(r, []))
+            for key in self.plan.build_commands:
+                self._run_commands(self.plan.build_commands[key])
 
     def publish(self) -> None:
         """Run publish commands."""

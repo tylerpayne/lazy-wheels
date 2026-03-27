@@ -38,7 +38,7 @@ def _make_plan_json(
         matrix=[
             MatrixEntry(
                 package=name,
-                runner="ubuntu-latest",
+                runner=["ubuntu-latest"],
                 path=f"packages/{name}",
                 version="1.0.0",
             )
@@ -59,7 +59,7 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
         changed=["pkg-a"],
         unchanged=[],
         build_commands={
-            "ubuntu-latest": [
+            '["ubuntu-latest"]': [
                 PlanCommand(args=["mkdir", "-p", "dist"]).model_dump(),
                 PlanCommand(
                     args=["uv", "build", "packages/pkg-a"], label="Build pkg-a"

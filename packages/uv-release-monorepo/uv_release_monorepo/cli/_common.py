@@ -12,7 +12,7 @@ from ..shared.toml import get_uvr_matrix, load_pyproject
 __version__ = pkg_version("uv-release-monorepo")
 
 
-def _read_matrix(root: Path) -> dict[str, list[str]]:
+def _read_matrix(root: Path) -> dict[str, list[list[str]]]:
     """Read [tool.uvr.matrix] from the workspace pyproject.toml."""
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
@@ -20,7 +20,7 @@ def _read_matrix(root: Path) -> dict[str, list[str]]:
     return get_uvr_matrix(load_pyproject(pyproject))
 
 
-def _print_matrix_status(package_runners: dict[str, list[str]]) -> None:
+def _print_matrix_status(package_runners: dict[str, list[list[str]]]) -> None:
     """Print each package's build runners as a list."""
     if not package_runners:
         return
@@ -32,7 +32,8 @@ def _print_matrix_status(package_runners: dict[str, list[str]]) -> None:
     print("Build matrix:")
     for pkg in names:
         runners = package_runners[pkg]
-        print(f"  {pkg.ljust(w)}  \u2192  {', '.join(runners)}")
+        runner_strs = [f"[{', '.join(r)}]" for r in runners]
+        print(f"  {pkg.ljust(w)}  \u2192  {', '.join(runner_strs)}")
 
 
 def _discover_packages(root: Path | None = None) -> dict[str, tuple[str, list[str]]]:

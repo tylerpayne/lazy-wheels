@@ -44,7 +44,7 @@ def _make_plan(
         matrix=[
             MatrixEntry(
                 package=name,
-                runner="ubuntu-latest",
+                runner=["ubuntu-latest"],
                 path=f"packages/{name}",
                 version="1.0.0",
             )

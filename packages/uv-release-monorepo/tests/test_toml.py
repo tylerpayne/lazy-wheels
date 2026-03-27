@@ -104,20 +104,20 @@ pkg-beta = ["ubuntu-latest"]
         doc = tomlkit.parse(content)
         result = get_uvr_matrix(doc)
         assert result == {
-            "pkg-alpha": ["ubuntu-latest", "macos-14"],
-            "pkg-beta": ["ubuntu-latest"],
+            "pkg-alpha": [["ubuntu-latest"], ["macos-14"]],
+            "pkg-beta": [["ubuntu-latest"]],
         }
 
     def test_set_uvr_matrix_writes_matrix(self) -> None:
         """set_uvr_matrix then get_uvr_matrix round-trips the data."""
         doc = tomlkit.parse('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
-        matrix = {
-            "pkg-beta": ["ubuntu-latest", "macos-14"],
-            "pkg-alpha": ["ubuntu-latest"],
+        matrix: dict[str, list[list[str]]] = {
+            "pkg-beta": [["ubuntu-latest"], ["macos-14"]],
+            "pkg-alpha": [["ubuntu-latest"]],
         }
         set_uvr_matrix(doc, matrix)
         result = get_uvr_matrix(doc)
         assert result == {
-            "pkg-alpha": ["ubuntu-latest"],
-            "pkg-beta": ["ubuntu-latest", "macos-14"],
+            "pkg-alpha": [["ubuntu-latest"]],
+            "pkg-beta": [["ubuntu-latest"], ["macos-14"]],
         }
