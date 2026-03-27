@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-03-27
+
+### Changed
+- Move version setting and dependency pinning from CI build commands to local pre-dispatch — `uvr release` now commits release versions before dispatching to CI, so release tags point at commits with the correct version (ADR-0010)
+
 ## [v0.12.0] - 2026-03-27
 
 ### Changed
