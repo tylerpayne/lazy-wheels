@@ -206,7 +206,11 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Skip git push after release.",
     )
     _out = release_parser.add_argument_group("output")
-    _out.add_argument("--json", action="store_true", help="Print the raw plan JSON.")
+    _out.add_argument(
+        "--json",
+        action="store_true",
+        help="Print only the plan JSON to stdout and exit.",
+    )
     _out.add_argument(
         "--workflow-dir",
         default=".github/workflows",

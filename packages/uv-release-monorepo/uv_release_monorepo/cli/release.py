@@ -166,7 +166,8 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     # For CI mode, ensure clean worktree and workflow exists
     root = Path.cwd()
-    if where == "ci":
+    json_only = getattr(args, "json", False)
+    if where == "ci" and not json_only:
         result = subprocess.run(
             ["git", "status", "--porcelain"], capture_output=True, text=True
         )
@@ -234,7 +235,12 @@ def cmd_release(args: argparse.Namespace) -> None:
         sys.stdout = old_stdout
 
     if not plan.changed:
-        print("Nothing changed since last release. Use --rebuild-all to rebuild all.")
+        if getattr(args, "json", False):
+            print(plan.model_dump_json(indent=2))
+        else:
+            print(
+                "Nothing changed since last release. Use --rebuild-all to rebuild all."
+            )
         return
 
     # Local mode: warn if packages have platform-specific runners configured
@@ -264,24 +270,24 @@ def cmd_release(args: argparse.Namespace) -> None:
                 f"  uvr runners <pkg> --clear"
             )
 
-    # Dry run: print summary and exit
-    if getattr(args, "dry_run", False):
-        _print_plan(plan, skipped)
-        return
-
     # Set skip/reuse fields on the plan
     if skipped:
         plan.skip = sorted(skipped)
     if reuse_run:
         plan.reuse_run_id = reuse_run
 
+    # --json: print only plan JSON to stdout and exit
+    if getattr(args, "json", False):
+        print(plan.model_dump_json(indent=2))
+        return
+
+    # Dry run: print summary and exit
+    if getattr(args, "dry_run", False):
+        _print_plan(plan, skipped)
+        return
+
     # Print human-readable summary
     _print_plan(plan, skipped)
-
-    # Optionally dump raw JSON
-    if getattr(args, "json", False):
-        print(json.dumps(plan.model_dump(), indent=2))
-        print()
 
     if where == "local":
         # Execute locally
