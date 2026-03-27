@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.11.1] - 2026-03-27
+
+### Fixed
+- Fix `uvr release` CI dispatch checking out the default branch instead of the dispatching branch
+
 ## [v0.11.0] - 2026-03-27
 
 ### Changed
