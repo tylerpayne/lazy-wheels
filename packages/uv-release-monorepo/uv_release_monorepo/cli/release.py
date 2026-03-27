@@ -92,7 +92,7 @@ def _print_plan(
     # -- Pipeline (job-by-job with details inline) --
     _section("Pipeline")
     _sw = 6  # width of "STATUS"
-    _D = " " * 10  # detail indent under job
+    _D = " " * 14  # detail indent under job
     print(f"  {'STATUS'.ljust(_sw)}  JOB")
     for job in JOB_ORDER:
         if job in skipped:
