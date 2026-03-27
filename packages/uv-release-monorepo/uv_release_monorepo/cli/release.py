@@ -220,6 +220,7 @@ def cmd_release(args: argparse.Namespace) -> None:
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
+        dry_run = getattr(args, "dry_run", False) or json_only
         plan, _pin_changes = _cli.ReleasePlanner(
             _cli.PlanConfig(
                 rebuild_all=args.rebuild_all,
@@ -229,6 +230,7 @@ def cmd_release(args: argparse.Namespace) -> None:
                 ci_publish=(where == "ci"),
                 release_type=release_type,
                 pre_kind=pre_kind,
+                dry_run=dry_run,
             )
         ).plan()
     finally:
@@ -288,6 +290,36 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     # Print human-readable summary
     _print_plan(plan, skipped)
+
+    # Commit release versions and pinned deps (planner wrote them locally)
+    subprocess.run(
+        ["uv", "sync", "--all-groups", "--all-extras"],
+        capture_output=True,
+        check=True,
+    )
+    pyproject_paths = [
+        f"{plan.changed[name].path}/pyproject.toml" for name in sorted(plan.changed)
+    ]
+    subprocess.run(["git", "add", "uv.lock", *pyproject_paths], check=True)
+    # Check if there are staged changes to commit
+    diff_result = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"], capture_output=True
+    )
+    if diff_result.returncode != 0:
+        version_summary = ", ".join(
+            f"{name} {plan.changed[name].version}" for name in sorted(plan.changed)
+        )
+        subprocess.run(
+            [
+                "git",
+                "commit",
+                "-m",
+                f"chore: set release versions\n\n{version_summary}",
+            ],
+            check=True,
+        )
+        if where == "ci":
+            subprocess.run(["git", "push"], check=True)
 
     if where == "local":
         # Execute locally

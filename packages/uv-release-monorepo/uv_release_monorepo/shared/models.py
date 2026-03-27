@@ -44,6 +44,7 @@ class PlanConfig:
     ci_publish: bool = True
     release_type: str = "final"
     pre_kind: str = ""
+    dry_run: bool = False
 
 
 class PackageInfo(BaseModel):

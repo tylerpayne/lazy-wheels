@@ -502,7 +502,7 @@ class TestBuildPlan:
         mock_detect.return_value = ["pkg-a"]
 
         plan, pin_updates = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         assert isinstance(plan, ReleasePlan)
@@ -541,6 +541,7 @@ class TestBuildPlan:
                     "pkg-b": [["ubuntu-latest"]],
                 },
                 uvr_version="0.3.0",
+                dry_run=True,
             )
         )
 
@@ -569,7 +570,7 @@ class TestBuildPlan:
         mock_detect.return_value = ["pkg-a"]
 
         plan, _ = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         assert len(plan.matrix) == 1
@@ -595,7 +596,7 @@ class TestBuildPlan:
         mock_detect.return_value = []
 
         plan, _ = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         assert plan.changed == {}
@@ -625,7 +626,7 @@ class TestBuildPlan:
         mock_gen_notes.return_value = "**Released:** pkg-a 1.0.0"
 
         plan, _ = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         assert plan.ci_publish is True
@@ -658,7 +659,7 @@ class TestBuildPlan:
         mock_detect.return_value = ["pkg-a"]
 
         plan, _ = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         assert plan.matrix[0].path == "packages/a"
@@ -702,7 +703,7 @@ class TestBuildCommandStages:
         mock_detect.return_value = list(packages)
 
         plan, _ = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         stages = plan.build_commands['["ubuntu-latest"]']
@@ -761,7 +762,7 @@ class TestBuildCommandStages:
         mock_detect.return_value = list(packages)
 
         plan, _ = build_plan(
-            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0")
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         stages = plan.build_commands['["ubuntu-latest"]']

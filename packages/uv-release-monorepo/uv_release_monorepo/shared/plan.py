@@ -18,6 +18,7 @@ from .models import (
     PublishEntry,
     ReleasePlan,
 )
+from .deps import pin_dependencies, set_version
 from .toml import get_uvr_config, load_pyproject
 from .versions import (
     base_version,
@@ -71,6 +72,10 @@ class ReleasePlanner:
             changed, changed_names, packages, release_tags
         )
 
+        # Apply release versions and dep pins locally (skip for dry-run)
+        if not self.config.dry_run:
+            self._apply_versions_and_pins(changed, published_versions)
+
         # Pre-compute version bumps (always bump to next .devN)
         bumps = self._compute_bumps(changed)
 
@@ -88,7 +93,7 @@ class ReleasePlanner:
 
         # Generate command sequences
         build_commands = self._generate_build_commands(
-            changed, unchanged, release_tags, matrix_entries, published_versions
+            changed, unchanged, release_tags, matrix_entries
         )
         publish_commands = self._generate_publish_commands(changed, release_tags)
         finalize_commands = self._generate_finalize_commands(
@@ -117,6 +122,23 @@ class ReleasePlanner:
             finalize_commands=finalize_commands,
         )
         return result_plan, []
+
+    def _apply_versions_and_pins(
+        self,
+        changed: dict[str, PackageInfo],
+        published_versions: dict[str, str],
+    ) -> None:
+        """Set release versions and pin deps in local pyproject.toml files."""
+        for name, info in sorted(changed.items()):
+            pyproject = Path(info.path) / "pyproject.toml"
+            set_version(pyproject, info.version)
+
+            dep_versions = {
+                dep: published_versions[dep]
+                for dep in info.deps
+                if dep in published_versions
+            }
+            pin_dependencies(pyproject, dep_versions)
 
     def _compute_release_versions(
         self,
@@ -230,7 +252,6 @@ class ReleasePlanner:
         unchanged: dict[str, PackageInfo],
         release_tags: dict[str, str | None],
         matrix_entries: list[MatrixEntry],
-        published_versions: dict[str, str],
     ) -> dict[str, list[BuildStage]]:
         """Generate build command stages per runner.
 
@@ -290,35 +311,6 @@ class ReleasePlanner:
                     if pkg_layer != layer:
                         continue
                     info = changed_to_build[pkg]
-                    release_ver = strip_dev(info.version)
-                    pkg_cmds: list[PlanCommand] = [
-                        PlanCommand(
-                            args=[
-                                "uv",
-                                "version",
-                                release_ver,
-                                "--directory",
-                                info.path,
-                            ],
-                            label=f"Set {pkg} version to {release_ver}",
-                        ),
-                    ]
-
-                    # Pin internal deps to published versions
-                    dep_specs = [
-                        f"{dep}>={published_versions[dep]}"
-                        for dep in info.deps
-                        if dep in published_versions
-                    ]
-                    if dep_specs:
-                        pyproject = f"{info.path}/pyproject.toml"
-                        pkg_cmds.append(
-                            PlanCommand(
-                                args=["uvr", "pin-deps", "--path", pyproject]
-                                + dep_specs,
-                                label=f"Pin {pkg} deps",
-                            )
-                        )
 
                     build_args = [
                         "uv",
@@ -331,10 +323,9 @@ class ReleasePlanner:
                     ]
                     if layer > 0:
                         build_args.append("--no-sources")
-                    pkg_cmds.append(
+                    layer_cmds[pkg] = [
                         PlanCommand(args=build_args, label=f"Build {pkg}"),
-                    )
-                    layer_cmds[pkg] = pkg_cmds
+                    ]
                 stages.append(BuildStage(commands=layer_cmds))
 
             # -- Cleanup stage: remove wheels not assigned to this runner --

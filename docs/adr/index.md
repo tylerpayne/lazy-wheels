@@ -13,6 +13,7 @@
 * [0007 - Use YAML File as Source of Truth for Workflow Configuration](0007-use-yaml-file-as-source-of-truth-for-workflow-configuration.md)
 * [0008 - Support Dev, Pre, and Post Releases with Base Tags](0008-support-dev-pre-and-post-releases-with-base-tags.md)
 * [0009 - Inline Dependency Pinning Into CI Build Commands](0009-inline-dependency-pinning-into-ci-build-commands.md)
+* [0010 - Apply Release Versions Locally Before CI Dispatch](0010-apply-release-versions-locally-before-ci-dispatch.md)
 
 ## Rejected Records
 

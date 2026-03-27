@@ -33,6 +33,7 @@ def _planner(
             ci_publish=False,
             release_type=release_type,
             pre_kind=pre_kind,
+            dry_run=True,
         )
     )
 

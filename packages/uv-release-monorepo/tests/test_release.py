@@ -82,9 +82,7 @@ class TestCmdRelease:
         plan = _make_plan(changed=["pkg-alpha"])
         mock_planner_cls.return_value.plan.return_value = (plan, [])
 
-        monkeypatch.setattr("builtins.input", lambda _: "n")
-
-        cmd_release(_release_args())
+        cmd_release(_release_args(dry_run=True))
 
         output = capsys.readouterr().out
         assert "Packages" in output
