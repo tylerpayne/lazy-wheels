@@ -209,28 +209,26 @@ class TestDetectChanges:
         """No packages have tags (first release)."""
         return {"pkg-a": None, "pkg-b": None, "pkg-c": None}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_first_release_all_changed(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         no_tags: dict[str, None],
     ) -> None:
         """On first release (no tags), all packages are marked changed."""
-        # No git diff called when tags are None
-
         changed = detect_changes(sample_packages, baselines=no_tags, rebuild_all=False)
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_rebuild_all_marks_everything_dirty(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
@@ -239,98 +237,96 @@ class TestDetectChanges:
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_single_package_changed(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
         """When only one leaf package changes, only it is rebuilt."""
-        responses = {
-            "pkg-a/v1.0.0": "",
-            "pkg-b/v1.0.0": "",
-            "pkg-c/v1.0.0": "packages/c/src.py",
+        responses: dict[str, set[str]] = {
+            "pkg-a/v1.0.0": set(),
+            "pkg-b/v1.0.0": set(),
+            "pkg-c/v1.0.0": {"packages/c/src.py"},
         }
-        mock_git.side_effect = lambda *a, **kw: responses.get(a[2], "")
+        mock_diff.side_effect = lambda _repo, tag: responses.get(tag, set())
 
         changed = detect_changes(sample_packages, baselines=all_tags, rebuild_all=False)
 
         assert set(changed) == {"pkg-c"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_dependency_change_propagates(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
         """When a dependency changes, its dependents are also marked dirty."""
-        responses = {
-            "pkg-a/v1.0.0": "packages/a/src.py",
-            "pkg-b/v1.0.0": "",
-            "pkg-c/v1.0.0": "",
+        responses: dict[str, set[str]] = {
+            "pkg-a/v1.0.0": {"packages/a/src.py"},
+            "pkg-b/v1.0.0": set(),
+            "pkg-c/v1.0.0": set(),
         }
-        mock_git.side_effect = lambda *a, **kw: responses.get(a[2], "")
+        mock_diff.side_effect = lambda _repo, tag: responses.get(tag, set())
 
         changed = detect_changes(sample_packages, baselines=all_tags, rebuild_all=False)
 
-        # pkg-a changed directly, pkg-b and pkg-c are dirty because they depend on it
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_middle_package_change_propagates_to_dependents(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
         """When a middle package changes, only it and its dependents are dirty."""
-        responses = {
-            "pkg-a/v1.0.0": "",
-            "pkg-b/v1.0.0": "packages/b/src.py",
-            "pkg-c/v1.0.0": "",
+        responses: dict[str, set[str]] = {
+            "pkg-a/v1.0.0": set(),
+            "pkg-b/v1.0.0": {"packages/b/src.py"},
+            "pkg-c/v1.0.0": set(),
         }
-        mock_git.side_effect = lambda *a, **kw: responses.get(a[2], "")
+        mock_diff.side_effect = lambda _repo, tag: responses.get(tag, set())
 
         changed = detect_changes(sample_packages, baselines=all_tags, rebuild_all=False)
 
-        # pkg-b changed, pkg-c depends on it, pkg-a is unaffected
         assert set(changed) == {"pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_root_pyproject_change_marks_package_dirty(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
         """When root pyproject.toml changes since a package's tag, it's marked dirty."""
-        mock_git.return_value = "pyproject.toml"
+        mock_diff.return_value = {"pyproject.toml"}
 
         changed = detect_changes(sample_packages, baselines=all_tags, rebuild_all=False)
 
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_no_changes_returns_empty(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
         """When nothing changed, returns empty changed list."""
-        mock_git.return_value = "unrelated/file.txt"
+        mock_diff.return_value = {"unrelated/file.txt"}
 
         changed = detect_changes(sample_packages, baselines=all_tags, rebuild_all=False)
 
@@ -364,23 +360,23 @@ class TestDetectChangesDiamondDeps:
             "top": "top/v1.0.0",
         }
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_bottom_change_propagates_to_all(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         diamond_packages: dict[str, PackageInfo],
         diamond_tags: dict[str, str],
     ) -> None:
         """Changing bottom affects all packages in diamond."""
-        responses = {
-            "bottom/v1.0.0": "packages/bottom/src.py",
-            "left/v1.0.0": "",
-            "right/v1.0.0": "",
-            "top/v1.0.0": "",
+        responses: dict[str, set[str]] = {
+            "bottom/v1.0.0": {"packages/bottom/src.py"},
+            "left/v1.0.0": set(),
+            "right/v1.0.0": set(),
+            "top/v1.0.0": set(),
         }
-        mock_git.side_effect = lambda *a, **kw: responses.get(a[2], "")
+        mock_diff.side_effect = lambda _repo, tag: responses.get(tag, set())
 
         changed = detect_changes(
             diamond_packages, baselines=diamond_tags, rebuild_all=False
@@ -388,23 +384,23 @@ class TestDetectChangesDiamondDeps:
 
         assert set(changed) == {"bottom", "left", "right", "top"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_left_change_propagates_to_top_only(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         diamond_packages: dict[str, PackageInfo],
         diamond_tags: dict[str, str],
     ) -> None:
         """Changing left affects only left and top."""
-        responses = {
-            "bottom/v1.0.0": "",
-            "left/v1.0.0": "packages/left/src.py",
-            "right/v1.0.0": "",
-            "top/v1.0.0": "",
+        responses: dict[str, set[str]] = {
+            "bottom/v1.0.0": set(),
+            "left/v1.0.0": {"packages/left/src.py"},
+            "right/v1.0.0": set(),
+            "top/v1.0.0": set(),
         }
-        mock_git.side_effect = lambda *a, **kw: responses.get(a[2], "")
+        mock_diff.side_effect = lambda _repo, tag: responses.get(tag, set())
 
         changed = detect_changes(
             diamond_packages, baselines=diamond_tags, rebuild_all=False
@@ -412,23 +408,23 @@ class TestDetectChangesDiamondDeps:
 
         assert set(changed) == {"left", "top"}
 
-    @patch("uv_release_monorepo.shared.changes.git")
+    @patch("uv_release_monorepo.shared.changes.diff_files")
     @patch("uv_release_monorepo.shared.changes.step")
     def test_top_change_only_affects_top(
         self,
         mock_step: MagicMock,
-        mock_git: MagicMock,
+        mock_diff: MagicMock,
         diamond_packages: dict[str, PackageInfo],
         diamond_tags: dict[str, str],
     ) -> None:
         """Changing top affects only top (no dependents)."""
-        responses = {
-            "bottom/v1.0.0": "",
-            "left/v1.0.0": "",
-            "right/v1.0.0": "",
-            "top/v1.0.0": "packages/top/src.py",
+        responses: dict[str, set[str]] = {
+            "bottom/v1.0.0": set(),
+            "left/v1.0.0": set(),
+            "right/v1.0.0": set(),
+            "top/v1.0.0": {"packages/top/src.py"},
         }
-        mock_git.side_effect = lambda *a, **kw: responses.get(a[2], "")
+        mock_diff.side_effect = lambda _repo, tag: responses.get(tag, set())
 
         changed = detect_changes(
             diamond_packages, baselines=diamond_tags, rebuild_all=False
@@ -464,10 +460,14 @@ class TestBuildPlan:
 
     @pytest.fixture(autouse=True)
     def _mock_tag_checks(self) -> None:  # type: ignore[return]
-        """Suppress git/gh calls fetched once at top of plan()."""
+        """Suppress pygit2/GitHub calls fetched once at top of plan()."""
         with (
-            patch("uv_release_monorepo.shared.plan.git", return_value=""),
-            patch("uv_release_monorepo.shared.plan.gh", return_value="[]"),
+            patch("uv_release_monorepo.shared.plan.open_repo"),
+            patch("uv_release_monorepo.shared.plan.list_tags", return_value=[]),
+            patch(
+                "uv_release_monorepo.shared.plan.list_release_tag_names",
+                return_value=set(),
+            ),
         ):
             yield
 
@@ -668,9 +668,14 @@ class TestBuildCommandStages:
 
     @pytest.fixture(autouse=True)
     def _mock_tag_checks(self) -> None:  # type: ignore[return]
+        """Suppress pygit2/GitHub calls fetched once at top of plan()."""
         with (
-            patch("uv_release_monorepo.shared.plan.git", return_value=""),
-            patch("uv_release_monorepo.shared.shell.gh", return_value="[]"),
+            patch("uv_release_monorepo.shared.plan.open_repo"),
+            patch("uv_release_monorepo.shared.plan.list_tags", return_value=[]),
+            patch(
+                "uv_release_monorepo.shared.plan.list_release_tag_names",
+                return_value=set(),
+            ),
         ):
             yield
 
@@ -825,10 +830,10 @@ class TestBuildCommandStages:
 class TestGenerateReleaseNotes:
     """Tests for generate_release_notes()."""
 
-    @patch("uv_release_monorepo.shared.publish.git")
-    def test_with_baseline_and_commits(self, mock_git: MagicMock) -> None:
+    @patch("uv_release_monorepo.shared.publish.commit_log")
+    def test_with_baseline_and_commits(self, mock_log: MagicMock) -> None:
         """Includes commit log when baseline tag exists."""
-        mock_git.return_value = "abc1234 fix: something\ndef5678 feat: another"
+        mock_log.return_value = ["abc1234 fix: something", "def5678 feat: another"]
         info = PackageInfo(path="packages/a", version="1.0.0", deps=[])
 
         result = generate_release_notes("pkg-a", info, "pkg-a/v0.9.0")
@@ -838,20 +843,20 @@ class TestGenerateReleaseNotes:
         assert "- abc1234 fix: something" in result
         assert "- def5678 feat: another" in result
 
-    @patch("uv_release_monorepo.shared.publish.git")
-    def test_without_baseline(self, mock_git: MagicMock) -> None:
+    @patch("uv_release_monorepo.shared.publish.commit_log")
+    def test_without_baseline(self, mock_log: MagicMock) -> None:
         """No commit log when no baseline tag."""
         info = PackageInfo(path="packages/a", version="1.0.0", deps=[])
 
         result = generate_release_notes("pkg-a", info, None)
 
         assert result == "**Released:** pkg-a 1.0.0"
-        mock_git.assert_not_called()
+        mock_log.assert_not_called()
 
-    @patch("uv_release_monorepo.shared.publish.git")
-    def test_with_baseline_no_commits(self, mock_git: MagicMock) -> None:
+    @patch("uv_release_monorepo.shared.publish.commit_log")
+    def test_with_baseline_no_commits(self, mock_log: MagicMock) -> None:
         """No commit section when git log returns empty."""
-        mock_git.return_value = ""
+        mock_log.return_value = []
         info = PackageInfo(path="packages/a", version="1.0.0", deps=[])
 
         result = generate_release_notes("pkg-a", info, "pkg-a/v0.9.0")

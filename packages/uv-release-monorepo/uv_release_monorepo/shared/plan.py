@@ -34,8 +34,9 @@ from .versions import (
 )
 from .changes import detect_changes
 from .discovery import discover_packages, find_release_tags, get_baseline_tags
+from .github import list_release_tag_names
+from .gitops import list_tags, open_repo
 from .publish import generate_release_notes
-from .shell import gh, git
 
 
 class ReleasePlanner:
@@ -50,15 +51,18 @@ class ReleasePlanner:
 
     def plan(self) -> tuple[ReleasePlan, list[PinChange]]:
         """Discover packages, detect changes, return a ReleasePlan."""
-        # Fetch shared data once — avoids redundant subprocess calls
-        all_git_tags = git("tag", "--list", check=False).splitlines()
+        # Fetch shared data once via library calls (no subprocess overhead)
+        repo = open_repo()
+        all_git_tags = list_tags(repo)
         all_git_tags_set = set(all_git_tags)
-        all_gh_releases = self._fetch_gh_releases()
+        all_gh_releases = list_release_tag_names()
 
         packages = discover_packages()
         release_tags = find_release_tags(packages, gh_releases=all_gh_releases)
         baselines = get_baseline_tags(packages, all_tags=all_git_tags_set)
-        changed_names = detect_changes(packages, baselines, self.config.rebuild_all)
+        changed_names = detect_changes(
+            packages, baselines, self.config.rebuild_all, repo=repo
+        )
 
         changed = {name: packages[name] for name in changed_names}
         unchanged = {
@@ -88,7 +92,9 @@ class ReleasePlanner:
         for name in changed_names:
             info = changed[name]
             baseline = release_tags.get(name)
-            release_notes[name] = generate_release_notes(name, info, baseline)
+            release_notes[name] = generate_release_notes(
+                name, info, baseline, repo=repo
+            )
 
         # Expand matrix
         matrix_entries = self._expand_matrix(changed_names, changed)
@@ -674,21 +680,6 @@ class ReleasePlanner:
                 )
             )
         return entries
-
-    @staticmethod
-    def _fetch_gh_releases() -> set[str]:
-        """Fetch all GitHub release tag names in one call."""
-        import json as _json
-
-        release_tag_names: set[str] = set()
-        raw = gh("release", "list", "--json", "tagName", "--limit", "1000", check=False)
-        if raw:
-            try:
-                for entry in _json.loads(raw):
-                    release_tag_names.add(entry["tagName"])
-            except (_json.JSONDecodeError, KeyError):
-                pass
-        return release_tag_names
 
     @staticmethod
     def _collect_deps(

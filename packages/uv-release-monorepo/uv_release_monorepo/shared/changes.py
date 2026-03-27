@@ -3,22 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import pygit2
 
+from .gitops import diff_files
 from .models import PackageInfo
-from .shell import git, step
+from .shell import step
 
 
 def _check_package(
-    name: str, info: PackageInfo, baseline: str
+    repo: pygit2.Repository, name: str, info: PackageInfo, baseline: str
 ) -> tuple[str, str | None]:
     """Check a single package for changes since its baseline.
 
     Returns ``(name, reason)`` where *reason* is a human-readable string
     if the package is dirty, or ``None`` if it is clean.
     """
-    changed_files = set(git("diff", "--name-only", baseline, "HEAD").splitlines())
+    changed_files = diff_files(repo, baseline)
 
     prefix = info.path.rstrip("/") + "/"
     if any(f.startswith(prefix) for f in changed_files):
@@ -34,6 +35,8 @@ def detect_changes(
     packages: dict[str, PackageInfo],
     baselines: Mapping[str, str | None],
     rebuild_all: bool,
+    *,
+    repo: pygit2.Repository | None = None,
 ) -> list[str]:
     """Determine which packages need to be rebuilt.
 
@@ -54,11 +57,17 @@ def detect_changes(
         packages: Map of package name -> PackageInfo.
         baselines: Map of package name -> baseline tag (or None).
         rebuild_all: If True, mark all packages as dirty.
+        repo: Pre-opened pygit2 Repository. Opened automatically if None.
 
     Returns:
         List of changed package names.
     """
     step("Detecting changes")
+
+    if repo is None:
+        from .gitops import open_repo
+
+        repo = open_repo()
 
     if rebuild_all:
         dirty = set(packages.keys())
@@ -76,18 +85,12 @@ def detect_changes(
             else:
                 to_check.append((name, info, baseline))
 
-        # Check remaining packages concurrently
-        if to_check:
-            with ThreadPoolExecutor(max_workers=min(len(to_check), 8)) as pool:
-                futures = {
-                    pool.submit(_check_package, name, info, baseline): name
-                    for name, info, baseline in to_check
-                }
-                for future in as_completed(futures):
-                    name, reason = future.result()
-                    if reason:
-                        dirty.add(name)
-                        print(f"  {name}: {reason}")
+        # Check remaining packages (pygit2 is not thread-safe, so run sequentially)
+        for name, info, baseline in to_check:
+            name, reason = _check_package(repo, name, info, baseline)
+            if reason:
+                dirty.add(name)
+                print(f"  {name}: {reason}")
 
     # Build reverse dependency map
     reverse_deps: dict[str, list[str]] = {n: [] for n in packages}
