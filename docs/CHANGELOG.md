@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.14.3] - 2026-03-27
+
+### Changed
+- Deduplicate subprocess calls in the planning phase — fetch git tags and GitHub releases once instead of 3x and 2x respectively
+- Batch per-package baseline tag lookups into a single `git tag --list` call with Python set filtering (eliminates N subprocess calls)
+- Parallelize per-package `git diff` change detection with `ThreadPoolExecutor`
+- Pre-compute release notes once instead of regenerating per caller
+
 ## [v0.14.2] - 2026-03-27
 
 ### Fixed
