@@ -69,6 +69,7 @@ Commands:
   skill init    Copy Claude Code skills into your project
 
 CI steps (used by the release workflow):
+  validate-plan Validate and pretty-print the release plan
   build         Build packages for a runner
   finalize      Tag, bump versions, commit, and push
 
@@ -353,6 +354,20 @@ Run 'uvr <command> --help' for details on a specific command.
     skill_init_parser.set_defaults(func=_cmd_skill_dispatch)
 
     # -- CI steps ------------------------------------------------------
+
+    def _cmd_validate_plan(a: argparse.Namespace) -> None:
+        import json
+
+        plan = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
+        print(json.dumps(plan.model_dump(mode="json"), indent=2))
+
+    vp_parser = subparsers.add_parser("validate-plan", help=_H)
+    vp_parser.add_argument(
+        "--plan",
+        default=None,
+        help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
+    )
+    vp_parser.set_defaults(func=_cmd_validate_plan)
 
     def _cmd_build(a: argparse.Namespace) -> None:
         from pathlib import Path

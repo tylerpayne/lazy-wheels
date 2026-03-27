@@ -319,6 +319,27 @@ def _frozen(default: Any, *, job: str = "", field: str = "") -> AfterValidator:
     return AfterValidator(_check)
 
 
+_VALIDATE_PLAN_STEPS: list[dict] = [
+    _SETUP_UV_STEP,
+    _SETUP_PYTHON_STEP,
+    {
+        "id": "validate-plan",
+        "name": "Validate release plan",
+        "env": {"UVR_PLAN": "${{ inputs.plan }}"},
+        "run": "uvr validate-plan",
+    },
+]
+
+
+class ValidatePlanJob(Job):
+    """The validate-plan job. Frozen — runs first to validate plan JSON."""
+
+    steps: Annotated[
+        list[dict],
+        _frozen(_VALIDATE_PLAN_STEPS, job="validate-plan", field="steps"),
+    ] = Field(default_factory=lambda: list(_VALIDATE_PLAN_STEPS))
+
+
 _BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
 _BUILD_RUNS_ON = "${{ matrix.runner }}"
 _BUILD_STRATEGY = {
@@ -343,6 +364,7 @@ class BuildJob(Job):
     steps: Annotated[list[dict], _frozen(_BUILD_STEPS, job="build", field="steps")] = (
         Field(default_factory=lambda: list(_BUILD_STEPS))
     )
+    _ensure_needs = _needs_validator("validate_plan")
 
 
 _PUBLISH_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'publish') }}}}"
@@ -387,6 +409,7 @@ class WorkflowJobs(BaseModel):
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
+    validate_plan: ValidatePlanJob = Field(default_factory=ValidatePlanJob)
     build: BuildJob = Field(default_factory=BuildJob)
     release: ReleaseJob = Field(default_factory=ReleaseJob)
     finalize: FinalizeJob = Field(default_factory=FinalizeJob)
@@ -418,6 +441,7 @@ class ReleaseWorkflow(BaseModel):
 
 
 JOB_ORDER: list[str] = [
+    "validate_plan",
     "build",
     "publish",
     "finalize",
