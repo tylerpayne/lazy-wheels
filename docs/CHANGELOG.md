@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.13.1] - 2026-03-27
+
+### Fixed
+- Fix topo-sort not considering `[build-system].requires` dependencies, causing concurrent builds to fail when a package's build-time dep hadn't finished building (#6)
+
 ## [v0.13.0] - 2026-03-27
 
 ### Changed
