@@ -275,9 +275,9 @@ class ReleasePlanner:
             changed_to_build = {n: changed[n] for n in needed if n in changed}
             unchanged_deps = {n: unchanged[n] for n in needed if n in unchanged}
 
-            # -- Stage 0: setup (mkdir + fetch unchanged wheels) --
+            # -- Stage 0: setup (mkdir + fetch unchanged dep wheels) --
             setup_cmds: list[PlanCommand] = []
-            setup_cmds.append(PlanCommand(args=["mkdir", "-p", "dist"]))
+            setup_cmds.append(PlanCommand(args=["mkdir", "-p", "dist", "deps"]))
 
             for name in sorted(unchanged_deps):
                 tag = release_tags.get(name)
@@ -293,7 +293,7 @@ class ReleasePlanner:
                                 "--pattern",
                                 f"{wheel_name}-*.whl",
                                 "--dir",
-                                "dist/",
+                                "deps/",
                                 "--clobber",
                             ],
                             label=f"Fetch {name} from {tag}",
@@ -320,6 +320,8 @@ class ReleasePlanner:
                         "dist/",
                         "--find-links",
                         "dist/",
+                        "--find-links",
+                        "deps/",
                     ]
                     if layer > 0:
                         build_args.append("--no-sources")
@@ -328,9 +330,9 @@ class ReleasePlanner:
                     ]
                 stages.append(BuildStage(commands=layer_cmds))
 
-            # -- Cleanup stage: remove wheels not assigned to this runner --
+            # -- Cleanup stage: remove built wheels not assigned to this runner --
             cleanup_cmds: list[PlanCommand] = []
-            for pkg in sorted(set(changed_to_build) | set(unchanged_deps)):
+            for pkg in sorted(changed_to_build):
                 if pkg not in assigned:
                     dist_name = canonicalize_name(pkg).replace("-", "_")
                     cleanup_cmds.append(

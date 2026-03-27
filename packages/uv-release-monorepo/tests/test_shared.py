@@ -771,6 +771,59 @@ class TestBuildCommandStages:
         assert "__setup__" in stages[0].commands
         assert set(stages[1].commands.keys()) == {"pkg-a", "pkg-b", "pkg-c"}
 
+    @patch("uv_release_monorepo.shared.plan.detect_changes")
+    @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
+    @patch("uv_release_monorepo.shared.plan.find_release_tags")
+    @patch("uv_release_monorepo.shared.plan.discover_packages")
+    def test_changed_dep_built_on_runner_that_needs_it(
+        self,
+        mock_discover: MagicMock,
+        mock_find_release: MagicMock,
+        mock_find_dev: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """A changed dep not assigned to a runner is still built there."""
+        # tools is pure-python (ubuntu-only), overlay depends on it (macos)
+        packages = {
+            "tools": PackageInfo(path="packages/tools", version="1.0.0", deps=[]),
+            "overlay": PackageInfo(
+                path="packages/overlay", version="1.0.0", deps=["tools"]
+            ),
+        }
+        mock_discover.return_value = packages
+        mock_find_release.return_value = {n: None for n in packages}
+        mock_find_dev.return_value = {n: None for n in packages}
+        mock_detect.return_value = list(packages)
+
+        plan, _ = build_plan(
+            PlanConfig(
+                rebuild_all=False,
+                matrix={
+                    "tools": [["ubuntu-latest"]],
+                    "overlay": [["macos-14"]],
+                },
+                uvr_version="0.3.0",
+                dry_run=True,
+            )
+        )
+
+        # macos-14 runner should build both tools (layer 0) and overlay (layer 1)
+        macos_stages = plan.build_commands['["macos-14"]']
+        built_pkgs = {
+            pkg
+            for stage in macos_stages
+            for pkg in stage.commands
+            if pkg not in ("__setup__", "__cleanup__")
+        }
+        assert "tools" in built_pkgs, "changed dep 'tools' must be built on macos-14"
+        assert "overlay" in built_pkgs
+
+        # tools wheel should be cleaned from dist/ (not assigned to macos-14)
+        cleanup_stage = macos_stages[-1]
+        assert "__cleanup__" in cleanup_stage.commands
+        cleanup_labels = [c.label for c in cleanup_stage.commands["__cleanup__"]]
+        assert any("tools" in label for label in cleanup_labels)
+
 
 class TestGenerateReleaseNotes:
     """Tests for generate_release_notes()."""
