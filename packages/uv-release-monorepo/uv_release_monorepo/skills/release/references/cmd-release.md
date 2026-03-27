@@ -2,7 +2,7 @@
 
 Plan and execute a release. By default, generates a release plan and dispatches it to GitHub Actions via `gh workflow run`.
 
-The release plan is a self-contained JSON document passed as the `plan` input to the workflow. It contains version numbers, build commands, skip lists, matrix entries, and everything CI needs to execute the release without reading git history.
+The release plan is a self-contained JSON document passed as the `plan` input to the workflow. It contains version numbers, build commands, skip lists, matrix entries, and everything CI needs to execute the release without reading git history. See `release-plan.md` for the plan schema.
 
 ## Basic usage
 
@@ -26,9 +26,9 @@ Mutually exclusive. Controls how versions are interpreted:
 | Flag | Description |
 |------|-------------|
 | *(none)* | Final release (default) — strips `.devN` suffix |
-| `--dev` | Dev release — publishes the current `.devN` version as-is |
-| `--pre {a,b,rc}` | Pre-release — alpha, beta, or release candidate |
-| `--post` | Post-release |
+| `--dev` | Dev release — publishes the current `.devN` version as-is (see `dev-releases.md`) |
+| `--pre {a,b,rc}` | Pre-release — alpha, beta, or release candidate (see `pre-releases.md`) |
+| `--post` | Post-release (see `post-releases.md`) |
 
 ## Build options
 

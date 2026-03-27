@@ -15,3 +15,5 @@ Each core job's `if`, `strategy`, `runs-on`, and `steps` are frozen by uvr. `uvr
 See also:
 - `release-plan.md` — what the release plan JSON contains
 - `custom-jobs.md` — how to add your own jobs to the workflow
+- `cmd-runners.md` — configure per-package build runners (cross-platform wheels)
+- `cmd-install.md` — install packages from the GitHub releases that publish creates

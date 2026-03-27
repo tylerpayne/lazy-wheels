@@ -8,6 +8,8 @@ disable-model-invocation: true
 
 Prerequisites: `uvr` (`uv tool install uv-release-monorepo`) and `gh`.
 
+For first-time setup, scaffold the workflow with `uvr init` (see `references/cmd-init.md`). To install the Claude skills into your project, see `references/cmd-skill-init.md`.
+
 If the project has existing CI checks (tests, linting, etc.) that aren't yet wired into the release workflow, see `references/custom-jobs.md` before your first release.
 
 ## 1. Branch
@@ -26,7 +28,7 @@ The working tree must be clean. Run `git status`. If dirty, ask the user whether
 uvr status
 ```
 
-This shows which packages are dirty (direct changes vs transitive dependents). For the full release plan with version numbers, run:
+This shows which packages are dirty (direct changes vs transitive dependents). See `references/cmd-status.md` for details. For the full release plan with version numbers, run:
 
 ```bash
 uvr release
@@ -81,7 +83,13 @@ gh run list --workflow=release.yml --limit=1
 gh run watch <RUN_ID> --exit-status
 ```
 
-If the workflow fails, fix the issue on the current branch, push, and re-dispatch:
+If the workflow fails, check which job failed:
+
+```bash
+gh run view <RUN_ID> --log-failed
+```
+
+If the failure is early (build broke), fix the issue and re-dispatch from scratch:
 
 ```bash
 git add <files>
@@ -89,6 +97,8 @@ git commit -m "Fix: <description>"
 git push
 uvr release
 ```
+
+If a later job failed but earlier jobs succeeded, use `--skip-to` and `--reuse-*` flags to resume without re-running what already passed. See `references/troubleshooting.md#resuming-a-partially-failed-release` for the full decision tree.
 
 ## 6. Verify
 

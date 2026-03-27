@@ -40,15 +40,65 @@ gh run view <RUN_ID> --log-failed
 
 ## Resuming a partially failed release
 
-Use `--skip-to` and `--reuse-run` to resume from a specific point. See `cli.md#dispatch-options-ci-mode` for details.
+When a release fails partway through, you don't need to start over. Use `--skip`, `--skip-to`, and `--reuse-*` flags to resume from where it broke. See `cmd-release.md` for the full flag reference.
+
+**First, identify what succeeded.** Check the failed run:
 
 ```bash
-# Build succeeded but publish failed — reuse artifacts
-uvr release --skip-to publish --reuse-run <RUN_ID>
+gh run view <RUN_ID> --log-failed
+```
 
-# Publish succeeded but finalize failed — skip build + publish
+The release pipeline has three core jobs in order: **build → publish → finalize**. Pick the right resume strategy based on where it failed:
+
+### Build failed
+
+Nothing was published — just fix the issue and re-run normally:
+
+```bash
+uvr release
+```
+
+### Build succeeded, publish failed
+
+Reuse the build artifacts so you don't rebuild:
+
+```bash
+uvr release --skip-to publish --reuse-run <RUN_ID>
+```
+
+`--skip-to publish` skips the build job. `--reuse-run` downloads artifacts from the prior run.
+
+### Publish succeeded, finalize failed
+
+GitHub releases already exist, so tell uvr to skip both build and publish:
+
+```bash
 uvr release --skip-to finalize --reuse-release
 ```
+
+`--reuse-release` means "don't try to create releases that already exist."
+
+### Skipping custom jobs
+
+If your workflow has custom jobs (tests, linting, etc.) and you want to skip one — for example, because you already ran checks locally:
+
+```bash
+uvr release --skip checks
+```
+
+`--skip` is repeatable. To skip multiple jobs:
+
+```bash
+uvr release --skip checks --skip docs
+```
+
+Custom jobs must check the plan's skip list in their `if` condition for this to work. See `custom-jobs.md`.
+
+### Constraints
+
+- `--reuse-run` requires build to be skipped (via `--skip build` or `--skip-to publish`/`--skip-to finalize`)
+- `--reuse-release` requires both build and publish to be skipped (via `--skip-to finalize`)
+- `--reuse-run` and `--reuse-release` are mutually exclusive
 
 ## Main moved ahead of the release branch
 

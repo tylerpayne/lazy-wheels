@@ -21,5 +21,5 @@ The generated workflow contains only the core pipeline. You can add custom jobs 
 
 - Requires a git repo with a `pyproject.toml` that defines `[tool.uv.workspace]` members.
 - After scaffolding, edit the workflow to add custom jobs for your project's quality gates.
-- Run `uvr validate` after manual edits to catch schema errors.
+- Run `uvr validate` after manual edits to catch schema errors (see `cmd-validate.md`).
 - `--force` overwrites the entire file. If you have custom jobs, back up first or re-add them after.
