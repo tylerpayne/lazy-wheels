@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.14.2] - 2026-03-27
+
+### Fixed
+- Fix build commands failing on Windows runners — replace `mkdir -p` and `find -delete` with cross-platform `uv run python -c` equivalents (#9)
+
 ## [v0.14.1] - 2026-03-27
 
 ### Fixed
