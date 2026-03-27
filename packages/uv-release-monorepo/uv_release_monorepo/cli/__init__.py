@@ -182,28 +182,13 @@ Run 'uvr <command> --help' for details on a specific command.
         action="append",
         metavar="JOB",
         help="Skip a CI job (repeatable).",
-        choices=[
-            "pre-build",
-            "build",
-            "post-build",
-            "pre-release",
-            "publish",
-            "finalize",
-            "post-release",
-        ],
+        choices=["build", "publish", "finalize"],
     )
     _dispatch.add_argument(
         "--skip-to",
         metavar="JOB",
         help="Skip all CI jobs before JOB.",
-        choices=[
-            "build",
-            "post-build",
-            "pre-release",
-            "publish",
-            "finalize",
-            "post-release",
-        ],
+        choices=["publish", "finalize"],
     )
     _dispatch.add_argument(
         "--reuse-run",

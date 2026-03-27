@@ -29,7 +29,7 @@ class TestInit:
         assert workflow.exists()
         text = workflow.read_text()
         assert "build:" in text
-        assert "pre-build:" in text
+        assert "release:" in text
         assert "finalize:" in text
 
     def test_init_workflow_has_plan_input(

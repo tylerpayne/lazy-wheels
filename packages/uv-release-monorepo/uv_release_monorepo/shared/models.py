@@ -219,8 +219,6 @@ class Job(BaseModel):
         return d
 
 
-_NOOP_STEPS: list[dict] = [{"name": "Never", "run": "echo 'Never'"}]
-
 # Shorthand for plan access in GitHub Actions expressions
 _P = "fromJSON(inputs.plan)"
 
@@ -328,26 +326,6 @@ def _frozen(default: Any, *, job: str = "", field: str = "") -> AfterValidator:
     return AfterValidator(_check)
 
 
-class HookJob(Job):
-    """Base for hook jobs. Ensures steps is never empty."""
-
-    steps: list[dict] = Field(default_factory=lambda: list(_NOOP_STEPS))
-
-    @model_validator(mode="after")
-    def _ensure_steps(self) -> HookJob:
-        if not self.steps:
-            self.steps = list(_NOOP_STEPS)
-        return self
-
-
-class PreBuildJob(HookJob):
-    """Pre-build hook. First in the pipeline."""
-
-    if_condition: str | None = Field(
-        default=f"${{{{ !contains({_P}.skip, 'pre-build') }}}}", alias="if"
-    )
-
-
 _BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
 _BUILD_RUNS_ON = "${{ matrix.runner }}"
 _BUILD_STRATEGY = {
@@ -371,27 +349,6 @@ class BuildJob(Job):
     steps: Annotated[list[dict], _frozen(_BUILD_STEPS, job="build", field="steps")] = (
         Field(default_factory=lambda: list(_BUILD_STEPS))
     )
-    _ensure_needs = _needs_validator("pre-build")
-
-
-class PostBuildJob(HookJob):
-    """Post-build hook. Must need build."""
-
-    if_condition: str | None = Field(
-        default=f"${{{{ always() && !failure() && !contains({_P}.skip, 'post-build') }}}}",
-        alias="if",
-    )
-    _ensure_needs = _needs_validator("build")
-
-
-class PreReleaseJob(HookJob):
-    """Pre-release hook. Must need post-build."""
-
-    if_condition: str | None = Field(
-        default=f"${{{{ always() && !failure() && !contains({_P}.skip, 'pre-release') }}}}",
-        alias="if",
-    )
-    _ensure_needs = _needs_validator("post-build")
 
 
 _PUBLISH_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'publish') }}}}"
@@ -401,7 +358,7 @@ _PUBLISH_STRATEGY = {
 }
 
 
-class PublishJob(Job):
+class ReleaseJob(Job):
     """The publish job. Frozen -- immutable fields enforced per-field."""
 
     if_condition: Annotated[
@@ -413,7 +370,7 @@ class PublishJob(Job):
     steps: Annotated[
         list[dict], _frozen(_PUBLISH_STEPS, job="publish", field="steps")
     ] = Field(default_factory=lambda: list(_PUBLISH_STEPS))
-    _ensure_needs = _needs_validator("pre-release")
+    _ensure_needs = _needs_validator("build")
 
 
 _FINALIZE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'finalize') }}}}"
@@ -431,32 +388,14 @@ class FinalizeJob(Job):
     _ensure_needs = _needs_validator("publish")
 
 
-class PostReleaseJob(HookJob):
-    """Post-release hook. Must need finalize."""
-
-    if_condition: str | None = Field(
-        default=f"${{{{ always() && !failure() && !contains({_P}.skip, 'post-release') }}}}",
-        alias="if",
-    )
-    _ensure_needs = _needs_validator("finalize")
-
-
 class WorkflowJobs(BaseModel):
     """All jobs in the release workflow."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    pre_build: PreBuildJob = Field(alias="pre-build", default_factory=PreBuildJob)
     build: BuildJob = Field(default_factory=BuildJob)
-    post_build: PostBuildJob = Field(alias="post-build", default_factory=PostBuildJob)
-    pre_release: PreReleaseJob = Field(
-        alias="pre-release", default_factory=PreReleaseJob
-    )
-    publish: PublishJob = Field(default_factory=PublishJob)
+    release: ReleaseJob = Field(default_factory=ReleaseJob)
     finalize: FinalizeJob = Field(default_factory=FinalizeJob)
-    post_release: PostReleaseJob = Field(
-        alias="post-release", default_factory=PostReleaseJob
-    )
 
 
 class ReleaseWorkflow(BaseModel):
@@ -485,13 +424,9 @@ class ReleaseWorkflow(BaseModel):
 
 
 JOB_ORDER: list[str] = [
-    "pre-build",
     "build",
-    "post-build",
-    "pre-release",
     "publish",
     "finalize",
-    "post-release",
 ]
 """Canonical ordering of jobs in the release workflow pipeline."""
 

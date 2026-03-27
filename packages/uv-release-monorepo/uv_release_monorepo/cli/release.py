@@ -7,9 +7,8 @@ import json
 from pathlib import Path
 
 from ..shared.graph import topo_layers
-from ..shared.models import JOB_ORDER, ReleasePlan, ReleaseWorkflow, _NOOP_STEPS
+from ..shared.models import JOB_ORDER, ReleasePlan
 from ._common import __version__, _fatal, _read_matrix
-from ._yaml import _load_yaml
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
@@ -55,7 +54,6 @@ def _print_plan(
     skipped: set[str],
 ) -> None:
     """Print a human-readable summary of the release plan."""
-    _HOOK_PHASES = {"pre-build", "post-build", "pre-release", "post-release"}
 
     # -- Packages --
     _section("Packages")
@@ -96,8 +94,7 @@ def _print_plan(
     print(f"  {'STATUS'.ljust(_sw)}  JOB")
     for job in JOB_ORDER:
         if job in skipped:
-            reason = "no-op" if job in _HOOK_PHASES else "user --skip"
-            print(f"  {'skip'.ljust(_sw)}  {job}  ({reason})")
+            print(f"  {'skip'.ljust(_sw)}  {job}  (--skip)")
             continue
 
         print(f"  {'run'.ljust(_sw)}  {job}")
@@ -260,21 +257,6 @@ def cmd_release(args: argparse.Namespace) -> None:
                 f"Use 'uvr release' (CI mode) instead, or remove custom runners:\n"
                 f"  uvr runners <pkg> --clear"
             )
-
-    # Auto-skip hook jobs that only have the default no-op step
-    if where == "ci":
-        _HOOK_PHASES = ["pre-build", "post-build", "pre-release", "post-release"]
-        workflow_path = root / args.workflow_dir / "release.yml"
-        if workflow_path.exists():
-            workflow_doc = _load_yaml(workflow_path)
-            model = ReleaseWorkflow.model_validate(workflow_doc)
-            jobs_dict = model.model_dump(by_alias=True, exclude_none=True).get(
-                "jobs", {}
-            )
-            for phase in _HOOK_PHASES:
-                job = jobs_dict.get(phase, {})
-                if job.get("steps") == _NOOP_STEPS:
-                    skipped.add(phase)
 
     # Dry run: print summary and exit
     if getattr(args, "dry_run", False):
