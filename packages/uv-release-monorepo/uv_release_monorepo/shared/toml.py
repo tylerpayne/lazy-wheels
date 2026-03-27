@@ -50,15 +50,17 @@ def get_project_version(doc: tomlkit.TOMLDocument) -> str:
 def get_all_dependency_strings(doc: tomlkit.TOMLDocument) -> list[str]:
     """Collect all dependency strings from a pyproject.toml.
 
-    Gathers dependencies from three locations:
+    Gathers dependencies from four locations:
+    - [build-system].requires (build-time deps)
     - [project].dependencies (main runtime deps)
     - [project].optional-dependencies.* (extras like [dev], [test])
     - [dependency-groups].* (PEP 735 dependency groups)
 
     Returns raw PEP 508 strings like "requests>=2.0" or "pkg[extra]~=1.0".
     """
+    deps: list[str] = list(doc.get("build-system", {}).get("requires", []))
     project = doc.get("project", {})
-    deps: list[str] = list(project.get("dependencies", []))
+    deps.extend(project.get("dependencies", []))
     # Collect optional dependency groups (e.g., [project.optional-dependencies.dev])
     for group_deps in project.get("optional-dependencies", {}).values():
         deps.extend(group_deps)

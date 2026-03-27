@@ -77,6 +77,16 @@ class TestGetAllDependencyStrings:
         deps = get_all_dependency_strings(sample_toml_doc)
         assert "hypothesis>=6.0" in deps
 
+    def test_gets_build_system_requires(self) -> None:
+        doc = tomlkit.parse(
+            '[build-system]\nrequires = ["hatchling", "my-tool>=1.0"]\n'
+            "[project]\nname = 'foo'\ndependencies = ['click>=8.0']\n"
+        )
+        deps = get_all_dependency_strings(doc)
+        assert "hatchling" in deps
+        assert "my-tool>=1.0" in deps
+        assert "click>=8.0" in deps
+
     def test_empty_when_no_deps(self) -> None:
         doc = tomlkit.parse("[project]\nname = 'foo'")
         assert get_all_dependency_strings(doc) == []
