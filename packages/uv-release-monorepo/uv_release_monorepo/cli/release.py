@@ -116,6 +116,7 @@ def _print_plan(
                 for runner_key, runner_entries in sorted(by_runner.items()):
                     labels = _json.loads(runner_key)
                     print(f"{_D}[{', '.join(labels)}]")
+                    local_layer = 0
                     for layer in range(max_layer + 1):
                         pkgs = [
                             e
@@ -125,7 +126,8 @@ def _print_plan(
                         if not pkgs:
                             continue
                         if max_layer > 0:
-                            print(f"{_D}  layer {layer}")
+                            print(f"{_D}  layer {local_layer}")
+                        local_layer += 1
                         for e in pkgs:
                             cur = plan.current_versions.get(e.package, e.version)
                             if cur != e.version:
@@ -217,7 +219,7 @@ def cmd_release(args: argparse.Namespace) -> None:
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
-        plan, pin_changes = _cli.ReleasePlanner(
+        plan, _pin_changes = _cli.ReleasePlanner(
             _cli.PlanConfig(
                 rebuild_all=args.rebuild_all,
                 matrix=package_runners,
@@ -275,43 +277,6 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     # Print human-readable summary
     _print_plan(plan, skipped)
-
-    # Prompt to write dep pins if needed
-    if pin_changes:
-        print()
-        print("Packages need to pin new dependencies")
-        print("--------------------------------------")
-        for pc in pin_changes:
-            for dc in pc.changes:
-                print(f"  uv add --package {pc.package} '{dc.new_spec}'")
-        files = " ".join(
-            f"{plan.changed[pc.package].path}/pyproject.toml" for pc in pin_changes
-        )
-        print(f"  git add {files} uv.lock")
-        print("  git commit -m 'chore: update dependency pins'")
-        print("  git push")
-        print("  uvr release")
-        print()
-        try:
-            answer = input("Proceed? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        if answer != "y":
-            return
-        from ..shared.plan import write_dep_pins
-
-        written = write_dep_pins(plan)
-        for pc in written:
-            for dc in pc.changes:
-                print(f"  {pc.package}: {dc.old_spec} -> {dc.new_spec}")
-        print()
-        print("Pin updates written. Commit and re-run:")
-        print(
-            "  git add -A && git commit -m 'chore: update dependency pins' && git push"
-        )
-        print("  uvr release")
-        return
 
     # Optionally dump raw JSON
     if getattr(args, "json", False):

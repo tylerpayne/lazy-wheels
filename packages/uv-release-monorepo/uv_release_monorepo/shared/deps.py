@@ -54,8 +54,9 @@ def set_version(pyproject_path: Path, new_version: str) -> None:
         new_version: New version string to set.
     """
     doc = load_pyproject(pyproject_path)
-    project = doc["project"]
-    assert isinstance(project, Table)
+    project = doc.get("project")
+    if not isinstance(project, Table):
+        return
     project["version"] = new_version
     save_pyproject(pyproject_path, doc)
 
@@ -81,8 +82,9 @@ def pin_dependencies(
     if not internal_dep_versions:
         return
     doc = load_pyproject(pyproject_path)
-    project = doc["project"]
-    assert isinstance(project, Table)
+    project = doc.get("project")
+    if not isinstance(project, Table):
+        return
 
     # Pin deps in [project].dependencies
     deps = project.get("dependencies")
@@ -145,8 +147,9 @@ def update_dep_pins(
     if not versions:
         return []
     doc = load_pyproject(path)
-    project = doc["project"]
-    assert isinstance(project, Table)
+    project = doc.get("project")
+    if not isinstance(project, Table):
+        return []
 
     changes: list[tuple[str, str]] = []
     deps = project.get("dependencies")

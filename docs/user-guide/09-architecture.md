@@ -58,6 +58,4 @@ commit E   ← my-pkg/v1.0.2-dev  (pyproject.toml bumped to 1.0.2.dev0; new diff
 
 ## The workflow model
 
-`release.yml` is generated from the `ReleaseWorkflow` Pydantic model. The model defines all seven jobs with their default steps, `needs` chain, and `if` conditions. Core jobs (build, publish, finalize) have default steps that warn (but don't fail) if modified. Hook jobs accept any steps.
-
-`uvr init` creates a fresh workflow. `uvr validate` checks an existing one against the model.
+`release.yml` is the source of truth for the workflow. The `ReleaseWorkflow` Pydantic model defines the expected schema -- all seven jobs with their default steps, `needs` chain, and `if` conditions. `uvr init` generates the initial YAML from the model's defaults. `uvr validate` checks an existing YAML against the model. Core jobs (build, publish, finalize) have default steps that warn (but don't fail) if modified. Hook jobs accept any steps.

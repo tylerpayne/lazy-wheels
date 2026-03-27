@@ -676,7 +676,6 @@ class TestBuildCommandStages:
         ):
             yield
 
-    @patch("uv_release_monorepo.shared.plan.update_dep_pins", return_value=[])
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
     @patch("uv_release_monorepo.shared.plan.find_release_tags")
@@ -687,7 +686,6 @@ class TestBuildCommandStages:
         mock_find_release: MagicMock,
         mock_find_dev: MagicMock,
         mock_detect: MagicMock,
-        _mock_pins: MagicMock,
     ) -> None:
         """Diamond dep graph produces setup + 3 build layers + cleanup stages."""
         packages = {

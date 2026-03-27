@@ -8,8 +8,8 @@ See [How it works](../user-guide/09-architecture.md) for the user-facing explana
 
 | Module | Key functions |
 |--------|---------------|
-| `deps.py` | `dep_canonical_name`, `pin_dep`, `rewrite_pyproject`, `update_dep_pins`, `_pin_dep_list` |
-| `pipeline.py` | `build_plan`, `write_dep_pins`, `bump_versions`, `collect_published_state` |
+| `deps.py` | `dep_canonical_name`, `pin_dep`, `pin_dependencies`, `rewrite_pyproject`, `update_dep_pins`, `_pin_dep_list` |
+| `plan.py` | `ReleasePlanner.plan`, `ReleasePlanner._detect_pin_changes`, `ReleasePlanner._generate_finalize_commands`, `write_dep_pins` |
 | `cli/release.py` | `cmd_release` (write-prompt flow) |
 
 ## Why pins exist
@@ -23,24 +23,24 @@ release for unchanged packages).
 
 ## Published version computation
 
-`pipeline.py:build_plan` computes a `published_versions` dict for all packages:
+`ReleasePlanner._published_versions` computes a `published_versions` dict for all packages:
 
-- **Changed packages**: publish at their current version (with `.dev` stripped).
-  The version in `pyproject.toml` during development is e.g., `1.2.4.dev`; after
+- **Changed packages**: publish at their computed release version. The version
+  in `pyproject.toml` during development is e.g., `1.2.4.dev0`; after
   stripping, the release version is `1.2.4`.
 
 - **Unchanged packages**: the version from their last release tag. The tag
-  `my-pkg/v1.2.3` is parsed by splitting on `/v` to extract `1.2.3`.
+  `my-pkg/v1.2.3` is parsed by `version_from_tag` to extract `1.2.3`.
 
 ```python
-published_versions: dict[str, str] = {}
+versions: dict[str, str] = {}
 for name in changed_names:
-    published_versions[name] = changed[name].version  # already stripped
+    versions[name] = changed[name].version
 for name, info in packages.items():
     if name not in changed_names:
         tag = release_tags.get(name)
-        published_versions[name] = (
-            tag.split("/v")[-1] if tag and "/v" in tag else info.version
+        versions[name] = (
+            version_from_tag(tag) if tag and "/v" in tag else info.version
         )
 ```
 
@@ -66,7 +66,7 @@ def pin_dep(dep_str: str, version: str) -> str:
 
 The `write` parameter controls whether changes are flushed to disk. When
 `write=False`, the function detects and returns changes without modifying the
-file. This is used by `build_plan` during plan generation.
+file. This is used by `_detect_pin_changes` during plan generation.
 
 ### Return value
 
@@ -81,32 +81,26 @@ Empty list means no pins needed updating.
 
 ## `deps.py:rewrite_pyproject`
 
-Lower-level function that both sets the package version **and** pins internal
-deps in a single write. Used during two pipeline phases:
-
-1. **Pre-build version strip** -- sets the release version (strips `.dev`),
-   no dep pin changes (`internal_dep_versions={}`).
-2. **Post-release bump** -- sets the next dev version and pins deps to the
-   just-published versions.
-
-Uses tomlkit to preserve TOML formatting and comments.
+Thin wrapper that calls `set_version()` + `pin_dependencies()` for backward
+compatibility. Sets the package version **and** pins internal deps in a single
+logical operation. Uses tomlkit to preserve TOML formatting and comments.
 
 ## The write-prompt flow in `cmd_release`
 
 `cli/release.py:cmd_release` orchestrates the user-facing pin update experience:
 
-1. `build_plan(..., dry_run=False)` returns `pin_changes` -- a list of
-   `(package_name, [(old_spec, new_spec), ...])` tuples. These were detected
-   with `write=False`.
+1. `ReleasePlanner(config).plan()` returns `pin_changes` -- a list of
+   `PinChange` objects containing `(package, [DepPinChange(old_spec, new_spec), ...])`.
+   These were detected with `write=False`.
 
 2. If `pin_changes` is non-empty, `_print_plan` displays them under a
    "Dependency pins" section.
 
 3. The user is prompted: `"Write dependency pin updates? [y/N]"`.
 
-4. On "y", `pipeline.py:write_dep_pins(plan)` is called, which recomputes
-   published versions from the plan and calls `update_dep_pins(..., write=True)`
-   for each changed package.
+4. On "y", `write_dep_pins(plan)` is called, which recomputes published
+   versions from the plan and runs `uv add --package PKG --frozen DEP>=VER`
+   for each changed dependency.
 
 5. After writing, the user is instructed to commit and re-run `uvr release`:
 
@@ -116,9 +110,9 @@ Uses tomlkit to preserve TOML formatting and comments.
      uvr release
    ```
 
-6. On the second run, `build_plan` detects no pending pin changes (they are
-   already committed), so `pin_changes` is empty and the release proceeds to
-   the dispatch prompt.
+6. On the second run, `_detect_pin_changes` detects no pending pin changes
+   (they are already committed), so `pin_changes` is empty and the release
+   proceeds to the dispatch prompt.
 
 ### Why two passes?
 
@@ -127,22 +121,32 @@ But writing pin changes modifies files, which would change the git state. The
 two-pass design (detect, prompt, write, re-run) keeps the plan generation pure
 and ensures the dispatched plan matches the committed code.
 
-## Post-release pinning in `bump_versions`
+## Post-release pinning in `_generate_finalize_commands`
 
-After a release, `pipeline.py:bump_versions` bumps each changed package to its
-next dev version and pins its internal deps to the **just-published** versions
-(not the bumped dev versions). This ensures that during development, each
-package's `pyproject.toml` declares constraints that are satisfiable from PyPI:
+After a release, the finalize phase bumps each changed package to its next dev
+version and pins its internal deps to the **just-published** versions (not the
+bumped dev versions). This ensures that during development, each package's
+`pyproject.toml` declares constraints that are satisfiable from PyPI.
+
+`_generate_finalize_commands` pre-computes `uvr pin-deps` shell commands for
+each package that has internal dependencies. These commands are embedded in the
+`ReleasePlan` and executed by the workflow (or locally) during finalization:
 
 ```python
-internal_dep_versions = {
-    dep: published_state[dep].published_version
-    for dep in pkg.info.deps
-    if dep in published_state
-}
-rewrite_pyproject(
-    Path(pkg.info.path) / "pyproject.toml",
-    make_dev(new_version),         # e.g., "1.2.5.dev"
-    internal_dep_versions,         # e.g., {"pkg-alpha": "0.1.5"}
-)
+# Pin internal deps to just-published versions
+dep_specs = [
+    f"{dep}>={published_versions[dep]}"
+    for dep in info.deps
+    if dep in published_versions
+]
+if dep_specs:
+    cmds.append(
+        PlanCommand(
+            args=["uvr", "pin-deps", "--path", pyproject] + dep_specs,
+            label=f"Pin {name} deps",
+        )
+    )
 ```
+
+The `uvr pin-deps` low-level command parses each `name>=version` spec and calls
+`pin_dependencies()` to rewrite the target `pyproject.toml`.

@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from packaging.utils import canonicalize_name
 
-from .deps import update_dep_pins
 from .graph import topo_layers
 from .models import (
     BuildStage,
     BumpPlan,
-    DepPinChange,
     MatrixEntry,
     PackageInfo,
     PinChange,
@@ -74,11 +71,6 @@ class ReleasePlanner:
             changed, changed_names, packages, release_tags
         )
 
-        # Check dep pins without writing
-        pin_changes = self._detect_pin_changes(
-            changed_names, packages, published_versions
-        )
-
         # Pre-compute version bumps (always bump to next .devN)
         bumps = self._compute_bumps(changed)
 
@@ -96,7 +88,7 @@ class ReleasePlanner:
 
         # Generate command sequences
         build_commands = self._generate_build_commands(
-            changed, unchanged, release_tags, matrix_entries
+            changed, unchanged, release_tags, matrix_entries, published_versions
         )
         publish_commands = self._generate_publish_commands(changed, release_tags)
         finalize_commands = self._generate_finalize_commands(
@@ -124,7 +116,7 @@ class ReleasePlanner:
             publish_commands=publish_commands,
             finalize_commands=finalize_commands,
         )
-        return result_plan, pin_changes
+        return result_plan, []
 
     def _compute_release_versions(
         self,
@@ -238,6 +230,7 @@ class ReleasePlanner:
         unchanged: dict[str, PackageInfo],
         release_tags: dict[str, str | None],
         matrix_entries: list[MatrixEntry],
+        published_versions: dict[str, str],
     ) -> dict[str, list[BuildStage]]:
         """Generate build command stages per runner.
 
@@ -298,7 +291,7 @@ class ReleasePlanner:
                         continue
                     info = changed_to_build[pkg]
                     release_ver = strip_dev(info.version)
-                    layer_cmds[pkg] = [
+                    pkg_cmds: list[PlanCommand] = [
                         PlanCommand(
                             args=[
                                 "uv",
@@ -309,6 +302,25 @@ class ReleasePlanner:
                             ],
                             label=f"Set {pkg} version to {release_ver}",
                         ),
+                    ]
+
+                    # Pin internal deps to published versions
+                    dep_specs = [
+                        f"{dep}>={published_versions[dep]}"
+                        for dep in info.deps
+                        if dep in published_versions
+                    ]
+                    if dep_specs:
+                        pyproject = f"{info.path}/pyproject.toml"
+                        pkg_cmds.append(
+                            PlanCommand(
+                                args=["uvr", "pin-deps", "--path", pyproject]
+                                + dep_specs,
+                                label=f"Pin {pkg} deps",
+                            )
+                        )
+
+                    pkg_cmds.append(
                         PlanCommand(
                             args=[
                                 "uv",
@@ -321,7 +333,8 @@ class ReleasePlanner:
                             ],
                             label=f"Build {pkg}",
                         ),
-                    ]
+                    )
+                    layer_cmds[pkg] = pkg_cmds
                 stages.append(BuildStage(commands=layer_cmds))
 
             # -- Cleanup stage: remove wheels not assigned to this runner --
@@ -607,35 +620,6 @@ class ReleasePlanner:
                 )
         return versions
 
-    def _detect_pin_changes(
-        self,
-        changed_names: list[str] | set[str],
-        packages: dict[str, PackageInfo],
-        published_versions: dict[str, str],
-    ) -> list[PinChange]:
-        pin_changes: list[PinChange] = []
-        for name in changed_names:
-            info = packages[name]
-            dep_versions = {
-                dep: published_versions[dep]
-                for dep in info.deps
-                if dep in published_versions
-            }
-            changes = update_dep_pins(
-                Path(info.path) / "pyproject.toml", dep_versions, write=False
-            )
-            if changes:
-                pin_changes.append(
-                    PinChange(
-                        package=name,
-                        changes=[
-                            DepPinChange(old_spec=old, new_spec=new)
-                            for old, new in changes
-                        ],
-                    )
-                )
-        return pin_changes
-
     def _expand_matrix(
         self,
         changed_names: list[str] | set[str],
@@ -703,51 +687,3 @@ class ReleasePlanner:
 def build_plan(config: PlanConfig) -> tuple[ReleasePlan, list[PinChange]]:
     """Run discovery locally and return a ReleasePlan and pin change details."""
     return ReleasePlanner(config).plan()
-
-
-def write_dep_pins(plan: ReleasePlan) -> list[PinChange]:
-    """Write pending dep pin updates via ``uv add --package PKG --frozen DEP>=VER``."""
-    published_versions: dict[str, str] = {}
-    for name, info in plan.changed.items():
-        published_versions[name] = info.version
-    for name in plan.unchanged:
-        tag = plan.release_tags.get(name)
-        published_versions[name] = (
-            version_from_tag(tag)
-            if tag and "/v" in tag
-            else plan.unchanged[name].version
-        )
-
-    result: list[PinChange] = []
-    for name, info in plan.changed.items():
-        dep_versions = {
-            dep: published_versions[dep]
-            for dep in info.deps
-            if dep in published_versions
-        }
-        changes = update_dep_pins(
-            Path(info.path) / "pyproject.toml", dep_versions, write=False
-        )
-        if changes:
-            result.append(
-                PinChange(
-                    package=name,
-                    changes=[
-                        DepPinChange(old_spec=old, new_spec=new) for old, new in changes
-                    ],
-                )
-            )
-
-    for pin_change in result:
-        for dep_change in pin_change.changes:
-            cmd = [
-                "uv",
-                "add",
-                "--package",
-                pin_change.package,
-                "--frozen",
-                dep_change.new_spec,
-            ]
-            subprocess.run(cmd, check=True)
-
-    return result
