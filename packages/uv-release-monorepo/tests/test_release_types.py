@@ -11,7 +11,7 @@ import pytest
 from packaging.version import Version
 
 from uv_release_monorepo.shared.models import PackageInfo, PlanConfig
-from uv_release_monorepo.shared.plan import ReleasePlanner
+from uv_release_monorepo.shared.planner import ReleasePlanner
 
 
 def _pep440(v: str) -> Version:

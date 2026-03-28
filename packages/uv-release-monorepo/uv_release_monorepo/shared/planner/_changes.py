@@ -6,10 +6,11 @@ from collections.abc import Mapping
 
 import pygit2
 
-from .git.local import diff_files
-from .graph import _build_graph_maps
-from .models import PackageInfo
-from .shell import step
+from ..git.local import diff_files
+from ..models import PackageInfo
+from ..shell import print_step
+
+from ._graph import _build_graph_maps
 
 
 def _check_package(
@@ -63,10 +64,10 @@ def detect_changes(
     Returns:
         List of changed package names.
     """
-    step("Detecting changes")
+    print_step("Detecting changes")
 
     if repo is None:
-        from .git.local import open_repo
+        from ..git.local import open_repo
 
         repo = open_repo()
 

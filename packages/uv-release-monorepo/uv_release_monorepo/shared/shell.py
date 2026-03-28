@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 
-def step(msg: str) -> None:
+def print_step(msg: str) -> None:
     """Print a visually distinct step header.
 
     Used to separate major phases of the release pipeline in terminal output.
@@ -13,7 +13,7 @@ def step(msg: str) -> None:
     print(f"\n{'─' * 60}\n{msg}\n{'─' * 60}")
 
 
-def fatal(msg: str) -> None:
+def exit_fatal(msg: str) -> None:
     """Print an error message and exit with code 1.
 
     Use for unrecoverable errors that should halt the pipeline.

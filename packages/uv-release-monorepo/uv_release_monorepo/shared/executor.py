@@ -66,7 +66,7 @@ class ReleaseExecutor:
         self.hook.post_finalize(self.plan)
 
     def run(self) -> None:
-        """Execute all phases: build → publish → finalize."""
+        """Execute all phases: build -> publish -> finalize."""
         self.build()
         self.publish()
         self.finalize()

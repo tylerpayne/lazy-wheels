@@ -1,26 +1,21 @@
-"""Tests for uv_release_monorepo.versions."""
+"""Tests for uv_release_monorepo.shared.planner._versions."""
 
 from __future__ import annotations
 
-from uv_release_monorepo.shared.versions import (
-    base_version,
+from uv_release_monorepo.shared.planner._versions import (
     bump_dev,
     bump_patch,
-    dev_number,
+    get_base_version,
     is_dev,
-    is_final,
-    is_postrelease,
-    is_prerelease,
     make_dev,
     make_post,
     make_pre,
     next_post_number,
     next_pre_number,
+    parse_tag_version,
     parse_version,
     strip_dev,
     strip_version,
-    tag_for_package,
-    version_from_tag,
 )
 
 
@@ -124,40 +119,11 @@ class TestBumpDev:
         assert bump_dev("1.2.3") == "1.2.3.dev0"
 
 
-class TestDevNumber:
-    def test_dev0(self) -> None:
-        assert dev_number("1.2.3.dev0") == 0
-
-    def test_dev5(self) -> None:
-        assert dev_number("1.2.3.dev5") == 5
-
-    def test_no_dev(self) -> None:
-        assert dev_number("1.2.3") is None
-
-
 class TestClassifiers:
     def test_is_dev(self) -> None:
         assert is_dev("1.2.3.dev0") is True
         assert is_dev("1.2.3") is False
         assert is_dev("1.2.3a0") is False
-
-    def test_is_prerelease(self) -> None:
-        assert is_prerelease("1.2.3a0") is True
-        assert is_prerelease("1.2.3b1") is True
-        assert is_prerelease("1.2.3rc0") is True
-        assert is_prerelease("1.2.3") is False
-        assert is_prerelease("1.2.3.dev0") is False
-
-    def test_is_postrelease(self) -> None:
-        assert is_postrelease("1.2.3.post0") is True
-        assert is_postrelease("1.2.3") is False
-        assert is_postrelease("1.2.3.dev0") is False
-
-    def test_is_final(self) -> None:
-        assert is_final("1.2.3") is True
-        assert is_final("1.2.3.dev0") is True  # dev of a final
-        assert is_final("1.2.3a0") is False
-        assert is_final("1.2.3.post0") is False
 
 
 class TestStripVersion:
@@ -195,23 +161,23 @@ class TestStripVersion:
         assert strip_version("1.2.3a1", pre=True) == "1.2.3"
 
 
-class TestBaseVersion:
+class TestGetBaseVersion:
     def test_plain(self) -> None:
-        assert base_version("1.2.3") == "1.2.3"
+        assert get_base_version("1.2.3") == "1.2.3"
 
     def test_dev(self) -> None:
-        assert base_version("1.2.3.dev0") == "1.2.3"
+        assert get_base_version("1.2.3.dev0") == "1.2.3"
 
     def test_pre(self) -> None:
-        assert base_version("1.2.3a1") == "1.2.3"
-        assert base_version("1.2.3b0") == "1.2.3"
-        assert base_version("1.2.3rc2") == "1.2.3"
+        assert get_base_version("1.2.3a1") == "1.2.3"
+        assert get_base_version("1.2.3b0") == "1.2.3"
+        assert get_base_version("1.2.3rc2") == "1.2.3"
 
     def test_post(self) -> None:
-        assert base_version("1.2.3.post0") == "1.2.3"
+        assert get_base_version("1.2.3.post0") == "1.2.3"
 
     def test_post_dev(self) -> None:
-        assert base_version("1.2.3.post0.dev0") == "1.2.3"
+        assert get_base_version("1.2.3.post0.dev0") == "1.2.3"
 
 
 class TestMakePre:
@@ -263,20 +229,12 @@ class TestNextPostNumber:
         assert next_post_number(tags, "pkg") == 0
 
 
-class TestVersionFromTag:
+class TestParseTagVersion:
     def test_simple_tag(self) -> None:
-        assert version_from_tag("pkg/v1.0.0") == "1.0.0"
+        assert parse_tag_version("pkg/v1.0.0") == "1.0.0"
 
     def test_dev_tag(self) -> None:
-        assert version_from_tag("my-pkg/v2.3.4.dev0") == "2.3.4.dev0"
+        assert parse_tag_version("my-pkg/v2.3.4.dev0") == "2.3.4.dev0"
 
     def test_hyphenated_name(self) -> None:
-        assert version_from_tag("my-long-pkg/v0.1.0") == "0.1.0"
-
-
-class TestTagForPackage:
-    def test_simple(self) -> None:
-        assert tag_for_package("pkg", "1.0.0") == "pkg/v1.0.0"
-
-    def test_hyphenated(self) -> None:
-        assert tag_for_package("my-pkg", "2.3.4") == "my-pkg/v2.3.4"
+        assert parse_tag_version("my-long-pkg/v0.1.0") == "0.1.0"

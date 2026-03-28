@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 
 from ..shared.models import PlanConfig, ReleasePlan
-from ..shared.plan import ReleasePlanner, build_plan
-from ..shared.execute import ReleaseExecutor
+from ..shared.planner import ReleasePlanner, build_plan
+from ..shared.executor import ReleaseExecutor
 from ._common import (
     __version__,
     _discover_package_names,
@@ -369,9 +369,9 @@ Run 'uvr <command> --help' for details on a specific command.
         from pathlib import Path
         from ..shared.hooks import load_hook
 
-        plan = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
+        plan_obj = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
         hook = load_hook(Path.cwd())
-        ReleaseExecutor(plan, hook).build(runner=a.runner)
+        ReleaseExecutor(plan_obj, hook).build(runner=a.runner)
 
     build_parser = subparsers.add_parser("build", help=_H)
     build_parser.add_argument(
@@ -386,9 +386,9 @@ Run 'uvr <command> --help' for details on a specific command.
         from pathlib import Path
         from ..shared.hooks import load_hook
 
-        plan = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
+        plan_obj = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
         hook = load_hook(Path.cwd())
-        ReleaseExecutor(plan, hook).finalize()
+        ReleaseExecutor(plan_obj, hook).finalize()
 
     finalize_parser = subparsers.add_parser("finalize", help=_H)
     finalize_parser.add_argument(
@@ -402,7 +402,7 @@ Run 'uvr <command> --help' for details on a specific command.
 
     def _cmd_pin_deps(a: argparse.Namespace) -> None:
         from pathlib import Path
-        from ..shared.deps import pin_dependencies
+        from ..shared.planner._dependencies import pin_dependencies
 
         versions: dict[str, str] = {}
         for spec in a.specs:

@@ -52,37 +52,9 @@ def bump_dev(version_str: str) -> str:
     return f"{version_str}.dev0"
 
 
-def dev_number(version_str: str) -> int | None:
-    """Extract the dev number from a version string.
-
-    Examples:
-        "1.2.3.dev0" -> 0
-        "1.2.3.dev5" -> 5
-        "1.2.3" -> None
-    """
-    m = _DEV_NUM_RE.search(version_str)
-    return int(m.group(1)) if m else None
-
-
 def is_dev(version_str: str) -> bool:
     """Check if a version has a .devN suffix."""
     return _DEV_RE.search(version_str) is not None
-
-
-def is_prerelease(version_str: str) -> bool:
-    """Check if a version has a pre-release suffix (aN, bN, rcN)."""
-    return re.search(r"(a|b|rc)\d+", strip_dev(version_str)) is not None
-
-
-def is_postrelease(version_str: str) -> bool:
-    """Check if a version has a .postN suffix."""
-    return ".post" in strip_dev(version_str)
-
-
-def is_final(version_str: str) -> bool:
-    """Check if a version is a plain final release (no dev/pre/post)."""
-    v = strip_dev(version_str)
-    return not is_prerelease(v) and not is_postrelease(v)
 
 
 def strip_version(
@@ -118,7 +90,7 @@ def strip_version(
     return v
 
 
-def base_version(version_str: str) -> str:
+def get_base_version(version_str: str) -> str:
     """Strip all dev/pre/post suffixes to get the base X.Y.Z.
 
     Examples:
@@ -142,7 +114,7 @@ def make_pre(version_str: str, kind: str, n: int = 0) -> str:
         make_pre("1.2.3.dev2", "a") -> "1.2.3a0"
         make_pre("1.2.3.dev2", "rc", 1) -> "1.2.3rc1"
     """
-    return f"{base_version(version_str)}{kind}{n}"
+    return f"{get_base_version(version_str)}{kind}{n}"
 
 
 def make_post(version_str: str, n: int = 0) -> str:
@@ -156,7 +128,7 @@ def make_post(version_str: str, n: int = 0) -> str:
         make_post("1.2.3") -> "1.2.3.post0"
         make_post("1.2.3", 1) -> "1.2.3.post1"
     """
-    return f"{base_version(version_str)}.post{n}"
+    return f"{get_base_version(version_str)}.post{n}"
 
 
 def next_pre_number(existing_tags: list[str], name: str, kind: str) -> int:
@@ -183,7 +155,7 @@ def next_post_number(existing_tags: list[str], name: str) -> int:
     return max(numbers) + 1 if numbers else 0
 
 
-def version_from_tag(tag: str) -> str:
+def parse_tag_version(tag: str) -> str:
     """Extract the version string from a release tag.
 
     Tags follow the pattern ``{package-name}/v{version}``.
@@ -193,16 +165,6 @@ def version_from_tag(tag: str) -> str:
         "my-pkg/v2.3.4.dev0" -> "2.3.4.dev0"
     """
     return tag.split("/v")[-1]
-
-
-def tag_for_package(name: str, version: str) -> str:
-    """Build a release tag from a package name and version.
-
-    Examples:
-        ("pkg", "1.0.0") -> "pkg/v1.0.0"
-        ("my-pkg", "2.3.4") -> "my-pkg/v2.3.4"
-    """
-    return f"{name}/v{version}"
 
 
 def parse_version(version_str: str) -> semver.Version:
@@ -216,7 +178,7 @@ def parse_version(version_str: str) -> semver.Version:
     - "1.2.3.dev0" -> "1.2.3"
     - "1.2.3a1" -> "1.2.3"
     """
-    cleaned = base_version(version_str)
+    cleaned = get_base_version(version_str)
     parts = cleaned.split(".")
     while len(parts) < 3:
         parts.append("0")

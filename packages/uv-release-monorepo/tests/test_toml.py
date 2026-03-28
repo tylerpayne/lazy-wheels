@@ -7,15 +7,15 @@ from pathlib import Path
 import tomlkit
 
 from uv_release_monorepo.shared.config import (
-    get_uvr_hooks,
-    get_uvr_matrix,
+    get_hooks,
+    get_matrix,
     get_workspace_member_globs,
-    set_uvr_matrix,
+    set_matrix,
 )
 from packaging.utils import canonicalize_name
 
-from uv_release_monorepo.shared.deps import get_all_dependency_strings
-from uv_release_monorepo.shared.toml import load_pyproject, save_pyproject
+from uv_release_monorepo.shared.packages import _get_dependencies
+from uv_release_monorepo.shared.toml import read_pyproject, write_pyproject
 
 
 def _get_project_name(doc: tomlkit.TOMLDocument, fallback: str) -> str:
@@ -28,16 +28,16 @@ def _get_project_version(doc: tomlkit.TOMLDocument) -> str:
 
 class TestLoadSavePyproject:
     def test_load(self, tmp_pyproject: Path) -> None:
-        doc = load_pyproject(tmp_pyproject)
+        doc = read_pyproject(tmp_pyproject)
         assert _get_project_name(doc, "") == "test-package"
 
     def test_save_preserves_content(self, tmp_pyproject: Path) -> None:
-        doc = load_pyproject(tmp_pyproject)
+        doc = read_pyproject(tmp_pyproject)
         project = doc.get("project", {})
         project["version"] = "9.9.9"
-        save_pyproject(tmp_pyproject, doc)
+        write_pyproject(tmp_pyproject, doc)
 
-        reloaded = load_pyproject(tmp_pyproject)
+        reloaded = read_pyproject(tmp_pyproject)
         assert _get_project_version(reloaded) == "9.9.9"
         assert _get_project_name(reloaded, "") == "test-package"
 
@@ -68,21 +68,21 @@ class TestGetProjectVersion:
         assert _get_project_version(doc) == "0.0.0"
 
 
-class TestGetAllDependencyStrings:
+class TestGetDependencies:
     def test_gets_main_deps(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
-        deps = get_all_dependency_strings(sample_toml_doc)
+        deps = _get_dependencies(sample_toml_doc)
         assert "click>=8.0" in deps
         assert "pydantic>=2.0" in deps
 
     def test_gets_optional_deps(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
-        deps = get_all_dependency_strings(sample_toml_doc)
+        deps = _get_dependencies(sample_toml_doc)
         assert "pytest>=8.0" in deps
         assert "sphinx>=7.0" in deps
 
     def test_gets_dependency_groups(
         self, sample_toml_doc: tomlkit.TOMLDocument
     ) -> None:
-        deps = get_all_dependency_strings(sample_toml_doc)
+        deps = _get_dependencies(sample_toml_doc)
         assert "hypothesis>=6.0" in deps
 
     def test_gets_build_system_requires(self) -> None:
@@ -90,14 +90,14 @@ class TestGetAllDependencyStrings:
             '[build-system]\nrequires = ["hatchling", "my-tool>=1.0"]\n'
             "[project]\nname = 'foo'\ndependencies = ['click>=8.0']\n"
         )
-        deps = get_all_dependency_strings(doc)
+        deps = _get_dependencies(doc)
         assert "hatchling" in deps
         assert "my-tool>=1.0" in deps
         assert "click>=8.0" in deps
 
     def test_empty_when_no_deps(self) -> None:
         doc = tomlkit.parse("[project]\nname = 'foo'")
-        assert get_all_dependency_strings(doc) == []
+        assert _get_dependencies(doc) == []
 
 
 class TestGetWorkspaceMemberGlobs:
@@ -109,22 +109,22 @@ class TestGetWorkspaceMemberGlobs:
 class TestUvrHooks:
     def test_returns_empty_when_missing(self) -> None:
         doc = tomlkit.parse("[project]\nname = 'foo'\n")
-        assert get_uvr_hooks(doc) == {}
+        assert get_hooks(doc) == {}
 
     def test_string_value(self) -> None:
         doc = tomlkit.parse('[tool.uvr.hooks]\nfile = "uvr_hooks.py:MyHook"\n')
-        assert get_uvr_hooks(doc) == {"file": "uvr_hooks.py:MyHook"}
+        assert get_hooks(doc) == {"file": "uvr_hooks.py:MyHook"}
 
     def test_bare_path(self) -> None:
         doc = tomlkit.parse('[tool.uvr.hooks]\nfile = "scripts/hooks.py"\n')
-        assert get_uvr_hooks(doc) == {"file": "scripts/hooks.py"}
+        assert get_hooks(doc) == {"file": "scripts/hooks.py"}
 
 
 class TestUvrMatrix:
     def test_get_uvr_matrix_returns_empty_when_missing(self) -> None:
         """Returns {} when there is no [tool.uvr] section."""
         doc = tomlkit.parse("[project]\nname = 'foo'\n")
-        assert get_uvr_matrix(doc) == {}
+        assert get_matrix(doc) == {}
 
     def test_get_uvr_matrix_returns_matrix(self) -> None:
         """Parses a doc that has [tool.uvr.matrix]."""
@@ -134,7 +134,7 @@ pkg-alpha = ["ubuntu-latest", "macos-14"]
 pkg-beta = ["ubuntu-latest"]
 """
         doc = tomlkit.parse(content)
-        result = get_uvr_matrix(doc)
+        result = get_matrix(doc)
         assert result == {
             "pkg-alpha": [["ubuntu-latest"], ["macos-14"]],
             "pkg-beta": [["ubuntu-latest"]],
@@ -147,8 +147,8 @@ pkg-beta = ["ubuntu-latest"]
             "pkg-beta": [["ubuntu-latest"], ["macos-14"]],
             "pkg-alpha": [["ubuntu-latest"]],
         }
-        set_uvr_matrix(doc, matrix)
-        result = get_uvr_matrix(doc)
+        set_matrix(doc, matrix)
+        result = get_matrix(doc)
         assert result == {
             "pkg-alpha": [["ubuntu-latest"]],
             "pkg-beta": [["ubuntu-latest"], ["macos-14"]],

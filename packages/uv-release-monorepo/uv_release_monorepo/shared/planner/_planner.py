@@ -7,8 +7,8 @@ from pathlib import Path
 
 from packaging.utils import canonicalize_name
 
-from .graph import topo_layers
-from .models import (
+from ..config import get_config
+from ..models import (
     BuildStage,
     ChangedPackage,
     PackageInfo,
@@ -16,25 +16,26 @@ from .models import (
     PlanConfig,
     ReleasePlan,
 )
-from .deps import pin_dependencies, set_version
-from .config import get_uvr_config
-from .toml import load_pyproject
-from .versions import (
-    base_version,
+from ..toml import read_pyproject
+
+from ._changes import detect_changes
+from ._dependencies import pin_dependencies, set_version
+from ._graph import topo_layers
+from ._versions import (
     bump_dev,
     bump_patch,
+    get_base_version,
     is_dev,
     make_dev,
     make_post,
     make_pre,
     next_post_number,
     next_pre_number,
-    version_from_tag,
+    parse_tag_version,
 )
-from .changes import detect_changes
-from .discovery import discover_packages, find_release_tags, get_baseline_tags
-from .git.local import generate_release_notes, list_tags, open_repo
-from .git.remote import list_release_tag_names
+from ..packages import find_baseline_tags, find_packages, find_release_tags
+from ..git.local import generate_release_notes, list_tags, open_repo
+from ..git.remote import list_release_tag_names
 
 
 def _dist_name(name: str) -> str:
@@ -59,9 +60,9 @@ class ReleasePlanner:
         all_git_tags_set = set(all_git_tags)
         all_gh_releases = list_release_tag_names()
 
-        packages = discover_packages()
+        packages = find_packages()
         release_tags = find_release_tags(packages, gh_releases=all_gh_releases)
-        baselines = get_baseline_tags(packages, all_tags=all_git_tags_set)
+        baselines = find_baseline_tags(packages, all_tags=all_git_tags_set)
         changed_names = detect_changes(
             packages, baselines, self.config.rebuild_all, repo=repo
         )
@@ -104,8 +105,8 @@ class ReleasePlanner:
             notes[name] = generate_release_notes(name, info, baseline, repo=repo)
 
         # Determine which package gets "Latest" on GitHub
-        root_doc = load_pyproject(Path.cwd() / "pyproject.toml")
-        latest_pkg = get_uvr_config(root_doc).get("latest", "")
+        root_doc = read_pyproject(Path.cwd() / "pyproject.toml")
+        latest_pkg = get_config(root_doc).get("latest", "")
 
         # Assemble ChangedPackage objects
         changed: dict[str, ChangedPackage] = {}
@@ -178,14 +179,14 @@ class ReleasePlanner:
                 n: changed[n] for n in sorted(changed) if not is_dev(changed[n].version)
             }
             if bad:
-                from .shell import fatal
+                from ..shell import exit_fatal
 
                 lines = "\n".join(
                     f"  uv version {make_dev(info.version)} --directory {info.path}"
                     for info in bad.values()
                 )
                 names = ", ".join(bad)
-                fatal(
+                exit_fatal(
                     f"--dev release requires a .devN version in pyproject.toml, "
                     f"but these packages have clean versions: {names}\n"
                     f"Fix with:\n{lines}"
@@ -194,17 +195,17 @@ class ReleasePlanner:
                 result[name] = info.version
         elif rt == "pre":
             for name, info in changed.items():
-                bv = base_version(info.version)
+                bv = get_base_version(info.version)
                 n = next_pre_number(all_git_tags, name, self.config.pre_kind)
                 result[name] = make_pre(bv, self.config.pre_kind, n)
         elif rt == "post":
             for name, info in changed.items():
-                bv = base_version(info.version)
+                bv = get_base_version(info.version)
                 n = next_post_number(all_git_tags, name)
                 result[name] = make_post(bv, n)
         else:
             for name, info in changed.items():
-                result[name] = base_version(info.version)
+                result[name] = get_base_version(info.version)
 
         return result
 
@@ -243,7 +244,7 @@ class ReleasePlanner:
         """Generate build command stages per runner."""
         all_packages: dict[str, PackageInfo] = {**changed, **unchanged}
 
-        # Build runner → assigned packages mapping from ChangedPackage.runners
+        # Build runner -> assigned packages mapping from ChangedPackage.runners
         by_runner: dict[tuple[str, ...], set[str]] = {}
         for name, pkg in changed.items():
             for runner in pkg.runners:
@@ -406,7 +407,7 @@ class ReleasePlanner:
                 )
             )
 
-        # Release tags (local only — CI publish action creates them)
+        # Release tags (local only -- CI publish action creates them)
         if not self.config.ci_publish:
             for name, pkg in sorted(changed.items()):
                 tag = f"{name}/v{pkg.release_version}"
@@ -484,7 +485,7 @@ class ReleasePlanner:
         all_gh_releases: set[str],
     ) -> None:
         """Verify that no tags or releases the plan will create already exist."""
-        from .shell import fatal
+        from ..shell import exit_fatal
 
         planned_tags: list[str] = []
         for name, pkg in changed.items():
@@ -504,7 +505,7 @@ class ReleasePlanner:
         post_versions = []
         for t in conflicts:
             if t in all_gh_releases:
-                ver = version_from_tag(t)
+                ver = parse_tag_version(t)
                 post_ver = make_post(
                     ver, next_post_number(list(all_gh_releases), t.split("/v")[0])
                 )
@@ -520,7 +521,7 @@ class ReleasePlanner:
         bump_cmds = []
         for t in conflicts:
             if t in all_gh_releases:
-                ver = version_from_tag(t)
+                ver = parse_tag_version(t)
                 next_ver = make_dev(bump_patch(ver))
                 pkg_name = t.split("/v")[0]
                 pkg_path = (
@@ -537,7 +538,7 @@ class ReleasePlanner:
         else:
             bump_hint = "  2. Bump to a new version: uv version <new-version> --directory <pkg>\n"
 
-        fatal(
+        exit_fatal(
             f"These tags/releases already exist and would conflict:\n"
             f"{lines}\n\n"
             f"To resolve, either:\n"
@@ -559,7 +560,7 @@ class ReleasePlanner:
             if name not in changed_names:
                 tag = release_tags.get(name)
                 versions[name] = (
-                    version_from_tag(tag) if tag and "/v" in tag else info.version
+                    parse_tag_version(tag) if tag and "/v" in tag else info.version
                 )
         return versions
 

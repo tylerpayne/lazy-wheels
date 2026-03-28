@@ -7,7 +7,7 @@ on package B, B is built first.
 
 from __future__ import annotations
 
-from .models import PackageInfo
+from ..models import PackageInfo
 
 
 def _build_graph_maps(
@@ -24,48 +24,6 @@ def _build_graph_maps(
     return in_degree, reverse_deps
 
 
-def topo_sort(packages: dict[str, PackageInfo]) -> list[str]:
-    """Topologically sort packages by their internal dependencies.
-
-    Uses Kahn's algorithm to produce a build order where dependencies
-    come before dependents. Packages with no dependencies are sorted
-    alphabetically for deterministic output.
-
-    Args:
-        packages: Map of package name → PackageInfo with deps list.
-
-    Returns:
-        List of package names in build order (dependencies first).
-
-    Raises:
-        RuntimeError: If a dependency cycle is detected.
-
-    Example:
-        If A depends on B, and B depends on C:
-        topo_sort({A, B, C}) → [C, B, A]
-    """
-    in_degree, reverse_deps = _build_graph_maps(packages)
-    queue = sorted(n for n, d in in_degree.items() if d == 0)
-    order: list[str] = []
-
-    while queue:
-        node = queue.pop(0)
-        order.append(node)
-        # Decrement in_degree for all packages that depend on this one
-        for dependent in sorted(reverse_deps[node]):
-            in_degree[dependent] -= 1
-            # When a package has all deps satisfied, add to queue
-            if in_degree[dependent] == 0:
-                queue.append(dependent)
-
-    # If we didn't process all packages, there must be a cycle
-    if len(order) != len(packages):
-        remaining = set(packages) - set(order)
-        raise RuntimeError(f"Dependency cycle detected involving: {remaining}")
-
-    return order
-
-
 def topo_layers(packages: dict[str, PackageInfo]) -> dict[str, int]:
     """Assign each package a build layer based on dependency depth.
 
@@ -76,10 +34,10 @@ def topo_layers(packages: dict[str, PackageInfo]) -> dict[str, int]:
     gets a layer number equal to the max layer of its dependencies + 1.
 
     Args:
-        packages: Map of package name → PackageInfo with deps list.
+        packages: Map of package name -> PackageInfo with deps list.
 
     Returns:
-        Dict mapping package name → layer number.
+        Dict mapping package name -> layer number.
 
     Raises:
         RuntimeError: If a dependency cycle is detected.

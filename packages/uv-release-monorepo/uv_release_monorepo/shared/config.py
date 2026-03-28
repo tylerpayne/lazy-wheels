@@ -10,7 +10,8 @@ import tomlkit
 from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.items import Table
 
-from .shell import fatal
+from .shell import exit_fatal
+from .toml import get_path
 
 
 def get_workspace_member_globs(doc: tomlkit.TOMLDocument) -> list[str]:
@@ -22,13 +23,13 @@ def get_workspace_member_globs(doc: tomlkit.TOMLDocument) -> list[str]:
     Raises:
         SystemExit: If no workspace members are defined.
     """
-    members = doc.get("tool", {}).get("uv", {}).get("workspace", {}).get("members")
+    members = get_path(doc, "tool", "uv", "workspace", "members")
     if not members:
-        fatal("No [tool.uv.workspace] members defined in root pyproject.toml")
+        exit_fatal("No [tool.uv.workspace] members defined in root pyproject.toml")
     return list(members)
 
 
-def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict:
+def get_config(doc: tomlkit.TOMLDocument) -> dict:
     """Extract [tool.uvr.config] as a dict.
 
     Supported keys:
@@ -40,7 +41,7 @@ def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict:
     If ``include`` is set, only listed packages are considered.
     ``exclude`` is applied after ``include``.
     """
-    raw = doc.get("tool", {}).get("uvr", {}).get("config", {})
+    raw = get_path(doc, "tool", "uvr", "config", default={})
     return {
         "include": list(raw.get("include", [])),
         "exclude": list(raw.get("exclude", [])),
@@ -49,7 +50,7 @@ def get_uvr_config(doc: tomlkit.TOMLDocument) -> dict:
     }
 
 
-def get_uvr_hooks(doc: tomlkit.TOMLDocument) -> dict[str, str]:
+def get_hooks(doc: tomlkit.TOMLDocument) -> dict[str, str]:
     """Extract [tool.uvr.hooks] as a dict.
 
     Supported keys:
@@ -57,13 +58,13 @@ def get_uvr_hooks(doc: tomlkit.TOMLDocument) -> dict[str, str]:
               subclass, optionally with ``:ClassName`` suffix.  When the
               class name is omitted it defaults to ``Hook``.
     """
-    raw = doc.get("tool", {}).get("uvr", {}).get("hooks", {})
+    raw = get_path(doc, "tool", "uvr", "hooks", default={})
     return {str(k): str(v) for k, v in raw.items()}
 
 
-def get_uvr_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
+def get_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
     """Extract [tool.uvr.matrix] as {package: [[label, ...], ...]}."""
-    raw = doc.get("tool", {}).get("uvr", {}).get("matrix", {})
+    raw = get_path(doc, "tool", "uvr", "matrix", default={})
     result: dict[str, list[list[str]]] = {}
     for k, v in raw.items():
         runners: list[list[str]] = []
@@ -77,9 +78,7 @@ def get_uvr_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
     return result
 
 
-def set_uvr_matrix(
-    doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]
-) -> None:
+def set_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]) -> None:
     """Write {package: [[label, ...], ...]} into [tool.uvr.matrix]."""
     if "tool" not in doc:
         doc["tool"] = tomlkit.table()

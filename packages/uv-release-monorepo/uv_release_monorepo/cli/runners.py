@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..shared.config import get_uvr_matrix, set_uvr_matrix
-from ..shared.toml import load_pyproject, save_pyproject
+from ..shared.config import get_matrix, set_matrix
+from ..shared.toml import read_pyproject, write_pyproject
 from ._common import _discover_package_names, _fatal, _print_matrix_status
 
 _DEFAULT_RUNNERS: list[list[str]] = [["ubuntu-latest"]]
@@ -19,8 +19,8 @@ def cmd_runners(args: argparse.Namespace) -> None:
     if not pyproject.exists():
         _fatal("No pyproject.toml found in current directory.")
 
-    doc = load_pyproject(pyproject)
-    matrix = get_uvr_matrix(doc)
+    doc = read_pyproject(pyproject)
+    matrix = get_matrix(doc)
 
     pkg: str | None = getattr(args, "package", None)
     add_val: str | None = getattr(args, "add_value", None)
@@ -38,8 +38,8 @@ def cmd_runners(args: argparse.Namespace) -> None:
     if clear:
         if pkg in matrix:
             del matrix[pkg]
-            set_uvr_matrix(doc, matrix)
-            save_pyproject(pyproject, doc)
+            set_matrix(doc, matrix)
+            write_pyproject(pyproject, doc)
             print(f"Cleared runners for '{pkg}'.")
         else:
             print(f"'{pkg}' has no runners configured.")
@@ -54,8 +54,8 @@ def cmd_runners(args: argparse.Namespace) -> None:
             return
         runners.append(labels)
         matrix[pkg] = runners
-        set_uvr_matrix(doc, matrix)
-        save_pyproject(pyproject, doc)
+        set_matrix(doc, matrix)
+        write_pyproject(pyproject, doc)
         print(f"Added [{', '.join(labels)}] to '{pkg}' runners.")
         return
 
@@ -70,8 +70,8 @@ def cmd_runners(args: argparse.Namespace) -> None:
             matrix[pkg] = runners
         else:
             del matrix[pkg]
-        set_uvr_matrix(doc, matrix)
-        save_pyproject(pyproject, doc)
+        set_matrix(doc, matrix)
+        write_pyproject(pyproject, doc)
         print(f"Removed [{', '.join(labels)}] from '{pkg}' runners.")
         return
 

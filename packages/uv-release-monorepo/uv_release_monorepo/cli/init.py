@@ -10,9 +10,9 @@ from pathlib import Path
 
 import shutil
 
-from ..shared.config import get_uvr_config
+from ..shared.config import get_config
 from ..shared.models.workflow import ReleaseWorkflow
-from ..shared.toml import load_pyproject, save_pyproject
+from ..shared.toml import read_pyproject, write_pyproject
 from ._common import _fatal
 from ._yaml import _dump_yaml, _load_yaml, _write_yaml
 
@@ -41,7 +41,7 @@ def _resolve_editor(args: argparse.Namespace, root: Path) -> str | None:
     # [tool.uvr.config].editor
     pyproject = root / "pyproject.toml"
     if pyproject.exists():
-        config = get_uvr_config(load_pyproject(pyproject))
+        config = get_config(read_pyproject(pyproject))
         toml_editor = config.get("editor", "")
         if toml_editor:
             return toml_editor
@@ -99,12 +99,12 @@ def _git_commit_and_record(
 
     # Store the commit hash in [tool.uvr.config]
     pyproject = root / "pyproject.toml"
-    doc = load_pyproject(pyproject)
+    doc = read_pyproject(pyproject)
     tool = doc.setdefault("tool", {})
     uvr = tool.setdefault("uvr", {})
     config = uvr.setdefault("config", {})
     config[config_key] = str(commit_oid)
-    save_pyproject(pyproject, doc)
+    write_pyproject(pyproject, doc)
 
     # Amend the commit to include the pyproject.toml change
     repo.index.add("pyproject.toml")
@@ -127,7 +127,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     if not pyproject.exists():
         _fatal("No pyproject.toml found in current directory.")
 
-    doc = load_pyproject(pyproject)
+    doc = read_pyproject(pyproject)
     members = doc.get("tool", {}).get("uv", {}).get("workspace", {}).get("members")
     if not members:
         _fatal(
@@ -210,7 +210,7 @@ def _get_base_text(root: Path, rel_path: str, config_key: str) -> str:
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
         return ""
-    doc = load_pyproject(pyproject)
+    doc = read_pyproject(pyproject)
     commit_hex = doc.get("tool", {}).get("uvr", {}).get("config", {}).get(config_key)
     if not commit_hex:
         return ""

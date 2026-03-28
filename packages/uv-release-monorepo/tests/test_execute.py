@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uv_release_monorepo.shared.execute import ReleaseExecutor
+from uv_release_monorepo.shared.executor import ReleaseExecutor
 from uv_release_monorepo.shared.models import BuildStage, PlanCommand, ReleasePlan
 
 
@@ -31,7 +31,7 @@ def _make_executor() -> ReleaseExecutor:
 class TestRunPackages:
     """Tests for _run_packages parallel execution."""
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_single_package_runs_sequentially(self, mock_run: MagicMock) -> None:
         """A stage with one package uses the fast sequential path."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -46,7 +46,7 @@ class TestRunPackages:
         _make_executor()._run_packages(stage)
         assert mock_run.call_count == 2
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_multiple_packages_all_run(self, mock_run: MagicMock) -> None:
         """A stage with multiple packages runs all of them."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -60,7 +60,7 @@ class TestRunPackages:
         _make_executor()._run_packages(stage)
         assert mock_run.call_count == 3
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_parallel_packages_run_concurrently(self, mock_run: MagicMock) -> None:
         """Packages in a multi-package stage execute in separate threads."""
         threads_seen: set[int] = set()
@@ -81,7 +81,7 @@ class TestRunPackages:
         _make_executor()._run_packages(stage)
         assert len(threads_seen) == 2, "Expected two distinct threads"
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_failure_lets_others_finish(self, mock_run: MagicMock) -> None:
         """When one package fails, other packages in the same stage still complete."""
         call_log: list[str] = []
@@ -105,14 +105,14 @@ class TestRunPackages:
         assert "a" in call_log
         assert "b" in call_log
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_empty_packages_is_noop(self, mock_run: MagicMock) -> None:
         """A stage with no packages does nothing."""
         stage = BuildStage()
         _make_executor()._run_packages(stage)
         mock_run.assert_not_called()
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_setup_runs_before_packages(self, mock_run: MagicMock) -> None:
         """Setup commands run sequentially via the build() method."""
         call_log: list[str] = []
@@ -139,7 +139,7 @@ class TestRunPackages:
 class TestBuildStages:
     """Tests for executor.build() with the new stage-based plan."""
 
-    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    @patch("uv_release_monorepo.shared.executor.subprocess.run")
     def test_stages_run_in_order(self, mock_run: MagicMock) -> None:
         """Stages execute sequentially — setup before build layers."""
         call_log: list[str] = []

@@ -53,7 +53,7 @@ def _make_plan_json(
     return plan.model_dump_json()
 
 
-@patch("uv_release_monorepo.shared.execute.subprocess.run")
+@patch("uv_release_monorepo.shared.executor.subprocess.run")
 def test_build_runs_commands(mock_run: MagicMock) -> None:
     """uvr build runs the pre-computed build stages for a runner."""
     mock_run.return_value = MagicMock(returncode=0)
@@ -85,7 +85,7 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
     assert mock_run.call_count == 2
 
 
-@patch("uv_release_monorepo.shared.execute.subprocess.run")
+@patch("uv_release_monorepo.shared.executor.subprocess.run")
 def test_finalize_runs_commands(mock_run: MagicMock) -> None:
     """uvr finalize runs the pre-computed finalize commands."""
     mock_run.return_value = MagicMock(returncode=0)
@@ -102,7 +102,7 @@ def test_finalize_runs_commands(mock_run: MagicMock) -> None:
     assert mock_run.call_count == 2
 
 
-@patch("uv_release_monorepo.shared.execute.subprocess.run")
+@patch("uv_release_monorepo.shared.executor.subprocess.run")
 def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     """uvr build is a no-op when no commands exist for the runner."""
     plan_json = _make_plan_json(changed=["pkg-a"], unchanged=[])
@@ -115,7 +115,7 @@ def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     mock_run.assert_not_called()
 
 
-@patch("uv_release_monorepo.shared.deps.pin_dependencies")
+@patch("uv_release_monorepo.shared.planner._dependencies.pin_dependencies")
 def test_pin_deps_writes(mock_pd: MagicMock) -> None:
     """uvr pin-deps calls pin_dependencies."""
     with patch.object(

@@ -3,19 +3,99 @@
 from __future__ import annotations
 
 import glob as _glob
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-
+import tomlkit
+from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-from .config import get_uvr_config, get_workspace_member_globs
-from .deps import dep_canonical_name, get_all_dependency_strings
+if TYPE_CHECKING:
+    import semver
+
+from .config import get_config
 from .models import PackageInfo
-from .shell import fatal, step
-from .toml import load_pyproject
+from .shell import exit_fatal, print_step
+from .toml import get_path, read_pyproject
 
 
-def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
+# ---------------------------------------------------------------------------
+# Private helpers (absorbed from deps.py and discovery.py)
+# ---------------------------------------------------------------------------
+
+
+def _canonicalize_dependency(dep_str: str) -> str:
+    """Extract the canonical package name from a PEP 508 dependency string.
+
+    Handles version specifiers, extras, and normalizes the name per PEP 503
+    (lowercase, hyphens instead of underscores).
+
+    Examples:
+        "requests>=2.0" -> "requests"
+        "My_Package[extra]~=1.0" -> "my-package"
+    """
+    return canonicalize_name(Requirement(dep_str).name)
+
+
+def _get_dependency_sections(doc: tomlkit.TOMLDocument) -> Iterator[list]:
+    """Yield every mutable dependency list from a pyproject.toml.
+
+    Covers [project].dependencies, [project].optional-dependencies.*,
+    and [dependency-groups].*.  Does NOT include [build-system].requires.
+    """
+    project = doc.get("project", {})
+    deps = project.get("dependencies")
+    if isinstance(deps, list):
+        yield deps
+    for group in project.get("optional-dependencies", {}).values():
+        if isinstance(group, list):
+            yield group
+    for group in doc.get("dependency-groups", {}).values():
+        if isinstance(group, list):
+            yield group
+
+
+def _get_dependencies(doc: tomlkit.TOMLDocument) -> list[str]:
+    """Collect all dependency strings from a pyproject.toml.
+
+    Gathers dependencies from four locations:
+    - [build-system].requires (build-time deps)
+    - [project].dependencies (main runtime deps)
+    - [project].optional-dependencies.* (extras like [dev], [test])
+    - [dependency-groups].* (PEP 735 dependency groups)
+
+    Returns raw PEP 508 strings like "requests>=2.0" or "pkg[extra]~=1.0".
+    """
+    deps: list[str] = list(get_path(doc, "build-system", "requires", default=[]))
+    for dep_list in _get_dependency_sections(doc):
+        deps.extend(dep_list)
+    return deps
+
+
+def _parse_version(version_str: str) -> semver.Version:
+    """Parse a version string into a semver.Version object.
+
+    Strips all dev/pre/post suffixes first, then handles incomplete versions
+    by padding with zeros.
+    """
+    import semver as _semver
+
+    from .planner._versions import get_base_version
+
+    cleaned = get_base_version(version_str)
+    parts = cleaned.split(".")
+    while len(parts) < 3:
+        parts.append("0")
+    return _semver.Version.parse(".".join(parts[:3]))
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     """Scan the workspace and discover all packages.
 
     Reads [tool.uv.workspace].members from root pyproject.toml to find
@@ -28,11 +108,16 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     Returns:
         Map of package name to PackageInfo.
     """
-    step("Discovering workspace packages")
+    print_step("Discovering workspace packages")
 
     root = root or Path.cwd()
-    root_doc = load_pyproject(root / "pyproject.toml")
-    member_globs = get_workspace_member_globs(root_doc)
+    root_doc = read_pyproject(root / "pyproject.toml")
+
+    # Inline get_workspace_member_globs logic
+    members = get_path(root_doc, "tool", "uv", "workspace", "members")
+    if not members:
+        exit_fatal("No [tool.uv.workspace] members defined in root pyproject.toml")
+    member_globs = list(members)
 
     # Expand globs to find all package directories
     member_dirs: list[Path] = []
@@ -43,7 +128,7 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
                 member_dirs.append(p)
 
     if not member_dirs:
-        fatal(
+        exit_fatal(
             "No packages found matching workspace members. "
             "Run from repo root; check [tool.uv.workspace].members in pyproject.toml."
         )
@@ -53,16 +138,16 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     raw_deps: dict[str, list[str]] = {}
 
     for d in member_dirs:
-        doc = load_pyproject(d / "pyproject.toml")
-        name = canonicalize_name(doc.get("project", {}).get("name", d.name))
+        doc = read_pyproject(d / "pyproject.toml")
+        name = canonicalize_name(get_path(doc, "project", "name", default=d.name))
         packages[name] = PackageInfo(
             path=str(d.relative_to(root)),
-            version=doc.get("project", {}).get("version", "0.0.0"),
+            version=get_path(doc, "project", "version", default="0.0.0"),
         )
-        raw_deps[name] = get_all_dependency_strings(doc)
+        raw_deps[name] = _get_dependencies(doc)
 
     # Apply include/exclude filters from [tool.uvr.config]
-    uvr_config = get_uvr_config(root_doc)
+    uvr_config = get_config(root_doc)
     include = uvr_config["include"]
     exclude = uvr_config["exclude"]
     if include:
@@ -78,7 +163,7 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     for name, deps in raw_deps.items():
         seen: set[str] = set()
         for dep_str in deps:
-            dep_name = dep_canonical_name(dep_str)
+            dep_name = _canonicalize_dependency(dep_str)
             # Only track internal deps, ignore external packages
             if dep_name in workspace_names and dep_name not in seen:
                 packages[name].deps.append(dep_name)
@@ -109,14 +194,12 @@ def find_release_tags(
     Returns:
         Map of package name to its last release tag, or None if no release exists.
     """
-    from .versions import parse_version
-
-    step("Finding last release tags")
+    print_step("Finding last release tags")
 
     release_tag_names = gh_releases
     release_tags: dict[str, str | None] = {}
     for name, info in packages.items():
-        current_base = parse_version(info.version)
+        current_base = _parse_version(info.version)
         # Filter to this package's releases, sorted by version descending
         pkg_releases = []
         prefix = f"{name}/v"
@@ -125,7 +208,7 @@ def find_release_tags(
                 continue
             tag_ver_str = tag[len(prefix) :]
             try:
-                tag_ver = parse_version(tag_ver_str)
+                tag_ver = _parse_version(tag_ver_str)
             except (ValueError, TypeError):
                 continue
             if tag_ver < current_base:
@@ -138,7 +221,7 @@ def find_release_tags(
     return release_tags
 
 
-def get_baseline_tags(
+def find_baseline_tags(
     packages: dict[str, PackageInfo],
     all_tags: set[str],
 ) -> dict[str, str | None]:
@@ -154,7 +237,7 @@ def get_baseline_tags(
     Returns:
         Map of package name to its baseline tag, or None if no tag exists.
     """
-    step("Finding baselines")
+    print_step("Finding baselines")
 
     baselines: dict[str, str | None] = {}
     for name, info in packages.items():
