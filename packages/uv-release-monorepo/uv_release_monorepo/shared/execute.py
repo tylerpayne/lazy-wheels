@@ -7,7 +7,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .hooks import ReleaseHook
-from .models import BuildStage, PlanCommand, ReleasePlan
+from .models import BuildStage, PlanCommand, ReleasePlan, _validate_runner_key
 
 
 class ReleaseExecutor:
@@ -21,42 +21,48 @@ class ReleaseExecutor:
         self.plan = plan
         self.hook = hook or ReleaseHook()
 
-    def build(self, *, runner: str | None = None) -> None:
-        """Run build stages."""
-        self.hook.pre_build(self.plan)
+    def build(self, *, runner: str | list[str] | None = None) -> None:
+        """Run build stages.
 
-        if runner:
-            import json
-
-            # Runner comes as JSON string from CI matrix
-            try:
-                parsed = json.loads(runner)
-            except (json.JSONDecodeError, TypeError):
-                parsed = [runner]
-            key = json.dumps(parsed if isinstance(parsed, list) else [parsed])
+        Args:
+            runner: Runner labels identifying which ``build_commands`` entry
+                to execute.  Accepts a JSON string (from CI), a list, or
+                ``None`` to run all entries.
+        """
+        if runner is not None:
+            key = _validate_runner_key(runner)
+            runner_list = list(key)
             stages = self.plan.build_commands.get(key, [])
         else:
+            runner_list = []
             stages = [
                 stage
                 for key in self.plan.build_commands
                 for stage in self.plan.build_commands[key]
             ]
 
-        for stage in stages:
-            self._run_stage(stage)
+        self.hook.pre_build(self.plan, runner=runner_list or None)
 
-        self.hook.post_build(self.plan)
+        for stage in stages:
+            self._run_commands_or_exit(stage.setup)
+            packages = sorted(stage.packages)
+            self.hook.pre_build_stage(self.plan, packages, runner=runner_list or None)
+            self._run_packages(stage)
+            self.hook.post_build_stage(self.plan, packages, runner=runner_list or None)
+            self._run_commands_or_exit(stage.cleanup)
+
+        self.hook.post_build(self.plan, runner=runner_list or None)
 
     def publish(self) -> None:
         """Run publish commands."""
         self.hook.pre_release(self.plan)
-        self._run_commands(self.plan.publish_commands)
+        self._run_commands_or_exit(self.plan.publish_commands)
         self.hook.post_release(self.plan)
 
     def finalize(self) -> None:
         """Run finalize commands."""
         self.hook.pre_finalize(self.plan)
-        self._run_commands(self.plan.finalize_commands)
+        self._run_commands_or_exit(self.plan.finalize_commands)
         self.hook.post_finalize(self.plan)
 
     def run(self) -> None:
@@ -65,34 +71,24 @@ class ReleaseExecutor:
         self.publish()
         self.finalize()
 
-    @staticmethod
-    def _run_stage(stage: BuildStage) -> None:
-        """Run all packages in a stage, parallelising across packages."""
-        if len(stage.commands) <= 1:
-            # Single package (or setup/cleanup) — run sequentially, no overhead.
-            for cmds in stage.commands.values():
-                ReleaseExecutor._run_commands(cmds)
+    def _run_packages(self, stage: BuildStage) -> None:
+        """Run package builds, parallelising across packages."""
+        if not stage.packages:
             return
 
         failures: list[str] = []
 
         def _run_pkg(pkg: str, cmds: list[PlanCommand]) -> str | None:
-            for cmd in cmds:
-                if cmd.label:
-                    print(f"  [{pkg}] {cmd.label}")
-                result = subprocess.run(cmd.args)
-                if cmd.check and result.returncode != 0:
-                    print(
-                        f"  [{pkg}] Command failed: {' '.join(cmd.args)}",
-                        file=sys.stderr,
-                    )
-                    return pkg
+            self.hook.pre_build_package(self.plan, pkg)
+            if not self._run_commands(cmds, prefix=pkg):
+                return pkg
+            self.hook.post_build_package(self.plan, pkg)
             return None
 
-        with ThreadPoolExecutor(max_workers=len(stage.commands)) as pool:
+        with ThreadPoolExecutor(max_workers=len(stage.packages)) as pool:
             futures = {
                 pool.submit(_run_pkg, pkg, cmds): pkg
-                for pkg, cmds in stage.commands.items()
+                for pkg, cmds in stage.packages.items()
             }
             for future in as_completed(futures):
                 failed = future.result()
@@ -107,14 +103,23 @@ class ReleaseExecutor:
             sys.exit(1)
 
     @staticmethod
-    def _run_commands(commands: list[PlanCommand]) -> None:
+    def _run_commands_or_exit(commands: list[PlanCommand]) -> None:
+        """Run commands sequentially, exiting on failure."""
+        if not ReleaseExecutor._run_commands(commands):
+            sys.exit(1)
+
+    @staticmethod
+    def _run_commands(commands: list[PlanCommand], *, prefix: str = "") -> bool:
+        """Run commands sequentially.  Return ``False`` on first failure."""
+        tag = f"[{prefix}] " if prefix else ""
         for cmd in commands:
             if cmd.label:
-                print(f"  {cmd.label}")
+                print(f"  {tag}{cmd.label}")
             result = subprocess.run(cmd.args)
             if cmd.check and result.returncode != 0:
                 print(
-                    f"Command failed: {' '.join(cmd.args)}",
+                    f"{tag}Command failed: {' '.join(cmd.args)}",
                     file=sys.stderr,
                 )
-                sys.exit(1)
+                return False
+        return True

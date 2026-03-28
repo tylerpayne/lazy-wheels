@@ -48,11 +48,33 @@ class ReleaseHook:
 
     # -- CI hooks ----------------------------------------------------------
 
-    def pre_build(self, plan: ReleasePlan) -> None:
+    def pre_build(self, plan: ReleasePlan, runner: list[str] | None = None) -> None:
         """Called before the build phase."""
 
-    def post_build(self, plan: ReleasePlan) -> None:
+    def post_build(self, plan: ReleasePlan, runner: list[str] | None = None) -> None:
         """Called after the build phase."""
+
+    def pre_build_stage(
+        self,
+        plan: ReleasePlan,
+        packages: list[str],
+        runner: list[str] | None = None,
+    ) -> None:
+        """Called before each build stage with the packages about to be built."""
+
+    def post_build_stage(
+        self,
+        plan: ReleasePlan,
+        packages: list[str],
+        runner: list[str] | None = None,
+    ) -> None:
+        """Called after each build stage with the packages that were built."""
+
+    def pre_build_package(self, plan: ReleasePlan, package: str) -> None:
+        """Called before building a single package (may run in parallel)."""
+
+    def post_build_package(self, plan: ReleasePlan, package: str) -> None:
+        """Called after building a single package (may run in parallel)."""
 
     def pre_release(self, plan: ReleasePlan) -> None:
         """Called before the publish/release phase."""

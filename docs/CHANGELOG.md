@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.17.0] - 2026-03-27
+
+### Added
+- Add `pre_build_stage`/`post_build_stage` hooks called before and after each build stage with the list of packages
+- Add `pre_build_package`/`post_build_package` hooks called around individual package builds (run in parallel threads)
+- Add optional `runner` parameter to `pre_build`/`post_build` hooks identifying the active runner labels
+
+### Changed
+- **BREAKING**: Replace `BuildStage.commands` dict (with `__setup__`/`__cleanup__` sentinel keys) with explicit `setup`, `packages`, and `cleanup` fields
+- **BREAKING**: Change `build_commands` dict keys from JSON-encoded strings to `RunnerKey` — a Pydantic-validated `tuple[str, ...]` that parses JSON strings at model validation time
+- Change `ReleaseExecutor.build()` to accept `str | list[str] | None` for the runner parameter — JSON strings from CI are parsed via the `RunnerKey` validator instead of a separate `parse_runner` function
+
 ## [v0.16.0] - 2026-03-27
 
 ### Added

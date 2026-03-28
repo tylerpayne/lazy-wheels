@@ -708,28 +708,28 @@ class TestBuildCommandStages:
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
-        stages = plan.build_commands['["ubuntu-latest"]']
+        stages = plan.build_commands[("ubuntu-latest",)]
 
-        # Stage 0: __setup__
-        assert "__setup__" in stages[0].commands
+        # Stage 0: setup
+        assert stages[0].setup
 
         # Stage 1: layer 0 — alpha (no deps)
-        assert "alpha" in stages[1].commands
-        assert len(stages[1].commands) == 1
+        assert "alpha" in stages[1].packages
+        assert len(stages[1].packages) == 1
 
         # Stage 2: layer 1 — beta and delta (both depend on alpha only)
-        assert set(stages[2].commands.keys()) == {"beta", "delta"}
+        assert set(stages[2].packages.keys()) == {"beta", "delta"}
 
         # Stage 3: layer 2 — gamma (depends on beta)
-        assert "gamma" in stages[3].commands
-        assert len(stages[3].commands) == 1
+        assert "gamma" in stages[3].packages
+        assert len(stages[3].packages) == 1
 
         # No cleanup stage (all packages assigned to the same runner)
         assert len(stages) == 4
 
         # Layer 0 (alpha) should NOT have --no-sources
         alpha_build = [
-            c for c in stages[1].commands["alpha"] if c.label == "Build alpha"
+            c for c in stages[1].packages["alpha"] if c.label == "Build alpha"
         ][0]
         assert "--no-sources" not in alpha_build.args
 
@@ -737,7 +737,7 @@ class TestBuildCommandStages:
         for stage, pkgs in [(stages[2], ["beta", "delta"]), (stages[3], ["gamma"])]:
             for pkg in pkgs:
                 build_cmd = [
-                    c for c in stage.commands[pkg] if c.label == f"Build {pkg}"
+                    c for c in stage.packages[pkg] if c.label == f"Build {pkg}"
                 ][0]
                 assert "--no-sources" in build_cmd.args
 
@@ -767,11 +767,11 @@ class TestBuildCommandStages:
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
-        stages = plan.build_commands['["ubuntu-latest"]']
+        stages = plan.build_commands[("ubuntu-latest",)]
         # setup + one layer with all 3 packages
         assert len(stages) == 2
-        assert "__setup__" in stages[0].commands
-        assert set(stages[1].commands.keys()) == {"pkg-a", "pkg-b", "pkg-c"}
+        assert stages[0].setup
+        assert set(stages[1].packages.keys()) == {"pkg-a", "pkg-b", "pkg-c"}
 
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
@@ -810,20 +810,15 @@ class TestBuildCommandStages:
         )
 
         # macos-14 runner should build both tools (layer 0) and overlay (layer 1)
-        macos_stages = plan.build_commands['["macos-14"]']
-        built_pkgs = {
-            pkg
-            for stage in macos_stages
-            for pkg in stage.commands
-            if pkg not in ("__setup__", "__cleanup__")
-        }
+        macos_stages = plan.build_commands[("macos-14",)]
+        built_pkgs = {pkg for stage in macos_stages for pkg in stage.packages}
         assert "tools" in built_pkgs, "changed dep 'tools' must be built on macos-14"
         assert "overlay" in built_pkgs
 
         # tools wheel should be cleaned from dist/ (not assigned to macos-14)
         cleanup_stage = macos_stages[-1]
-        assert "__cleanup__" in cleanup_stage.commands
-        cleanup_cmd = cleanup_stage.commands["__cleanup__"][0]
+        assert cleanup_stage.cleanup
+        cleanup_cmd = cleanup_stage.cleanup[0]
         assert "tools" in " ".join(cleanup_cmd.args)
 
 

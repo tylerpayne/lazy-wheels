@@ -102,33 +102,25 @@ def _print_plan(
             if plan.reuse_run_id:
                 print(f"{_D}artifacts from run {plan.reuse_run_id}")
             elif plan.build_commands:
-                import json as _json
-
                 # Collect assigned packages per runner for marking transitive deps
-                assigned_by_runner: dict[str, set[str]] = {}
+                assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
                 for me in plan.matrix:
-                    key = _json.dumps(me.runner)
-                    assigned_by_runner.setdefault(key, set()).add(me.package)
+                    assigned_by_runner.setdefault(tuple(me.runner), set()).add(
+                        me.package
+                    )
 
                 all_build_pkgs: list[str] = []
                 for stages in plan.build_commands.values():
                     for stage in stages:
-                        for key in stage.commands:
-                            if key not in ("__setup__", "__cleanup__"):
-                                all_build_pkgs.append(key)
+                        all_build_pkgs.extend(stage.packages)
                 bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
 
                 for runner_key in sorted(plan.build_commands):
-                    labels = _json.loads(runner_key)
                     assigned = assigned_by_runner.get(runner_key, set())
-                    print(f"{_D}[{', '.join(labels)}]")
+                    print(f"{_D}[{', '.join(runner_key)}]")
                     local_layer = 0
                     for stage in plan.build_commands[runner_key]:
-                        pkgs = sorted(
-                            k
-                            for k in stage.commands
-                            if k not in ("__setup__", "__cleanup__")
-                        )
+                        pkgs = sorted(stage.packages)
                         if not pkgs:
                             continue
                         print(f"{_D}  layer {local_layer}")

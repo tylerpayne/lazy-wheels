@@ -24,22 +24,26 @@ def _make_plan(**kwargs: object) -> ReleasePlan:
     return ReleasePlan(**defaults)
 
 
-class TestRunStage:
-    """Tests for _run_stage parallel execution."""
+def _make_executor() -> ReleaseExecutor:
+    return ReleaseExecutor(_make_plan())
+
+
+class TestRunPackages:
+    """Tests for _run_packages parallel execution."""
 
     @patch("uv_release_monorepo.shared.execute.subprocess.run")
     def test_single_package_runs_sequentially(self, mock_run: MagicMock) -> None:
         """A stage with one package uses the fast sequential path."""
         mock_run.return_value = MagicMock(returncode=0)
         stage = BuildStage(
-            commands={
+            packages={
                 "pkg-a": [
                     PlanCommand(args=["uv", "version", "1.0.0"]),
                     PlanCommand(args=["uv", "build", "packages/a"]),
                 ]
             }
         )
-        ReleaseExecutor._run_stage(stage)
+        _make_executor()._run_packages(stage)
         assert mock_run.call_count == 2
 
     @patch("uv_release_monorepo.shared.execute.subprocess.run")
@@ -47,13 +51,13 @@ class TestRunStage:
         """A stage with multiple packages runs all of them."""
         mock_run.return_value = MagicMock(returncode=0)
         stage = BuildStage(
-            commands={
+            packages={
                 "pkg-a": [PlanCommand(args=["uv", "build", "a"])],
                 "pkg-b": [PlanCommand(args=["uv", "build", "b"])],
                 "pkg-c": [PlanCommand(args=["uv", "build", "c"])],
             }
         )
-        ReleaseExecutor._run_stage(stage)
+        _make_executor()._run_packages(stage)
         assert mock_run.call_count == 3
 
     @patch("uv_release_monorepo.shared.execute.subprocess.run")
@@ -69,12 +73,12 @@ class TestRunStage:
 
         mock_run.side_effect = _track_thread
         stage = BuildStage(
-            commands={
+            packages={
                 "pkg-a": [PlanCommand(args=["uv", "build", "a"])],
                 "pkg-b": [PlanCommand(args=["uv", "build", "b"])],
             }
         )
-        ReleaseExecutor._run_stage(stage)
+        _make_executor()._run_packages(stage)
         assert len(threads_seen) == 2, "Expected two distinct threads"
 
     @patch("uv_release_monorepo.shared.execute.subprocess.run")
@@ -89,32 +93,47 @@ class TestRunStage:
 
         mock_run.side_effect = _side_effect
         stage = BuildStage(
-            commands={
+            packages={
                 "pkg-a": [PlanCommand(args=["uv", "build", "a"])],
                 "pkg-b": [PlanCommand(args=["uv", "build", "b"])],
             }
         )
         with pytest.raises(SystemExit) as exc:
-            ReleaseExecutor._run_stage(stage)
+            _make_executor()._run_packages(stage)
         assert exc.value.code == 1
         # Both packages were attempted
         assert "a" in call_log
         assert "b" in call_log
 
     @patch("uv_release_monorepo.shared.execute.subprocess.run")
-    def test_setup_stage_runs_all_commands(self, mock_run: MagicMock) -> None:
-        """The __setup__ stage runs all its commands sequentially."""
-        mock_run.return_value = MagicMock(returncode=0)
-        stage = BuildStage(
-            commands={
-                "__setup__": [
-                    PlanCommand(args=["mkdir", "-p", "dist"]),
-                    PlanCommand(args=["gh", "release", "download", "tag"]),
+    def test_empty_packages_is_noop(self, mock_run: MagicMock) -> None:
+        """A stage with no packages does nothing."""
+        stage = BuildStage()
+        _make_executor()._run_packages(stage)
+        mock_run.assert_not_called()
+
+    @patch("uv_release_monorepo.shared.execute.subprocess.run")
+    def test_setup_runs_before_packages(self, mock_run: MagicMock) -> None:
+        """Setup commands run sequentially via the build() method."""
+        call_log: list[str] = []
+
+        def _side_effect(args: list[str], **_kw: object) -> MagicMock:
+            call_log.append(" ".join(args))
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = _side_effect
+        plan = _make_plan(
+            build_commands={
+                ("ubuntu-latest",): [
+                    BuildStage(
+                        setup=[PlanCommand(args=["mkdir", "-p", "dist"])],
+                        packages={"pkg-a": [PlanCommand(args=["uv", "build", "a"])]},
+                    ),
                 ]
             }
         )
-        ReleaseExecutor._run_stage(stage)
-        assert mock_run.call_count == 2
+        ReleaseExecutor(plan).build(runner=["ubuntu-latest"])
+        assert call_log == ["mkdir -p dist", "uv build a"]
 
 
 class TestBuildStages:
@@ -132,18 +151,14 @@ class TestBuildStages:
         mock_run.side_effect = _side_effect
         plan = _make_plan(
             build_commands={
-                '["ubuntu-latest"]': [
+                ("ubuntu-latest",): [
+                    BuildStage(setup=[PlanCommand(args=["mkdir", "-p", "dist"])]),
                     BuildStage(
-                        commands={
-                            "__setup__": [PlanCommand(args=["mkdir", "-p", "dist"])]
-                        }
-                    ),
-                    BuildStage(
-                        commands={"pkg-a": [PlanCommand(args=["uv", "build", "a"])]}
+                        packages={"pkg-a": [PlanCommand(args=["uv", "build", "a"])]}
                     ),
                 ]
             }
         )
         executor = ReleaseExecutor(plan)
-        executor.build(runner="ubuntu-latest")
+        executor.build(runner=["ubuntu-latest"])
         assert call_log == ["mkdir -p dist", "uv build a"]

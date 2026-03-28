@@ -270,21 +270,19 @@ class ReleasePlanner:
         unchanged: dict[str, PackageInfo],
         release_tags: dict[str, str | None],
         matrix_entries: list[MatrixEntry],
-    ) -> dict[str, list[BuildStage]]:
+    ) -> dict[tuple[str, ...], list[BuildStage]]:
         """Generate build command stages per runner.
 
         Returns a list of :class:`BuildStage` per runner.  Stages execute
         sequentially; packages *within* a stage execute concurrently.
         """
-        import json as _json
-
         all_packages = {**changed, **unchanged}
-        by_runner: dict[str, set[str]] = {}
+        by_runner: dict[tuple[str, ...], set[str]] = {}
         for entry in matrix_entries:
-            key = _json.dumps(entry.runner)
+            key = tuple(entry.runner)
             by_runner.setdefault(key, set()).add(entry.package)
 
-        result: dict[str, list[BuildStage]] = {}
+        result: dict[tuple[str, ...], list[BuildStage]] = {}
         for runner, assigned in sorted(by_runner.items()):
             stages: list[BuildStage] = []
 
@@ -328,7 +326,7 @@ class ReleasePlanner:
                             check=False,
                         )
                     )
-            stages.append(BuildStage(commands={"__setup__": setup_cmds}))
+            stages.append(BuildStage(setup=setup_cmds))
 
             # -- Build stages: one per topo layer --
             layers = topo_layers(changed_to_build)
@@ -356,7 +354,7 @@ class ReleasePlanner:
                     layer_cmds[pkg] = [
                         PlanCommand(args=build_args, label=f"Build {pkg}"),
                     ]
-                stages.append(BuildStage(commands=layer_cmds))
+                stages.append(BuildStage(packages=layer_cmds))
 
             # -- Cleanup stage: remove built wheels not assigned to this runner --
             # Collect transitive dep wheel patterns to remove
@@ -382,7 +380,7 @@ class ReleasePlanner:
                     label="Remove transitive dep wheels",
                     check=False,
                 )
-                stages.append(BuildStage(commands={"__cleanup__": [cleanup_cmd]}))
+                stages.append(BuildStage(cleanup=[cleanup_cmd]))
 
             result[runner] = stages
         return result

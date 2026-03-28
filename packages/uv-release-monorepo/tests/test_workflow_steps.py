@@ -60,12 +60,10 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
         changed=["pkg-a"],
         unchanged=[],
         build_commands={
-            '["ubuntu-latest"]': [
+            ("ubuntu-latest",): [
+                BuildStage(setup=[PlanCommand(args=["mkdir", "-p", "dist"])]),
                 BuildStage(
-                    commands={"__setup__": [PlanCommand(args=["mkdir", "-p", "dist"])]}
-                ).model_dump(),
-                BuildStage(
-                    commands={
+                    packages={
                         "pkg-a": [
                             PlanCommand(
                                 args=["uv", "build", "packages/pkg-a"],
@@ -73,14 +71,14 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
                             )
                         ]
                     }
-                ).model_dump(),
+                ),
             ],
         },
     )
     with patch.object(
         sys,
         "argv",
-        ["uvr", "build", "--plan", plan_json, "--runner", "ubuntu-latest"],
+        ["uvr", "build", "--plan", plan_json, "--runner", '["ubuntu-latest"]'],
     ):
         cli()
     assert mock_run.call_count == 2
@@ -110,7 +108,7 @@ def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     with patch.object(
         sys,
         "argv",
-        ["uvr", "build", "--plan", plan_json, "--runner", "macos-latest"],
+        ["uvr", "build", "--plan", plan_json, "--runner", '["macos-latest"]'],
     ):
         cli()
     mock_run.assert_not_called()

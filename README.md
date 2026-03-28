@@ -80,7 +80,7 @@ file = "uvr_hooks.py"          # default class: Hook
 
 Or just drop a `uvr_hooks.py` with a `Hook` class at the workspace root — it's discovered automatically.
 
-**Hook points:** `pre_plan` / `post_plan` (local), `pre_build` / `post_build`, `pre_release` / `post_release`, `pre_finalize` / `post_finalize` (CI).
+**Hook points:** `pre_plan` / `post_plan` (local), `pre_build` / `post_build`, `pre_build_stage` / `post_build_stage`, `pre_build_package` / `post_build_package`, `pre_release` / `post_release`, `pre_finalize` / `post_finalize` (CI).
 
 ## How it works
 

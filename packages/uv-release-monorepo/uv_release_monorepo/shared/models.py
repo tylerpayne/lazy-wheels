@@ -6,6 +6,7 @@ the release pipeline.
 
 from __future__ import annotations
 
+import json as _json
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -14,9 +15,37 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PlainSerializer,
+    PlainValidator,
     model_serializer,
     model_validator,
 )
+
+
+def _validate_runner_key(v: Any) -> tuple[str, ...]:
+    """Parse a runner key from a JSON string or sequence into a tuple."""
+    if isinstance(v, str):
+        parsed = _json.loads(v)
+        if not isinstance(parsed, list):
+            msg = f"Expected JSON array for runner key, got {type(parsed).__name__}"
+            raise ValueError(msg)
+        return tuple(parsed)
+    if isinstance(v, (list, tuple)):
+        return tuple(v)
+    msg = f"Expected str, list, or tuple for runner key, got {type(v).__name__}"
+    raise ValueError(msg)
+
+
+RunnerKey = Annotated[
+    tuple[str, ...],
+    PlainValidator(_validate_runner_key),
+    PlainSerializer(lambda v: _json.dumps(list(v)), return_type=str),
+]
+"""Runner label key: a tuple of runner labels (e.g. ``("ubuntu-latest",)``).
+
+Accepts JSON strings (``'["ubuntu-latest"]'``), lists, or tuples on input.
+Serializes back to a JSON string for use as a dict key in JSON output.
+"""
 
 
 @dataclass
@@ -101,12 +130,16 @@ class BuildStage(BaseModel):
     independent packages build in parallel.
 
     Attributes:
-        commands: Map of package name (or ``__setup__``/``__cleanup__``) to
-            its command list.  Commands for different keys run concurrently;
-            commands within a single key run sequentially.
+        setup: Commands that run sequentially before parallel builds.
+        packages: Map of package name to its command list.  Different
+            packages run concurrently; commands within a package run
+            sequentially.
+        cleanup: Commands that run sequentially after parallel builds.
     """
 
-    commands: dict[str, list[PlanCommand]]
+    setup: list[PlanCommand] = Field(default_factory=list)
+    packages: dict[str, list[PlanCommand]] = Field(default_factory=dict)
+    cleanup: list[PlanCommand] = Field(default_factory=list)
 
 
 class MatrixEntry(BaseModel):
@@ -489,6 +522,6 @@ class ReleasePlan(BaseModel):
         return self
 
     # Pre-computed command sequences for the executor
-    build_commands: dict[str, list[BuildStage]] = Field(default_factory=dict)
+    build_commands: dict[RunnerKey, list[BuildStage]] = Field(default_factory=dict)
     publish_commands: list[PlanCommand] = Field(default_factory=list)
     finalize_commands: list[PlanCommand] = Field(default_factory=list)
