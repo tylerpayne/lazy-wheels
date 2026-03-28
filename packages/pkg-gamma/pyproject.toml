@@ -1,11 +1,11 @@
 [project]
 name = "pkg-gamma"
-version = "0.1.20a2.dev0"
+version = "0.1.20a2"
 description = "Dummy package gamma - depends on beta"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
-    "pkg-beta>=0.1.8a1",
+    "pkg-beta>=0.1.8a2",
 ]
 
 [build-system]
