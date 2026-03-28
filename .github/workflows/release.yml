@@ -14,105 +14,125 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !contains(fromJSON(inputs.plan).skip, 'check') }}
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - uses: astral-sh/setup-uv@v5
-      with:
-        python-version: ${{ fromJSON(inputs.plan).python_version }}
-    - name: Lint, typecheck, and test
-      run: |
-        uv sync --all-packages
-        uv run poe check
-        uv run poe test
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ fromJSON(inputs.plan).python_version }}
+      - name: Lint, typecheck, and test
+        run: |
+          uv sync --all-packages
+          uv run poe check
+          uv run poe test
+  validate_plan:
+    runs-on: ubuntu-latest
+    steps:
+      - id: setup-uv
+        uses: astral-sh/setup-uv@v5
+      - id: setup-python
+        name: Set up Python
+        run: |
+          uv python install ${{ fromJSON(inputs.plan).python_version }}
+          uv tool install ./packages/uv-release-monorepo
+      - id: validate-plan
+        name: Validate release plan
+        env:
+          UVR_PLAN: ${{ inputs.plan }}
+        run: uvr validate-plan
   build:
     runs-on: ${{ matrix.runner }}
     if: ${{ !contains(fromJSON(inputs.plan).skip, 'build') }}
     needs:
-    - check
-    steps:
-    - id: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - uses: astral-sh/setup-uv@v5
-    - name: Set up Python
-      run: |
-        uv python install ${{ fromJSON(inputs.plan).python_version }}
-        uv tool install ./packages/uv-release-monorepo
-    - name: Build packages
-      env:
-        GH_TOKEN: ${{ github.token }}
-        UVR_PLAN: ${{ inputs.plan }}
-      run: uvr build --runner '${{ toJSON(matrix.runner) }}'
-    - id: upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: wheels-${{ join(matrix.runner, '-') }}
-        path: dist/*.whl
-        if-no-files-found: error
+      - check
+      - validate_plan
     strategy:
       fail-fast: true
       matrix:
         runner: ${{ fromJSON(inputs.plan).build_matrix }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: setup-uv
+        uses: astral-sh/setup-uv@v5
+      - id: setup-python
+        name: Set up Python
+        run: |
+          uv python install ${{ fromJSON(inputs.plan).python_version }}
+          uv tool install ./packages/uv-release-monorepo
+      - id: build
+        name: Build packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UVR_PLAN: ${{ inputs.plan }}
+        run: uvr build --runner '${{ toJSON(matrix.runner) }}'
+      - id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ join(matrix.runner, '-') }}
+          path: dist/*.whl
+          if-no-files-found: error
   release:
     runs-on: ubuntu-latest
     if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'release') }}
     needs:
-    - build
+      - build
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(inputs.plan).release_matrix }}
     steps:
-    - id: download
-      uses: actions/download-artifact@v4
-      with:
-        pattern: wheels-*
-        merge-multiple: true
-        path: dist
-        run-id: ${{ fromJSON(inputs.plan).reuse_run_id != '' && fromJSON(inputs.plan).reuse_run_id || github.run_id }}
-    - id: publish
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ matrix.tag }}
-        name: ${{ matrix.title }}
-        body: ${{ matrix.body }}
-        files: dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl
-        make_latest: ${{ matrix.make_latest }}
+      - id: download
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+          run-id: ${{ fromJSON(inputs.plan).reuse_run_id != '' && fromJSON(inputs.plan).reuse_run_id || github.run_id }}
+      - id: publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ matrix.tag }}
+          name: ${{ matrix.title }}
+          body: ${{ matrix.body }}
+          files: dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl
+          make_latest: ${{ matrix.make_latest }}
   finalize:
     runs-on: ubuntu-latest
     if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'finalize') }}
     needs:
-    - release
+      - release
     steps:
-    - id: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - uses: astral-sh/setup-uv@v5
-    - name: Set up Python
-      run: |
-        uv python install ${{ fromJSON(inputs.plan).python_version }}
-        uv tool install ./packages/uv-release-monorepo
-    - name: Finalize release
-      env:
-        UVR_PLAN: ${{ inputs.plan }}
-      run: uvr finalize
+      - id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: setup-uv
+        uses: astral-sh/setup-uv@v5
+      - id: setup-python
+        name: Set up Python
+        run: |
+          uv python install ${{ fromJSON(inputs.plan).python_version }}
+          uv tool install ./packages/uv-release-monorepo
+      - id: finalize
+        name: Finalize release
+        env:
+          UVR_PLAN: ${{ inputs.plan }}
+        run: uvr finalize
   publish:
     runs-on: ubuntu-latest
-    if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
+    if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'publish') && contains(fromJSON(inputs.plan).changed, 'uv-release-monorepo') }}
     needs:
-    - finalize
+      - finalize
     environment: pypi
     steps:
-    - name: Download wheel for PyPI
-      if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
-      env:
-        GH_TOKEN: ${{ github.token }}
-        VERSION: ${{ fromJSON(inputs.plan).changed['uv-release-monorepo'].version }}
-      run: |
-        mkdir -p dist
-        gh release download "uv-release-monorepo/v${VERSION}" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist
-    - uses: pypa/gh-action-pypi-publish@release/v1
-      if: fromJSON(inputs.plan).changed['uv-release-monorepo'] != null
+      - name: Download wheel for PyPI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ fromJSON(inputs.plan).uvr_install }}
+        run: |
+          mkdir -p dist
+          gh release download "uv-release-monorepo/v${VERSION}" --repo "${{ github.repository }}" --pattern "uv_release_monorepo-*.whl" --dir dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
