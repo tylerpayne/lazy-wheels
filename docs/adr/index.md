@@ -17,6 +17,7 @@
 * [0011 - Use Python Hook System For Release Pipeline Extensibility](0011-use-python-hook-system-for-release-pipeline-extensibility.md)
 * [0012 - Replace Git And Gh Subprocesses With Pygit2 And Httpx](0012-replace-git-and-gh-subprocesses-with-pygit2-and-httpx.md)
 * [0013 - Use Three Way Merge For Workflow Upgrades](0013-use-three-way-merge-for-workflow-upgrades.md)
+* [0014 - Restructure Shared Module Architecture](0014-restructure-shared-module-architecture.md)
 
 ## Rejected Records
 

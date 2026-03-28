@@ -37,7 +37,7 @@ uvr release --post       # post:  1.0.1 → 1.0.1.post0
 
 ```bash
 uvr release --skip build                      # skip the build job
-uvr release --skip-to publish                 # skip everything before publish
+uvr release --skip-to release                 # skip everything before release
 uvr release --skip build --reuse-run 12345    # reuse artifacts from run 12345
 ```
 
@@ -87,7 +87,7 @@ Or just drop a `uvr_hooks.py` with a `Hook` class at the workspace root — it's
 `uvr release` scans your workspace, diffs each package against its last baseline tag, walks the dependency graph, and builds a plan containing every shell command needed for the release. It dispatches this plan to GitHub Actions, which runs eight jobs:
 
 ```
-validate-plan → pre-build → build → post-build → pre-release → publish → finalize → post-release
+validate-plan → build → release → finalize
 ```
 
 Hook jobs (pre-build, post-build, pre-release, post-release) are no-ops by default — edit `release.yml` directly to add tests, linting, PyPI publish, or notifications.
