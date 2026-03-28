@@ -42,10 +42,10 @@ Mutually exclusive. Controls how versions are interpreted:
 | Flag | Description |
 |------|-------------|
 | `-y, --yes` | Skip the confirmation prompt |
-| `--skip JOB` | Skip a CI job (repeatable). Core jobs: `build`, `publish`, `finalize`. Custom jobs can also be skipped if they check the plan's skip list in their `if` condition. |
-| `--skip-to JOB` | Skip all core jobs before JOB. Choices: `publish`, `finalize`. `--skip-to publish` skips build; `--skip-to finalize` skips build + publish. |
+| `--skip JOB` | Skip a CI job (repeatable). Core jobs: `build`, `release`, `finalize`. Custom jobs can also be skipped if they check the plan's skip list in their `if` condition. |
+| `--skip-to JOB` | Skip all core jobs before JOB. Choices: `release`, `finalize`. `--skip-to release` skips build; `--skip-to finalize` skips build + release. |
 | `--reuse-run RUN_ID` | Reuse build artifacts from a prior workflow run. Requires `build` to be skipped. |
-| `--reuse-release` | Assume GitHub releases already exist. Requires both `build` and `publish` to be skipped. |
+| `--reuse-release` | Assume GitHub releases already exist. Requires both `build` and `release` to be skipped. |
 
 `--reuse-run` and `--reuse-release` are mutually exclusive.
 
@@ -72,9 +72,9 @@ uvr release --dry-run
 uvr release -y
 
 # Resume after a failed build — reuse artifacts from run 12345678
-uvr release --skip-to publish --reuse-run 12345678
+uvr release --skip-to release --reuse-run 12345678
 
-# Resume after publish succeeded but finalize failed
+# Resume after release succeeded but finalize failed
 uvr release --skip-to finalize --reuse-release
 
 # Skip a custom job (e.g., tests you already ran locally)

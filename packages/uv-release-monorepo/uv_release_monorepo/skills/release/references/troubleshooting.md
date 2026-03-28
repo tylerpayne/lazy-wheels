@@ -48,7 +48,7 @@ When a release fails partway through, you don't need to start over. Use `--skip`
 gh run view <RUN_ID> --log-failed
 ```
 
-The release pipeline has three core jobs in order: **build → publish → finalize**. Pick the right resume strategy based on where it failed:
+The release pipeline has three core jobs in order: **build → release → finalize**. Pick the right resume strategy based on where it failed:
 
 ### Build failed
 
@@ -58,19 +58,19 @@ Nothing was published — just fix the issue and re-run normally:
 uvr release
 ```
 
-### Build succeeded, publish failed
+### Build succeeded, release failed
 
 Reuse the build artifacts so you don't rebuild:
 
 ```bash
-uvr release --skip-to publish --reuse-run <RUN_ID>
+uvr release --skip-to release --reuse-run <RUN_ID>
 ```
 
-`--skip-to publish` skips the build job. `--reuse-run` downloads artifacts from the prior run.
+`--skip-to release` skips the build job. `--reuse-run` downloads artifacts from the prior run.
 
-### Publish succeeded, finalize failed
+### Release succeeded, finalize failed
 
-GitHub releases already exist, so tell uvr to skip both build and publish:
+GitHub releases already exist, so tell uvr to skip both build and release:
 
 ```bash
 uvr release --skip-to finalize --reuse-release
@@ -96,8 +96,8 @@ Custom jobs must check the plan's skip list in their `if` condition for this to 
 
 ### Constraints
 
-- `--reuse-run` requires build to be skipped (via `--skip build` or `--skip-to publish`/`--skip-to finalize`)
-- `--reuse-release` requires both build and publish to be skipped (via `--skip-to finalize`)
+- `--reuse-run` requires build to be skipped (via `--skip build` or `--skip-to release`/`--skip-to finalize`)
+- `--reuse-release` requires both build and release to be skipped (via `--skip-to finalize`)
 - `--reuse-run` and `--reuse-release` are mutually exclusive
 
 ## Main moved ahead of the release branch

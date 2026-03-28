@@ -8,8 +8,9 @@ See [How it works](../user-guide/09-architecture.md) for the user-facing explana
 
 | Module | Key functions |
 |--------|---------------|
-| `deps.py` | `dep_canonical_name`, `pin_dep`, `pin_dependencies`, `rewrite_pyproject`, `update_dep_pins`, `_pin_dep_list` |
-| `plan.py` | `ReleasePlanner.plan`, `ReleasePlanner._detect_pin_changes`, `ReleasePlanner._generate_finalize_commands`, `write_dep_pins` |
+| `planner/_dependencies.py` | `set_version`, `pin_dependencies` |
+| `planner/_versions.py` | `get_base_version`, `parse_tag_version` |
+| `planner/_planner.py` | `ReleasePlanner.plan`, `ReleasePlanner._detect_pin_changes`, `ReleasePlanner._generate_finalize_commands`, `write_dep_pins` |
 | `cli/release.py` | `cmd_release` (write-prompt flow) |
 
 ## Why pins exist
@@ -30,7 +31,7 @@ release for unchanged packages).
   stripping, the release version is `1.2.4`.
 
 - **Unchanged packages**: the version from their last release tag. The tag
-  `my-pkg/v1.2.3` is parsed by `version_from_tag` to extract `1.2.3`.
+  `my-pkg/v1.2.3` is parsed by `parse_tag_version` to extract `1.2.3`.
 
 ```python
 versions: dict[str, str] = {}
@@ -40,11 +41,11 @@ for name, info in packages.items():
     if name not in changed_names:
         tag = release_tags.get(name)
         versions[name] = (
-            version_from_tag(tag) if tag and "/v" in tag else info.version
+            parse_tag_version(tag) if tag and "/v" in tag else info.version
         )
 ```
 
-## `deps.py:update_dep_pins`
+## `planner/_dependencies.py:pin_dependencies`
 
 Given a `pyproject.toml` path and a `{dep_name: version}` map, updates all
 internal dependency constraints in place. Scans three sections:
@@ -78,12 +79,6 @@ dependency that was changed. Example:
 ```
 
 Empty list means no pins needed updating.
-
-## `deps.py:rewrite_pyproject`
-
-Thin wrapper that calls `set_version()` + `pin_dependencies()` for backward
-compatibility. Sets the package version **and** pins internal deps in a single
-logical operation. Uses tomlkit to preserve TOML formatting and comments.
 
 ## The write-prompt flow in `cmd_release`
 

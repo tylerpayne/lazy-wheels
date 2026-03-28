@@ -6,7 +6,7 @@ The release pipeline has four hook points. Edit `.github/workflows/release.yml` 
 |------|-------------|------------|
 | `pre-build` | Before build | Tests, linting |
 | `post-build` | After build | Integration tests |
-| `pre-release` | Before publish | Approval gates |
+| `pre-release` | Before release | Approval gates |
 | `post-release` | After finalize | PyPI publish, notifications |
 
 Unconfigured hooks have a no-op default step and are auto-skipped in the release plan.

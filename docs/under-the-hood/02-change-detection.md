@@ -9,12 +9,17 @@ See [Releasing](../user-guide/02-releasing.md) and [How it works](../user-guide/
 
 | Module | Key functions |
 |--------|---------------|
-| `pipeline.py` | `build_plan`, `discover_packages`, `find_release_tags`, `find_dev_baselines`, `detect_changes` |
-| `toml.py` | `get_workspace_member_globs`, `get_uvr_config`, `get_all_dependency_strings` |
-| `deps.py` | `dep_canonical_name` |
-| `graph.py` | `topo_sort` |
+| `context/_context.py` | `build_context` |
+| `context/_packages.py` | `_find_packages`, `_canonicalize_dependency`, `_get_dependencies` |
+| `context/_releases.py` | `_find_release_tags` |
+| `context/_baselines.py` | `_find_baselines` |
+| `planner/_changes.py` | `detect_changes` |
+| `planner/_planner.py` | `ReleasePlanner`, `build_plan` |
+| `toml.py` | `get_workspace_member_globs`, `read_pyproject` |
+| `config.py` | `get_config` |
+| `planner/_graph.py` | `topo_sort` |
 
-## Discovery -- `pipeline.py:discover_packages`
+## Discovery -- `context/_packages.py:_find_packages`
 
 1. **Read member globs.** `toml.py:get_workspace_member_globs` reads
    `[tool.uv.workspace].members` from the root `pyproject.toml` (e.g.,
@@ -29,12 +34,12 @@ See [Releasing](../user-guide/02-releasing.md) and [How it works](../user-guide/
    locations (`[project].dependencies`, `[project].optional-dependencies.*`,
    `[dependency-groups].*`).
 
-4. **Apply include/exclude filters.** `toml.py:get_uvr_config` reads
+4. **Apply include/exclude filters.** `toml.py:get_config` reads
    `[tool.uvr.config]` from the root pyproject. If `include` is set, only those
    packages are kept. Then `exclude` removes any remaining matches.
 
 5. **Second pass: resolve internal deps.** For each package, each raw dependency
-   string is canonicalized via `deps.py:dep_canonical_name` (which parses the
+   string is canonicalized via `deps.py:_canonicalize_dependency` (which parses the
    PEP 508 string with `packaging.requirements.Requirement` then
    `canonicalize_name`). If the canonical name matches a workspace package, it is
    recorded as an internal dependency.
@@ -42,29 +47,29 @@ See [Releasing](../user-guide/02-releasing.md) and [How it works](../user-guide/
 ### Data flow
 
 ```
-discover_packages(root)
-  -> load_pyproject(root / "pyproject.toml")
+_find_packages(root)
+  -> read_pyproject(root / "pyproject.toml")
   -> get_workspace_member_globs(doc)          # ["packages/*"]
   -> glob.glob for each pattern
   -> for each member dir:
-       load_pyproject(member / "pyproject.toml")
+       read_pyproject(member / "pyproject.toml")
        get_project_name / get_project_version
-       get_all_dependency_strings
-  -> get_uvr_config(root_doc)                 # include/exclude
+       _get_dependencies
+  -> get_config(root_doc)                     # include/exclude
   -> filter packages
-  -> resolve internal deps via dep_canonical_name
+  -> resolve internal deps via _canonicalize_dependency
   -> dict[str, PackageInfo]
 ```
 
 ## Tag lookup
 
-### `pipeline.py:find_release_tags`
+### `context/_releases.py:_find_release_tags`
 
 For each package, runs `git tag --list {name}/v* --sort=-v:refname` and returns
 the first tag that does **not** end in `-dev`. This is the most recent release
 tag (e.g., `my-pkg/v1.2.3`).
 
-### `pipeline.py:find_dev_baselines`
+### `context/_baselines.py:_find_baselines`
 
 For each package, first looks for `-dev` tags via
 `git tag --list {name}/v*-dev --sort=-v:refname`. If found, returns the most
@@ -75,7 +80,7 @@ The dev baseline tag is placed on the version-bump commit after each release.
 This means the diff for the next release starts from the bump commit, not the
 release commit -- so the version bump itself is excluded from change detection.
 
-## Diffing -- `pipeline.py:detect_changes`
+## Diffing -- `planner/_changes.py:detect_changes`
 
 A package is marked dirty if any of these conditions hold:
 
@@ -111,26 +116,30 @@ both B and C are rebuilt even if their own files are untouched.
 
 ## `build_plan()` orchestration
 
-`pipeline.py:build_plan` ties all the above together and returns a
-`(ReleasePlan, pin_changes)` tuple:
+`planner/_planner.py:build_plan` ties all the above together by first building
+a `RepositoryContext` and then running the `ReleasePlanner`:
 
 ```
-build_plan(rebuild_all, matrix, uvr_version, python_version)
-  -> discover_packages()
-  -> find_release_tags(packages)
-  -> find_dev_baselines(packages)
-  -> detect_changes(packages, dev_baselines, rebuild_all)
-  -> split into changed / unchanged dicts
-  -> strip .dev suffixes from changed versions
-  -> compute published_versions for dep pinning
-  -> update_dep_pins(..., write=False) for each changed package  # dry-run
-  -> compute BumpPlan for each changed package (bump_patch)
-  -> expand build matrix (per-package, per-runner)
-  -> build publish matrix (release notes, tags, make_latest)
-  -> assemble ReleasePlan
+build_plan(config)
+  -> build_context(root)              # context/_context.py
+       -> _find_packages(root)        # context/_packages.py
+       -> _find_release_tags(packages)  # context/_releases.py
+       -> _find_baselines(packages)   # context/_baselines.py
+       -> RepositoryContext(packages, release_tags, baselines)
+  -> ReleasePlanner(config, context).plan()
+       -> detect_changes(packages, baselines, rebuild_all)  # planner/_changes.py
+       -> split into changed / unchanged dicts
+       -> compute release versions (strip .dev suffixes)
+       -> compute next versions
+       -> build ChangedPackage for each changed package
+       -> expand build matrix (per-package, per-runner)
+       -> compute release_matrix (release notes, tags, make_latest)
+       -> generate build_commands, release_commands, finalize_commands
+       -> assemble ReleasePlan
+  -> detect pin changes (dry-run)
   -> return (plan, pin_changes)
 ```
 
-Key detail: `build_plan` calls `update_dep_pins` with `write=False`. It only
-*detects* pin changes. The caller (`cmd_release`) decides whether to prompt the
-user to write them. See [Dependency pinning](03-dependency-pinning.md) for more.
+Key detail: the planner detects pin changes with a dry-run pass. The caller
+(`cmd_release`) decides whether to prompt the user to write them.
+See [Dependency pinning](03-dependency-pinning.md) for more.

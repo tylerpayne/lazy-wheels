@@ -8,7 +8,7 @@ See [Add CI hooks](../user-guide/04-hooks.md) and [How it works](../user-guide/0
 
 | Module | Key symbols |
 |--------|-------------|
-| `models.py` | `ReleaseWorkflow`, `WorkflowTrigger`, `WorkflowDispatch`, `WorkflowInput`, `WorkflowJobs`, `Job`, `BuildJob`, `ReleaseJob`, `FinalizeJob`, `JOB_ORDER`, `_frozen`, `_needs_validator`, `_P` |
+| `models/workflow.py` | `ReleaseWorkflow`, `WorkflowTrigger`, `WorkflowDispatch`, `WorkflowInput`, `WorkflowJobs`, `Job`, `BuildJob`, `ReleaseJob`, `FinalizeJob`, `JOB_ORDER`, `_frozen`, `_needs_validator`, `_P` |
 
 ## Top-level model: `ReleaseWorkflow`
 
@@ -68,8 +68,8 @@ There are three core job classes. All inherit directly from `Job`:
 | Class | Default `if` | `_needs_validator` |
 |-------|-------------|-------------------|
 | `BuildJob` | `!contains(plan.skip, 'build')` | (none) |
-| `ReleaseJob` | `always() && !failure() && !contains(plan.skip, 'publish')` | `build` |
-| `FinalizeJob` | `always() && !failure() && !contains(plan.skip, 'finalize')` | `publish` |
+| `ReleaseJob` | `always() && !failure() && !contains(plan.skip, 'release')` | `build` |
+| `FinalizeJob` | `always() && !failure() && !contains(plan.skip, 'finalize')` | `release` |
 
 The `always() && !failure()` pattern means downstream jobs run even when
 earlier jobs are skipped (via the `skip` list in the plan), but stop if a
@@ -98,7 +98,7 @@ class ReleaseJob(Job):
     _ensure_needs = _needs_validator("build")
 
 class FinalizeJob(Job):
-    _ensure_needs = _needs_validator("publish")
+    _ensure_needs = _needs_validator("release")
 ```
 
 If the user removes a `needs` entry from the YAML, validation silently adds it
@@ -125,8 +125,9 @@ warning behavior.
 
 ```python
 JOB_ORDER: list[str] = [
+    "validate_plan",
     "build",
-    "publish",
+    "release",
     "finalize",
 ]
 ```
@@ -136,13 +137,13 @@ before a given job) and by `_print_plan` to display the pipeline in order.
 
 ## `WorkflowJobs`
 
-Maps job names to their models. Only the three core jobs are declared as typed
-fields:
+Maps job names to their models. The four core jobs are declared as typed fields:
 
 ```python
 class WorkflowJobs(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
+    validate_plan: ValidatePlanJob = Field(default_factory=ValidatePlanJob)
     build: BuildJob = Field(default_factory=BuildJob)
     release: ReleaseJob = Field(default_factory=ReleaseJob)
     finalize: FinalizeJob = Field(default_factory=FinalizeJob)
@@ -181,6 +182,6 @@ _BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
 # expands to: ${{ !contains(fromJSON(inputs.plan).skip, 'build') }}
 ```
 
-Step constant blocks (`_BUILD_STEPS`, `_PUBLISH_STEPS`, `_FINALIZE_STEPS`) are
+Step constant blocks (`_BUILD_STEPS`, `_RELEASE_STEPS`, `_FINALIZE_STEPS`) are
 defined at module level and referenced by the frozen field defaults. See
 [CI execution](07-ci-execution.md) for what each step does.
