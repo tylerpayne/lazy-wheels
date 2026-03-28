@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from uv_release_monorepo.cli import __version__, cmd_init
-from uv_release_monorepo.shared.models import MatrixEntry, PackageInfo, ReleasePlan
+from uv_release_monorepo.shared.models import ChangedPackage, PackageInfo, ReleasePlan
 
 
 def _write_workspace_repo(root: Path, package_names: list[str]) -> None:
@@ -30,26 +30,27 @@ def _make_plan(
     """Helper to create a ReleasePlan for testing."""
     changed = changed or []
     unchanged = unchanged or []
-    all_pkgs = changed + unchanged
-    packages = {
+    changed_pkgs = {
+        name: ChangedPackage(
+            path=f"packages/{name}",
+            version="1.0.0",
+            deps=[],
+            current_version="1.0.0",
+            release_version="1.0.0",
+            next_version="1.0.1.dev0",
+            runners=[["ubuntu-latest"]],
+        )
+        for name in changed
+    }
+    unchanged_pkgs = {
         name: PackageInfo(path=f"packages/{name}", version="1.0.0", deps=[])
-        for name in all_pkgs
+        for name in unchanged
     }
     return ReleasePlan(
         uvr_version=__version__,
         rebuild_all=False,
-        changed={name: packages[name] for name in changed},
-        unchanged={name: packages[name] for name in unchanged},
-        release_tags={name: None for name in all_pkgs},
-        matrix=[
-            MatrixEntry(
-                package=name,
-                runner=["ubuntu-latest"],
-                path=f"packages/{name}",
-                version="1.0.0",
-            )
-            for name in changed
-        ],
+        changed=changed_pkgs,
+        unchanged=unchanged_pkgs,
     )
 
 

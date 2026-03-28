@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from uv_release_monorepo.shared.models import (
-    MatrixEntry,
+    ChangedPackage,
     PackageInfo,
     ReleasePlan,
 )
@@ -26,32 +26,28 @@ class TestPackageInfo:
         assert pkg.deps == ["new-dep"]
 
 
-class TestMatrixEntry:
-    def test_create(self) -> None:
-        entry = MatrixEntry(package="pkg-alpha", runner=["ubuntu-latest"])
-        assert entry.package == "pkg-alpha"
-        assert entry.runner == ["ubuntu-latest"]
-
-
 class TestReleasePlan:
     def _make_plan(self) -> ReleasePlan:
-        alpha = PackageInfo(path="packages/alpha", version="0.1.5", deps=[])
+        alpha = ChangedPackage(
+            path="packages/alpha",
+            version="0.1.5",
+            deps=[],
+            current_version="0.1.5.dev0",
+            release_version="0.1.5",
+            next_version="0.1.6.dev0",
+            runners=[["ubuntu-latest"]],
+        )
         beta = PackageInfo(path="packages/beta", version="0.2.0", deps=["pkg-alpha"])
         return ReleasePlan(
             uvr_version="0.3.0",
             rebuild_all=False,
             changed={"pkg-alpha": alpha},
             unchanged={"pkg-beta": beta},
-            release_tags={
-                "pkg-alpha": "pkg-alpha/v0.1.4",
-                "pkg-beta": "pkg-beta/v0.1.9",
-            },
-            matrix=[MatrixEntry(package="pkg-alpha", runner=["ubuntu-latest"])],
         )
 
-    def test_schema_version_defaults_to_8(self) -> None:
+    def test_schema_version_defaults_to_9(self) -> None:
         plan = self._make_plan()
-        assert plan.schema_version == 8
+        assert plan.schema_version == 9
 
     def test_extra_keys_survive_round_trip(self) -> None:
         plan = self._make_plan()
@@ -76,18 +72,18 @@ class TestReleasePlan:
         assert restored.uvr_version == plan.uvr_version
         assert restored.changed["pkg-alpha"].version == "0.1.5"
         assert restored.unchanged["pkg-beta"].version == "0.2.0"
-        assert restored.matrix[0].package == "pkg-alpha"
-        assert restored.matrix[0].runner == ["ubuntu-latest"]
 
-    def test_matrix_shape_matches_gha_include(self) -> None:
-        """matrix entries serialize as dicts for GHA fromJSON."""
+    def test_build_matrix_shape(self) -> None:
+        """build_matrix serializes as list of runner label sets."""
         plan = self._make_plan()
         data = plan.model_dump()
-        assert data["matrix"] == [
-            {
-                "package": "pkg-alpha",
-                "runner": ["ubuntu-latest"],
-                "path": "",
-                "version": "",
-            }
-        ]
+        assert data["build_matrix"] == [["ubuntu-latest"]]
+
+    def test_release_matrix_shape(self) -> None:
+        """release_matrix serializes as list of dicts for GHA fromJSON."""
+        plan = self._make_plan()
+        data = plan.model_dump()
+        assert len(data["release_matrix"]) == 1
+        entry = data["release_matrix"][0]
+        assert entry["package"] == "pkg-alpha"
+        assert entry["tag"] == "pkg-alpha/v0.1.5"

@@ -53,9 +53,8 @@ class TestCmdRelease:
 
         cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
-        mock_planner_cls.return_value.plan.return_value = (
-            _make_plan(changed=[], unchanged=["pkg-alpha"]),
-            [],
+        mock_planner_cls.return_value.plan.return_value = _make_plan(
+            changed=[], unchanged=["pkg-alpha"]
         )
 
         cmd_release(_release_args())
@@ -80,7 +79,7 @@ class TestCmdRelease:
         cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         plan = _make_plan(changed=["pkg-alpha"])
-        mock_planner_cls.return_value.plan.return_value = (plan, [])
+        mock_planner_cls.return_value.plan.return_value = plan
 
         cmd_release(_release_args(dry_run=True))
 
@@ -108,7 +107,7 @@ class TestCmdRelease:
         cmd_init(argparse.Namespace(workflow_dir=".github/workflows"))
 
         plan = _make_plan(changed=["pkg-alpha"])
-        mock_planner_cls.return_value.plan.return_value = (plan, [])
+        mock_planner_cls.return_value.plan.return_value = plan
 
         def _fake_run(cmd, **kwargs):
             if cmd[0] == "git" and "branch" in cmd:

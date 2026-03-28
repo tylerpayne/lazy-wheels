@@ -186,13 +186,11 @@ Run 'uvr <command> --help' for details on a specific command.
         action="append",
         metavar="JOB",
         help="Skip a CI job (repeatable).",
-        choices=["build", "publish", "finalize"],
     )
     _dispatch.add_argument(
         "--skip-to",
         metavar="JOB",
         help="Skip all CI jobs before JOB.",
-        choices=["publish", "finalize"],
     )
     _dispatch.add_argument(
         "--reuse-run",
@@ -289,10 +287,8 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Upgrade frozen template fields in an existing release.yml.",
     )
     init_parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Apply upgrade without confirmation prompt.",
+        "--editor",
+        help="Editor to use for conflict resolution (e.g. 'code', 'vim').",
     )
 
     def _cmd_init_dispatch(a: argparse.Namespace) -> None:

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -142,49 +140,19 @@ class TestUpgrade:
     def test_preserves_user_customization(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """User additions are preserved in the three-way merge."""
+        """User customizations are preserved by three-way merge."""
         wf = _init_and_get_path(tmp_path, monkeypatch)
-        # Add a custom line that doesn't exist in the template
-        text = wf.read_text()
-        text = text.replace(
-            "name: Release Wheels",
-            "name: Release Wheels\n# Custom user comment",
-        )
-        wf.write_text(text)
-        _git_commit_wf(wf)
-
-        cmd_upgrade(_upgrade_args())
-
-        result = wf.read_text()
-        # User addition preserved (may be in a conflict block, but present)
-        assert "Custom user comment" in result
-
-    def test_declined_no_changes(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        wf = _init_and_get_path(tmp_path, monkeypatch)
-        # Add a user line so there's a diff to decline
+        # Change the workflow name — user customization
         text = wf.read_text().replace(
             "name: Release Wheels",
             "name: My Custom Release",
         )
         wf.write_text(text)
         _git_commit_wf(wf)
-        original = wf.read_text()
 
-        _real_run = subprocess.run
+        # Decline editor if conflicts arise
+        monkeypatch.setattr("builtins.input", lambda _: "n")
+        cmd_upgrade(_upgrade_args())
 
-        def fake_run(cmd, **kwargs):
-            if isinstance(cmd, list) and "checkout" in cmd and "-p" in cmd:
-                wf.write_text(original)
-                return MagicMock(returncode=0)
-            return _real_run(cmd, **kwargs)
-
-        monkeypatch.setattr("uv_release_monorepo.cli.init.subprocess.run", fake_run)
-        cmd_upgrade(_upgrade_args(yes=False))
-
-        assert wf.read_text() == original
-        assert "No changes applied" in capsys.readouterr().out
+        result = wf.read_text()
+        assert "My Custom Release" in result

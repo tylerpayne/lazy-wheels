@@ -6,13 +6,50 @@ pyproject.toml files to pin internal workspace dependencies to exact versions.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
+import tomlkit
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from tomlkit.items import Table
 
 from .toml import load_pyproject, save_pyproject
+
+
+def iter_dep_lists(doc: tomlkit.TOMLDocument) -> Iterator[list]:
+    """Yield every mutable dependency list from a pyproject.toml.
+
+    Covers [project].dependencies, [project].optional-dependencies.*,
+    and [dependency-groups].*.  Does NOT include [build-system].requires.
+    """
+    project = doc.get("project", {})
+    deps = project.get("dependencies")
+    if isinstance(deps, list):
+        yield deps
+    for group in project.get("optional-dependencies", {}).values():
+        if isinstance(group, list):
+            yield group
+    for group in doc.get("dependency-groups", {}).values():
+        if isinstance(group, list):
+            yield group
+
+
+def get_all_dependency_strings(doc: tomlkit.TOMLDocument) -> list[str]:
+    """Collect all dependency strings from a pyproject.toml.
+
+    Gathers dependencies from four locations:
+    - [build-system].requires (build-time deps)
+    - [project].dependencies (main runtime deps)
+    - [project].optional-dependencies.* (extras like [dev], [test])
+    - [dependency-groups].* (PEP 735 dependency groups)
+
+    Returns raw PEP 508 strings like "requests>=2.0" or "pkg[extra]~=1.0".
+    """
+    deps: list[str] = list(doc.get("build-system", {}).get("requires", []))
+    for dep_list in iter_dep_lists(doc):
+        deps.extend(dep_list)
+    return deps
 
 
 def dep_canonical_name(dep_str: str) -> str:
@@ -82,29 +119,8 @@ def pin_dependencies(
     if not internal_dep_versions:
         return
     doc = load_pyproject(pyproject_path)
-    project = doc.get("project")
-    if not isinstance(project, Table):
-        return
-
-    # Pin deps in [project].dependencies
-    deps = project.get("dependencies")
-    if isinstance(deps, list):
-        _pin_dep_list(deps, internal_dep_versions)
-
-    # Pin deps in [project].optional-dependencies.*
-    opt_deps = project.get("optional-dependencies")
-    if isinstance(opt_deps, dict):
-        for group in opt_deps.values():
-            if isinstance(group, list):
-                _pin_dep_list(group, internal_dep_versions)
-
-    # Pin deps in [dependency-groups].*
-    dep_groups = doc.get("dependency-groups")
-    if isinstance(dep_groups, dict):
-        for group in dep_groups.values():
-            if isinstance(group, list):
-                _pin_dep_list(group, internal_dep_versions)
-
+    for dep_list in iter_dep_lists(doc):
+        _pin_dep_list(dep_list, internal_dep_versions)
     save_pyproject(pyproject_path, doc)
 
 
@@ -125,54 +141,6 @@ def rewrite_pyproject(
     """
     set_version(pyproject_path, new_version)
     pin_dependencies(pyproject_path, internal_dep_versions)
-
-
-def update_dep_pins(
-    path: Path, versions: dict[str, str], *, write: bool = True
-) -> list[tuple[str, str]]:
-    """Pin internal dep constraints in a pyproject.toml without changing the version.
-
-    Updates [project].dependencies, [project].optional-dependencies.*, and
-    [dependency-groups].* sections. Uses tomlkit to preserve formatting.
-
-    Args:
-        path: Path to the pyproject.toml file.
-        versions: Map of package name → version to pin.
-        write: If False, detect whether pins need updating without writing to disk.
-
-    Returns:
-        List of (old_spec, new_spec) pairs for each changed dependency.
-        Empty list means no changes were needed.
-    """
-    if not versions:
-        return []
-    doc = load_pyproject(path)
-    project = doc.get("project")
-    if not isinstance(project, Table):
-        return []
-
-    changes: list[tuple[str, str]] = []
-    deps = project.get("dependencies")
-    if isinstance(deps, list):
-        changes += _pin_dep_list(deps, versions)
-
-    opt_deps = project.get("optional-dependencies")
-    if isinstance(opt_deps, dict):
-        for group in opt_deps.values():
-            if isinstance(group, list):
-                changes += _pin_dep_list(group, versions)
-
-    dep_groups = doc.get("dependency-groups")
-    if isinstance(dep_groups, dict):
-        for group in dep_groups.values():
-            if isinstance(group, list):
-                changes += _pin_dep_list(group, versions)
-
-    if not changes:
-        return []
-    if write:
-        save_pyproject(path, doc)
-    return changes
 
 
 def _pin_dep_list(deps: list, versions: dict[str, str]) -> list[tuple[str, str]]:

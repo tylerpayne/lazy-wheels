@@ -3,14 +3,60 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import tempfile
 from pathlib import Path
 
-from ..shared.models import ReleaseWorkflow
+import shutil
+
+from ..shared.config import get_uvr_config
+from ..shared.models.workflow import ReleaseWorkflow
 from ..shared.toml import load_pyproject, save_pyproject
 from ._common import _fatal
 from ._yaml import _dump_yaml, _load_yaml, _write_yaml
+
+
+_FALLBACK_EDITORS = ("code", "vim", "vi", "nano")
+
+# Editors that launch a GUI and return immediately — need --wait to block
+_WAIT_EDITORS = {"code", "codium", "subl", "atom", "zed"}
+
+
+def _editor_cmd(editor: str) -> list[str]:
+    """Build the editor command, adding --wait for GUI editors that need it."""
+    base = Path(editor).stem
+    if base in _WAIT_EDITORS:
+        return [editor, "--wait"]
+    return [editor]
+
+
+def _resolve_editor(args: argparse.Namespace, root: Path) -> str | None:
+    """Resolve editor: --editor CLI arg > [tool.uvr.config].editor > $VISUAL > $EDITOR > fallback."""
+    # CLI arg
+    cli_editor = getattr(args, "editor", None)
+    if cli_editor:
+        return cli_editor
+
+    # [tool.uvr.config].editor
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        config = get_uvr_config(load_pyproject(pyproject))
+        toml_editor = config.get("editor", "")
+        if toml_editor:
+            return toml_editor
+
+    # Environment variables
+    env_editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+    if env_editor:
+        return env_editor
+
+    # Fallback: first available from known editors
+    for name in _FALLBACK_EDITORS:
+        if shutil.which(name):
+            return name
+
+    return None
 
 
 def _git_commit_and_record(
@@ -23,7 +69,7 @@ def _git_commit_and_record(
 
     Prompts the user for confirmation before committing.
     """
-    from ..shared.gitops import open_repo
+    from ..shared.git.local import open_repo
 
     rel_files = [str(Path(f).relative_to(root)) for f in files]
     print()
@@ -159,7 +205,7 @@ def _get_base_text(root: Path, rel_path: str, config_key: str) -> str:
     """Retrieve the base file content from the init commit, or empty string."""
     import pygit2
 
-    from ..shared.gitops import open_repo
+    from ..shared.git.local import open_repo
 
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
@@ -224,14 +270,14 @@ def _three_way_merge(dest: Path, base_text: str, fresh_text: str) -> tuple[str, 
         base_path.unlink(missing_ok=True)
         fresh_path.unlink(missing_ok=True)
 
-    if result.returncode > 1:
+    if result.returncode < 0:
         _fatal(f"git merge-file failed:\n{result.stderr}")
 
-    return result.stdout, result.returncode == 1
+    return result.stdout, result.returncode > 0
 
 
 def cmd_upgrade(args: argparse.Namespace) -> None:
-    """Upgrade an existing release.yml using three-way merge with git merge-file."""
+    """Upgrade an existing release.yml via three-way merge (falling back to two-way)."""
     root = Path.cwd()
     workflow_dir = getattr(args, "workflow_dir", ".github/workflows")
     dest = root / workflow_dir / "release.yml"
@@ -250,86 +296,56 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
             "  Commit or stash them before upgrading."
         )
 
-    # Generate fresh template
+    existing_text = dest.read_text()
+    rel_dest = str(dest.relative_to(root))
+
     fresh_text = _dump_yaml(
         ReleaseWorkflow().model_dump(by_alias=True, exclude_none=True)
     )
-    existing_text = dest.read_text()
-
-    if existing_text.rstrip() == fresh_text.rstrip():
-        print("Already up to date.")
-        return
-
-    rel_dest = str(dest.relative_to(root))
-
-    # Get base from the init commit (if tracked), otherwise empty
     base_text = _get_base_text(root, rel_dest, "init_commit")
-
     merged_text, has_conflicts = _three_way_merge(dest, base_text, fresh_text)
 
     if merged_text.rstrip() == existing_text.rstrip():
         print("Already up to date.")
         return
 
-    if has_conflicts:
-        print(f"Merge has conflicts -- resolve markers in {rel_dest} after applying.")
-
-    # Write merged content over the file
     dest.write_text(merged_text)
 
-    if not getattr(args, "yes", False):
-        # Interactive: let user revert hunks they don't want
-        try:
-            subprocess.run(["git", "checkout", "-p", "--", str(dest)])
-        except KeyboardInterrupt:
-            dest.write_text(existing_text)
-            print("\nAborted. No changes applied.")
-            return
-
-        final_text = dest.read_text()
-        if final_text.rstrip() == existing_text.rstrip():
-            print("No changes applied.")
-            return
-
-        # Confirm the result (handles quit-early leaving partial state)
-        try:
-            answer = input("\nKeep these changes? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if answer != "y":
-            dest.write_text(existing_text)
-            print("Reverted. No changes applied.")
-            return
-
-    print(f"OK: Upgraded {rel_dest}")
-
-    # Record the upgrade commit
-    _git_commit_and_record(
-        root,
-        [str(dest)],
-        "chore: uvr init --upgrade",
-        "init_commit",
-    )
-
-    # Skip validation if conflicts remain
-    if has_conflicts or "<<<<<<" in dest.read_text():
-        print("  Resolve conflict markers before committing.")
+    if not (has_conflicts or "<<<<<<" in merged_text):
+        print(f"OK: Upgraded {rel_dest}")
+        _git_commit_and_record(
+            root, [str(dest)], "chore: uvr init --upgrade", "init_commit"
+        )
         return
 
-    # Validate the result
-    import warnings
+    # Conflicts — offer editor
+    print(f"Upgraded {rel_dest} with conflicts.")
+    editor = _resolve_editor(args, root)
+    prompt = (
+        f"Open in {editor} to resolve? [Y/n/editor] "
+        if editor
+        else "Editor to resolve? [n/editor] "
+    )
+    try:
+        answer = input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+    if answer.lower() not in ("n", "no", ""):
+        chosen = editor if answer.lower() in ("y", "yes") else answer
+        if chosen:
+            subprocess.run([*_editor_cmd(chosen), str(dest)])
+    elif editor and answer == "":
+        subprocess.run([*_editor_cmd(editor), str(dest)])
 
-    from pydantic import ValidationError
-
-    reloaded = _load_yaml(dest)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+    # Check if conflicts were resolved
+    if "<<<<<<" in dest.read_text():
+        print("Unresolved conflicts remain.")
         try:
-            ReleaseWorkflow.model_validate(reloaded)
-        except ValidationError as e:
-            print(f"\nUpgraded file has validation errors:\n{e}")
-            return
-
-    if caught:
-        for w in caught:
-            print(f"  Warning: {w.message}")
+            answer = input("Revert to original? [Y/n] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer not in ("n", "no"):
+            dest.write_text(existing_text)
+            print("Reverted. No changes applied.")
+        else:
+            print(f"  Resolve markers in {rel_dest}, then commit.")

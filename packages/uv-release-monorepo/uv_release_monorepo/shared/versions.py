@@ -11,6 +11,9 @@ import re
 
 import semver
 
+_DEV_RE = re.compile(r"\.dev\d*$")
+_DEV_NUM_RE = re.compile(r"\.dev(\d+)$")
+
 
 def strip_dev(version_str: str) -> str:
     """Remove a PEP 440 ``.devN`` suffix if present.
@@ -20,7 +23,7 @@ def strip_dev(version_str: str) -> str:
         "1.2.3" -> "1.2.3"
         "1.2.3.post0.dev0" -> "1.2.3.post0"
     """
-    return re.sub(r"\.dev\d*$", "", version_str)
+    return _DEV_RE.sub("", version_str)
 
 
 def make_dev(version_str: str) -> str:
@@ -42,7 +45,7 @@ def bump_dev(version_str: str) -> str:
         "1.2.3.dev5" -> "1.2.3.dev6"
         "1.2.3" -> "1.2.3.dev0"  (adds .dev0 if not present)
     """
-    m = re.search(r"\.dev(\d+)$", version_str)
+    m = _DEV_NUM_RE.search(version_str)
     if m:
         n = int(m.group(1))
         return version_str[: m.start()] + f".dev{n + 1}"
@@ -57,13 +60,13 @@ def dev_number(version_str: str) -> int | None:
         "1.2.3.dev5" -> 5
         "1.2.3" -> None
     """
-    m = re.search(r"\.dev(\d+)$", version_str)
+    m = _DEV_NUM_RE.search(version_str)
     return int(m.group(1)) if m else None
 
 
 def is_dev(version_str: str) -> bool:
     """Check if a version has a .devN suffix."""
-    return re.search(r"\.dev\d*$", version_str) is not None
+    return _DEV_RE.search(version_str) is not None
 
 
 def is_prerelease(version_str: str) -> bool:
@@ -107,7 +110,7 @@ def strip_version(
     """
     v = version_str
     if dev:
-        v = re.sub(r"\.dev\d*$", "", v)
+        v = _DEV_RE.sub("", v)
     if post:
         v = re.sub(r"\.post\d+$", "", v)
     if pre:

@@ -1,13 +1,7 @@
-"""Data models for uv-release-monorepo.
-
-These Pydantic models represent the core data structures used throughout
-the release pipeline.
-"""
+"""Release workflow models -- represents the full .github/workflows/release.yml."""
 
 from __future__ import annotations
 
-import json as _json
-from dataclasses import dataclass
 from typing import Annotated, Any
 
 from pydantic import (
@@ -15,171 +9,9 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    PlainSerializer,
-    PlainValidator,
     model_serializer,
     model_validator,
 )
-
-
-def _validate_runner_key(v: Any) -> tuple[str, ...]:
-    """Parse a runner key from a JSON string or sequence into a tuple."""
-    if isinstance(v, str):
-        parsed = _json.loads(v)
-        if not isinstance(parsed, list):
-            msg = f"Expected JSON array for runner key, got {type(parsed).__name__}"
-            raise ValueError(msg)
-        return tuple(parsed)
-    if isinstance(v, (list, tuple)):
-        return tuple(v)
-    msg = f"Expected str, list, or tuple for runner key, got {type(v).__name__}"
-    raise ValueError(msg)
-
-
-RunnerKey = Annotated[
-    tuple[str, ...],
-    PlainValidator(_validate_runner_key),
-    PlainSerializer(lambda v: _json.dumps(list(v)), return_type=str),
-]
-"""Runner label key: a tuple of runner labels (e.g. ``("ubuntu-latest",)``).
-
-Accepts JSON strings (``'["ubuntu-latest"]'``), lists, or tuples on input.
-Serializes back to a JSON string for use as a dict key in JSON output.
-"""
-
-
-@dataclass
-class PlanConfig:
-    """Configuration for ReleasePlanner.
-
-    Groups the parameters needed to generate a release plan. Uses dataclass
-    rather than BaseModel because this is internal configuration, not
-    serialized data.
-
-    Attributes:
-        rebuild_all: If True, mark all packages as changed.
-        matrix: Per-package runner configuration from the workflow file.
-        uvr_version: The uvr version to embed in the plan.
-        python_version: Python version for CI builds.
-        ci_publish: If True (default), plan targets CI execution.
-        release_type: One of "final", "dev", "pre", "post".
-        pre_kind: Pre-release kind ("a", "b", "rc"). Only used when release_type="pre".
-    """
-
-    rebuild_all: bool
-    matrix: dict[str, list[list[str]]]
-    uvr_version: str
-    python_version: str = "3.12"
-    ci_publish: bool = True
-    release_type: str = "final"
-    pre_kind: str = ""
-    dry_run: bool = False
-
-
-class PackageInfo(BaseModel):
-    """Metadata for a single package in the monorepo workspace.
-
-    Attributes:
-        path: Relative path from workspace root to the package directory.
-        version: Current version string from pyproject.toml.
-        deps: List of internal (workspace) dependency names. External deps
-              are not tracked here since we only need to manage internal
-              version pinning.
-    """
-
-    path: str
-    version: str
-    deps: list[str] = Field(default_factory=list)
-
-
-class BumpPlan(BaseModel):
-    """Pre-computed version bump for a single package.
-
-    Computed locally during planning so CI only needs to apply the patch
-    bump — dep pin updates are applied locally before the release is triggered.
-
-    Attributes:
-        new_version: The patch-bumped version to write into pyproject.toml.
-    """
-
-    new_version: str
-
-
-class PlanCommand(BaseModel):
-    """A single shell command in the release plan.
-
-    The planner pre-computes every command; the executor just runs them
-    via ``subprocess.run()``.
-
-    Attributes:
-        args: Command and arguments, e.g. ``["git", "tag", "pkg/v1.0.0"]``.
-        label: Human-readable description printed before execution.
-        check: If True, abort on non-zero exit code.
-    """
-
-    args: list[str]
-    label: str = ""
-    check: bool = True
-
-
-class BuildStage(BaseModel):
-    """A group of per-package command sequences that execute concurrently.
-
-    Stages execute sequentially (layer 0 completes before layer 1 starts).
-    Within a stage, each package's commands run in a separate thread so
-    independent packages build in parallel.
-
-    Attributes:
-        setup: Commands that run sequentially before parallel builds.
-        packages: Map of package name to its command list.  Different
-            packages run concurrently; commands within a package run
-            sequentially.
-        cleanup: Commands that run sequentially after parallel builds.
-    """
-
-    setup: list[PlanCommand] = Field(default_factory=list)
-    packages: dict[str, list[PlanCommand]] = Field(default_factory=dict)
-    cleanup: list[PlanCommand] = Field(default_factory=list)
-
-
-class MatrixEntry(BaseModel):
-    """A single (package, runner) pair in the build matrix."""
-
-    package: str
-    runner: list[str]
-    path: str = ""
-    version: str = ""
-
-
-class DepPinChange(BaseModel):
-    """A single dependency pin change (old spec -> new spec)."""
-
-    old_spec: str
-    new_spec: str
-
-
-class PinChange(BaseModel):
-    """Dependency pin changes for a single package."""
-
-    package: str
-    changes: list[DepPinChange]
-
-
-class PublishEntry(BaseModel):
-    """A single entry in the publish matrix — one GitHub release per package."""
-
-    package: str
-    version: str
-    tag: str
-    title: str
-    body: str
-    make_latest: bool = False
-    dist_name: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Release workflow models — represents the full .github/workflows/release.yml
-# ---------------------------------------------------------------------------
 
 
 class WorkflowInput(BaseModel):
@@ -205,7 +37,7 @@ class WorkflowDispatch(BaseModel):
 
 
 class WorkflowTrigger(BaseModel):
-    """The ``on:`` block. Editable — users can add triggers."""
+    """The ``on:`` block. Editable -- users can add triggers."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -224,13 +56,16 @@ class Job(BaseModel):
     concurrency: str | dict | None = None
     timeout_minutes: int | None = Field(default=None, alias="timeout-minutes")
     env: dict[str, str] | None = None
+    strategy: dict = Field(default_factory=dict)
     steps: list[dict] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
-    def _drop_empty_needs(self, handler: Any) -> dict:
+    def _drop_empty(self, handler: Any) -> dict:
         d = handler(self)
         if "needs" in d and d["needs"] == []:
             del d["needs"]
+        if "strategy" in d and d["strategy"] == {}:
+            del d["strategy"]
         return d
 
 
@@ -284,7 +119,7 @@ _BUILD_STEPS: list[dict] = [
     },
 ]
 
-_PUBLISH_STEPS: list[dict] = [
+_RELEASE_STEPS: list[dict] = [
     {
         "id": "download",
         "uses": "actions/download-artifact@v4",
@@ -365,7 +200,7 @@ _VALIDATE_PLAN_STEPS: list[dict] = [
 
 
 class ValidatePlanJob(Job):
-    """The validate-plan job. Frozen — runs first to validate plan JSON."""
+    """The validate-plan job. Frozen -- runs first to validate plan JSON."""
 
     steps: Annotated[
         list[dict],
@@ -378,7 +213,7 @@ _BUILD_RUNS_ON = "${{ matrix.runner }}"
 _BUILD_STRATEGY = {
     # Avoid messy partial --reuse-build merges: all runners succeed or all runners fail
     "fail-fast": True,
-    "matrix": {"runner": f"${{{{ {_P}.runners }}}}"},
+    "matrix": {"runner": f"${{{{ {_P}.build_matrix }}}}"},
 }
 
 
@@ -400,25 +235,25 @@ class BuildJob(Job):
     _ensure_needs = _needs_validator("validate_plan")
 
 
-_PUBLISH_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'publish') }}}}"
-_PUBLISH_STRATEGY = {
+_RELEASE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'release') }}}}"
+_RELEASE_STRATEGY = {
     "fail-fast": False,
-    "matrix": {"include": f"${{{{ {_P}.publish_matrix }}}}"},
+    "matrix": {"include": f"${{{{ {_P}.release_matrix }}}}"},
 }
 
 
 class ReleaseJob(Job):
-    """The publish job. Frozen -- immutable fields enforced per-field."""
+    """The release job. Frozen -- immutable fields enforced per-field."""
 
     if_condition: Annotated[
-        str | None, _frozen(_PUBLISH_IF, job="publish", field="if")
-    ] = Field(default=_PUBLISH_IF, alias="if")
+        str | None, _frozen(_RELEASE_IF, job="release", field="if")
+    ] = Field(default=_RELEASE_IF, alias="if")
     strategy: Annotated[
-        dict, _frozen(_PUBLISH_STRATEGY, job="publish", field="strategy")
-    ] = Field(default_factory=lambda: dict(_PUBLISH_STRATEGY))
+        dict, _frozen(_RELEASE_STRATEGY, job="release", field="strategy")
+    ] = Field(default_factory=lambda: dict(_RELEASE_STRATEGY))
     steps: Annotated[
-        list[dict], _frozen(_PUBLISH_STEPS, job="publish", field="steps")
-    ] = Field(default_factory=lambda: list(_PUBLISH_STEPS))
+        list[dict], _frozen(_RELEASE_STEPS, job="release", field="steps")
+    ] = Field(default_factory=lambda: list(_RELEASE_STEPS))
     _ensure_needs = _needs_validator("build")
 
 
@@ -434,7 +269,7 @@ class FinalizeJob(Job):
     steps: Annotated[
         list[dict], _frozen(_FINALIZE_STEPS, job="finalize", field="steps")
     ] = Field(default_factory=lambda: list(_FINALIZE_STEPS))
-    _ensure_needs = _needs_validator("publish")
+    _ensure_needs = _needs_validator("release")
 
 
 class WorkflowJobs(BaseModel):
@@ -467,7 +302,7 @@ class ReleaseWorkflow(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _normalize_on_key(cls, data: Any) -> Any:
-        """PyYAML parses ``on:`` as boolean ``True`` — normalize to string."""
+        """PyYAML parses ``on:`` as boolean ``True`` -- normalize to string."""
         if isinstance(data, dict) and True in data:
             data["on"] = data.pop(True)
         return data
@@ -476,52 +311,7 @@ class ReleaseWorkflow(BaseModel):
 JOB_ORDER: list[str] = [
     "validate_plan",
     "build",
-    "publish",
+    "release",
     "finalize",
 ]
 """Canonical ordering of jobs in the release workflow pipeline."""
-
-
-class ReleasePlan(BaseModel):
-    """Self-contained release plan generated locally and executed by CI.
-
-    Contains everything the executor workflow needs: which packages changed,
-    what their last release tags were, which runners to use for each build,
-    and the pre-computed version bumps. The executor never needs to run git
-    commands, change detection, or version arithmetic.
-
-    Extra keys are allowed (``extra="allow"``) so that user hooks can attach
-    custom data that travels through the pipeline to CI.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    schema_version: int = 8
-    uvr_version: str
-    uvr_install: str = "uv-release-monorepo"
-    python_version: str = "3.12"
-    release_type: str = "final"
-    rebuild_all: bool
-    changed: dict[str, PackageInfo]
-    unchanged: dict[str, PackageInfo]
-    current_versions: dict[str, str] = Field(default_factory=dict)
-    release_tags: dict[str, str | None]
-    matrix: list[MatrixEntry]
-    runners: list[list[str]] = Field(default_factory=list)
-    bumps: dict[str, BumpPlan] = Field(default_factory=dict)
-    publish_matrix: list[PublishEntry] = Field(default_factory=list)
-    ci_publish: bool = False
-    skip: list[str] = Field(default_factory=list)
-    reuse_run_id: str = ""
-
-    @model_validator(mode="after")
-    def _forbid_skip_validate_plan(self) -> ReleasePlan:
-        if "validate-plan" in self.skip or "validate_plan" in self.skip:
-            msg = "validate-plan cannot be skipped"
-            raise ValueError(msg)
-        return self
-
-    # Pre-computed command sequences for the executor
-    build_commands: dict[RunnerKey, list[BuildStage]] = Field(default_factory=dict)
-    publish_commands: list[PlanCommand] = Field(default_factory=list)
-    finalize_commands: list[PlanCommand] = Field(default_factory=list)

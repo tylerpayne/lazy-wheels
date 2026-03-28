@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from packaging.utils import canonicalize_name
@@ -9,17 +10,15 @@ from packaging.utils import canonicalize_name
 from .graph import topo_layers
 from .models import (
     BuildStage,
-    BumpPlan,
-    MatrixEntry,
+    ChangedPackage,
     PackageInfo,
-    PinChange,
     PlanCommand,
     PlanConfig,
-    PublishEntry,
     ReleasePlan,
 )
 from .deps import pin_dependencies, set_version
-from .toml import get_uvr_config, load_pyproject
+from .config import get_uvr_config
+from .toml import load_pyproject
 from .versions import (
     base_version,
     bump_dev,
@@ -34,9 +33,13 @@ from .versions import (
 )
 from .changes import detect_changes
 from .discovery import discover_packages, find_release_tags, get_baseline_tags
-from .github import list_release_tag_names
-from .gitops import list_tags, open_repo
-from .publish import generate_release_notes
+from .git.local import generate_release_notes, list_tags, open_repo
+from .git.remote import list_release_tag_names
+
+
+def _dist_name(name: str) -> str:
+    """Convert a package name to its wheel/dist filename stem."""
+    return canonicalize_name(name).replace("-", "_")
 
 
 class ReleasePlanner:
@@ -49,9 +52,8 @@ class ReleasePlanner:
     def __init__(self, config: PlanConfig) -> None:
         self.config = config
 
-    def plan(self) -> tuple[ReleasePlan, list[PinChange]]:
+    def plan(self) -> ReleasePlan:
         """Discover packages, detect changes, return a ReleasePlan."""
-        # Fetch shared data once via library calls (no subprocess overhead)
         repo = open_repo()
         all_git_tags = list_tags(repo)
         all_git_tags_set = set(all_git_tags)
@@ -64,83 +66,86 @@ class ReleasePlanner:
             packages, baselines, self.config.rebuild_all, repo=repo
         )
 
-        changed = {name: packages[name] for name in changed_names}
+        raw_changed = {name: packages[name] for name in changed_names}
         unchanged = {
             name: info for name, info in packages.items() if name not in changed_names
         }
 
-        # Save current pyproject versions before transformation
-        current_versions = {name: info.version for name, info in changed.items()}
+        # Save current versions before transformation
+        current_versions = {name: info.version for name, info in raw_changed.items()}
 
-        # Compute release versions based on release_type
-        changed = self._compute_release_versions(changed, release_tags, all_git_tags)
+        # Compute release versions
+        release_versions = self._compute_release_versions(raw_changed, all_git_tags)
+
+        # Build a working dict with release versions applied (for dep pinning, commands)
+        versioned: dict[str, PackageInfo] = {}
+        for name, info in raw_changed.items():
+            versioned[name] = PackageInfo(
+                path=info.path, version=release_versions[name], deps=info.deps
+            )
 
         # Compute published versions for internal dep pinning
         published_versions = self._published_versions(
-            changed, changed_names, packages, release_tags
+            versioned, changed_names, packages, release_tags
         )
 
         # Apply release versions and dep pins locally (skip for dry-run)
         if not self.config.dry_run:
-            self._apply_versions_and_pins(changed, published_versions)
+            self._apply_versions_and_pins(versioned, published_versions)
 
-        # Pre-compute version bumps (always bump to next .devN)
-        bumps = self._compute_bumps(changed)
+        # Compute next-dev versions
+        next_versions = self._compute_next_versions(versioned)
 
-        # Pre-compute release notes once (used by both publish commands and publish matrix)
-        release_notes: dict[str, str] = {}
+        # Generate release notes
+        notes: dict[str, str] = {}
         for name in changed_names:
-            info = changed[name]
+            info = versioned[name]
             baseline = release_tags.get(name)
-            release_notes[name] = generate_release_notes(
-                name, info, baseline, repo=repo
+            notes[name] = generate_release_notes(name, info, baseline, repo=repo)
+
+        # Determine which package gets "Latest" on GitHub
+        root_doc = load_pyproject(Path.cwd() / "pyproject.toml")
+        latest_pkg = get_uvr_config(root_doc).get("latest", "")
+
+        # Assemble ChangedPackage objects
+        changed: dict[str, ChangedPackage] = {}
+        for name in sorted(changed_names):
+            info = versioned[name]
+            changed[name] = ChangedPackage(
+                path=info.path,
+                version=info.version,
+                deps=info.deps,
+                current_version=current_versions[name],
+                release_version=release_versions[name],
+                next_version=next_versions[name],
+                last_release_tag=release_tags.get(name),
+                release_notes=notes.get(name, ""),
+                make_latest=name == latest_pkg,
+                runners=self.config.matrix.get(name, [["ubuntu-latest"]]),
             )
 
-        # Expand matrix
-        matrix_entries = self._expand_matrix(changed_names, changed)
-        unique_runners = sorted(
-            {tuple(e.runner) for e in matrix_entries}, key=lambda t: list(t)
-        )
-        runners_list: list[list[str]] = [list(t) for t in unique_runners]
-
-        # Build publish matrix
-        publish_entries = self._build_publish_matrix(
-            changed_names, changed, release_notes
-        )
-
         # Generate command sequences
-        build_commands = self._generate_build_commands(
-            changed, unchanged, release_tags, matrix_entries
-        )
-        publish_commands = self._generate_publish_commands(
-            changed, release_tags, release_notes
-        )
+        build_commands = self._generate_build_commands(changed, unchanged, release_tags)
+        release_commands = self._generate_release_commands(changed)
         finalize_commands = self._generate_finalize_commands(
-            changed, bumps, published_versions
+            changed, published_versions
         )
 
-        # Validate that no tags we'll create already exist
-        self._check_tag_conflicts(changed, bumps, all_git_tags_set, all_gh_releases)
+        # Validate no tag conflicts
+        self._check_tag_conflicts(changed, all_git_tags_set, all_gh_releases)
 
-        result_plan = ReleasePlan(
+        return ReleasePlan(
             uvr_version=self.config.uvr_version,
             python_version=self.config.python_version,
             rebuild_all=self.config.rebuild_all,
             release_type=self.config.release_type,
+            ci_publish=self.config.ci_publish,
             changed=changed,
             unchanged=unchanged,
-            current_versions=current_versions,
-            release_tags=release_tags,
-            matrix=matrix_entries,
-            runners=runners_list,
-            bumps=bumps,
-            publish_matrix=publish_entries,
-            ci_publish=self.config.ci_publish,
             build_commands=build_commands,
-            publish_commands=publish_commands,
+            release_commands=release_commands,
             finalize_commands=finalize_commands,
         )
-        return result_plan, []
 
     def _apply_versions_and_pins(
         self,
@@ -162,22 +167,13 @@ class ReleasePlanner:
     def _compute_release_versions(
         self,
         changed: dict[str, PackageInfo],
-        release_tags: dict[str, str | None],
         all_git_tags: list[str],
-    ) -> dict[str, PackageInfo]:
-        """Compute the release version for each changed package.
-
-        - final: strip all suffixes (dev, pre, post) → clean X.Y.Z
-        - dev: keep as-is (publish the .devN version)
-        - pre: rewrite to X.Y.Z{a,b,rc}N (auto-increment N from existing tags)
-        - post: rewrite to X.Y.Z.postN (auto-increment N from existing tags)
-        """
+    ) -> dict[str, str]:
+        """Compute the release version string for each changed package."""
         rt = self.config.release_type
-        result: dict[str, PackageInfo] = {}
+        result: dict[str, str] = {}
 
         if rt == "dev":
-            # Publish as-is — the .devN version in pyproject.toml is the release.
-            # Error if any package doesn't have a .dev suffix.
             bad = {
                 n: changed[n] for n in sorted(changed) if not is_dev(changed[n].version)
             }
@@ -195,70 +191,44 @@ class ReleasePlanner:
                     f"Fix with:\n{lines}"
                 )
             for name, info in changed.items():
-                result[name] = info
+                result[name] = info.version
         elif rt == "pre":
             for name, info in changed.items():
                 bv = base_version(info.version)
                 n = next_pre_number(all_git_tags, name, self.config.pre_kind)
-                version = make_pre(bv, self.config.pre_kind, n)
-                result[name] = PackageInfo(
-                    path=info.path, version=version, deps=info.deps
-                )
+                result[name] = make_pre(bv, self.config.pre_kind, n)
         elif rt == "post":
             for name, info in changed.items():
                 bv = base_version(info.version)
                 n = next_post_number(all_git_tags, name)
-                version = make_post(bv, n)
-                result[name] = PackageInfo(
-                    path=info.path, version=version, deps=info.deps
-                )
+                result[name] = make_post(bv, n)
         else:
-            # final: strip all suffixes (dev, pre, post) → clean X.Y.Z
             for name, info in changed.items():
-                result[name] = PackageInfo(
-                    path=info.path, version=base_version(info.version), deps=info.deps
-                )
+                result[name] = base_version(info.version)
 
         return result
 
-    def _compute_bumps(self, changed: dict[str, PackageInfo]) -> dict[str, BumpPlan]:
-        """Compute the exact next pyproject.toml version after release.
-
-        The returned new_version is written directly — no further transformation.
-
-        - After final 1.0.1:      → 1.0.2.dev0
-        - After dev 1.0.1.dev2:   → 1.0.1.dev3
-        - After pre 1.0.1a0:      → 1.0.1a1.dev0  (dev toward next pre)
-        - After post 1.0.0.post0: → 1.0.0.post0.dev0
-        """
+    def _compute_next_versions(self, changed: dict[str, PackageInfo]) -> dict[str, str]:
+        """Compute the post-release dev version for each changed package."""
         rt = self.config.release_type
-        bumps: dict[str, BumpPlan] = {}
+        result: dict[str, str] = {}
 
         for name, info in changed.items():
             if rt == "dev":
-                bumps[name] = BumpPlan(new_version=bump_dev(info.version))
+                result[name] = bump_dev(info.version)
             elif rt == "pre":
-                # After 1.0.1a0 → 1.0.1a1.dev0 (increment pre number, add .dev0)
                 kind = self.config.pre_kind
-                # Extract current pre number and increment
-                import re
-
                 m = re.search(rf"{re.escape(kind)}(\d+)$", info.version)
                 n = int(m.group(1)) + 1 if m else 1
-                next_pre = make_pre(info.version, kind, n)
-                bumps[name] = BumpPlan(new_version=make_dev(next_pre))
+                result[name] = make_dev(make_pre(info.version, kind, n))
             elif rt == "post":
-                # After 1.0.0.post0 → 1.0.0.post1.dev0 (dev toward next post)
-                import re
-
                 m = re.search(r"\.post(\d+)$", info.version)
                 n = int(m.group(1)) + 1 if m else 1
-                next_post = make_post(info.version, n)
-                bumps[name] = BumpPlan(new_version=make_dev(next_post))
+                result[name] = make_dev(make_post(info.version, n))
             else:
-                bumps[name] = BumpPlan(new_version=make_dev(bump_patch(info.version)))
+                result[name] = make_dev(bump_patch(info.version))
 
-        return bumps
+        return result
 
     # ------------------------------------------------------------------
     # Command generation
@@ -266,34 +236,30 @@ class ReleasePlanner:
 
     def _generate_build_commands(
         self,
-        changed: dict[str, PackageInfo],
+        changed: dict[str, ChangedPackage],
         unchanged: dict[str, PackageInfo],
         release_tags: dict[str, str | None],
-        matrix_entries: list[MatrixEntry],
     ) -> dict[tuple[str, ...], list[BuildStage]]:
-        """Generate build command stages per runner.
+        """Generate build command stages per runner."""
+        all_packages: dict[str, PackageInfo] = {**changed, **unchanged}
 
-        Returns a list of :class:`BuildStage` per runner.  Stages execute
-        sequentially; packages *within* a stage execute concurrently.
-        """
-        all_packages = {**changed, **unchanged}
+        # Build runner → assigned packages mapping from ChangedPackage.runners
         by_runner: dict[tuple[str, ...], set[str]] = {}
-        for entry in matrix_entries:
-            key = tuple(entry.runner)
-            by_runner.setdefault(key, set()).add(entry.package)
+        for name, pkg in changed.items():
+            for runner in pkg.runners:
+                key = tuple(runner)
+                by_runner.setdefault(key, set()).add(name)
 
         result: dict[tuple[str, ...], list[BuildStage]] = {}
         for runner, assigned in sorted(by_runner.items()):
             stages: list[BuildStage] = []
 
-            # Collect transitive deps
             needed = self._collect_deps(assigned, all_packages)
             changed_to_build = {n: changed[n] for n in needed if n in changed}
             unchanged_deps = {n: unchanged[n] for n in needed if n in unchanged}
 
-            # -- Stage 0: setup (mkdir + fetch unchanged dep wheels) --
-            setup_cmds: list[PlanCommand] = []
-            setup_cmds.append(
+            # -- Stage 0: setup --
+            setup_cmds: list[PlanCommand] = [
                 PlanCommand(
                     args=[
                         "uv",
@@ -303,12 +269,11 @@ class ReleasePlanner:
                         "from pathlib import Path; Path('dist').mkdir(exist_ok=True); Path('deps').mkdir(exist_ok=True)",
                     ],
                 )
-            )
+            ]
 
             for name in sorted(unchanged_deps):
                 tag = release_tags.get(name)
                 if tag:
-                    wheel_name = canonicalize_name(name).replace("-", "_")
                     setup_cmds.append(
                         PlanCommand(
                             args=[
@@ -317,7 +282,7 @@ class ReleasePlanner:
                                 "download",
                                 tag,
                                 "--pattern",
-                                f"{wheel_name}-*.whl",
+                                f"{_dist_name(name)}-*.whl",
                                 "--dir",
                                 "deps/",
                                 "--clobber",
@@ -337,7 +302,6 @@ class ReleasePlanner:
                     if pkg_layer != layer:
                         continue
                     info = changed_to_build[pkg]
-
                     build_args = [
                         "uv",
                         "build",
@@ -356,50 +320,49 @@ class ReleasePlanner:
                     ]
                 stages.append(BuildStage(packages=layer_cmds))
 
-            # -- Cleanup stage: remove built wheels not assigned to this runner --
-            # Collect transitive dep wheel patterns to remove
+            # -- Cleanup: remove transitive dep wheels --
             remove_patterns = [
-                f"{canonicalize_name(pkg).replace('-', '_')}-*.whl"
+                f"{_dist_name(pkg)}-*.whl"
                 for pkg in sorted(changed_to_build)
                 if pkg not in assigned
             ]
             if remove_patterns:
-                # Single python command to remove all transitive dep wheels
                 globs = "; ".join(
                     f'[p.unlink() for p in Path("dist").glob("{pat}")]'
                     for pat in remove_patterns
                 )
-                cleanup_cmd = PlanCommand(
-                    args=[
-                        "uv",
-                        "run",
-                        "python",
-                        "-c",
-                        f"from pathlib import Path; {globs}",
-                    ],
-                    label="Remove transitive dep wheels",
-                    check=False,
+                stages.append(
+                    BuildStage(
+                        cleanup=[
+                            PlanCommand(
+                                args=[
+                                    "uv",
+                                    "run",
+                                    "python",
+                                    "-c",
+                                    f"from pathlib import Path; {globs}",
+                                ],
+                                label="Remove transitive dep wheels",
+                                check=False,
+                            )
+                        ]
+                    )
                 )
-                stages.append(BuildStage(cleanup=[cleanup_cmd]))
 
             result[runner] = stages
         return result
 
-    def _generate_publish_commands(
+    def _generate_release_commands(
         self,
-        changed: dict[str, PackageInfo],
-        release_tags: dict[str, str | None],
-        release_notes: dict[str, str],
+        changed: dict[str, ChangedPackage],
     ) -> list[PlanCommand]:
         """Generate publish commands (only for local execution)."""
         if self.config.ci_publish:
             return []
 
         cmds: list[PlanCommand] = []
-        for name, info in sorted(changed.items()):
-            tag = f"{name}/v{info.version}"
-            dist_name = canonicalize_name(name).replace("-", "_")
-            notes = release_notes.get(name, "")
+        for name, pkg in sorted(changed.items()):
+            tag = f"{name}/v{pkg.release_version}"
             cmds.append(
                 PlanCommand(
                     args=[
@@ -408,11 +371,11 @@ class ReleasePlanner:
                         "create",
                         tag,
                         "--title",
-                        f"{name} {info.version}",
+                        f"{name} {pkg.release_version}",
                         "--notes",
-                        notes,
+                        pkg.release_notes,
                         "--pattern",
-                        f"dist/{dist_name}-{info.version}-*.whl",
+                        f"dist/{_dist_name(name)}-{pkg.release_version}-*.whl",
                     ],
                     label=f"Publish {tag}",
                 )
@@ -421,8 +384,7 @@ class ReleasePlanner:
 
     def _generate_finalize_commands(
         self,
-        changed: dict[str, PackageInfo],
-        bumps: dict[str, BumpPlan],
+        changed: dict[str, ChangedPackage],
         published_versions: dict[str, str],
     ) -> list[PlanCommand]:
         """Generate finalize commands (tag, bump, commit, push)."""
@@ -431,9 +393,7 @@ class ReleasePlanner:
         # Git identity (CI only)
         if self.config.ci_publish:
             cmds.append(
-                PlanCommand(
-                    args=["git", "config", "user.name", "github-actions[bot]"],
-                )
+                PlanCommand(args=["git", "config", "user.name", "github-actions[bot]"])
             )
             cmds.append(
                 PlanCommand(
@@ -442,47 +402,32 @@ class ReleasePlanner:
                         "config",
                         "user.email",
                         "github-actions[bot]@users.noreply.github.com",
-                    ],
+                    ]
                 )
             )
 
         # Release tags (local only — CI publish action creates them)
         if not self.config.ci_publish:
-            for name, info in sorted(changed.items()):
-                tag = f"{name}/v{info.version}"
-                cmds.append(
-                    PlanCommand(
-                        args=["git", "tag", tag],
-                        label=f"Tag {tag}",
-                    )
-                )
+            for name, pkg in sorted(changed.items()):
+                tag = f"{name}/v{pkg.release_version}"
+                cmds.append(PlanCommand(args=["git", "tag", tag], label=f"Tag {tag}"))
 
         # Version bumps + dep pinning
         pyproject_paths: list[str] = []
-        for name, bump in sorted(bumps.items()):
-            info = changed[name]
-            # new_version is the exact pyproject.toml version (already includes .dev)
-            next_version = bump.new_version
-            pyproject = f"{info.path}/pyproject.toml"
+        for name, pkg in sorted(changed.items()):
+            pyproject = f"{pkg.path}/pyproject.toml"
             pyproject_paths.append(pyproject)
 
             cmds.append(
                 PlanCommand(
-                    args=[
-                        "uv",
-                        "version",
-                        next_version,
-                        "--directory",
-                        info.path,
-                    ],
-                    label=f"Bump {name} to {next_version}",
+                    args=["uv", "version", pkg.next_version, "--directory", pkg.path],
+                    label=f"Bump {name} to {pkg.next_version}",
                 )
             )
 
-            # Pin internal deps to just-published versions
             dep_specs = [
                 f"{dep}>={published_versions[dep]}"
-                for dep in info.deps
+                for dep in pkg.deps
                 if dep in published_versions
             ]
             if dep_specs:
@@ -494,18 +439,14 @@ class ReleasePlanner:
                 )
 
         # Sync, stage, commit
-        cmds.append(
-            PlanCommand(
-                args=["uv", "sync", "--all-groups", "--all-extras"],
-            )
-        )
+        cmds.append(PlanCommand(args=["uv", "sync", "--all-groups", "--all-extras"]))
         for p in pyproject_paths:
             cmds.append(PlanCommand(args=["git", "add", p]))
         cmds.append(PlanCommand(args=["git", "add", "uv.lock"]))
 
         summary = "\n".join(
-            f"  {n}: {changed[n].version} -> {b.new_version}"
-            for n, b in sorted(bumps.items())
+            f"  {n}: {pkg.release_version} -> {pkg.next_version}"
+            for n, pkg in sorted(changed.items())
         )
         cmds.append(
             PlanCommand(
@@ -516,19 +457,14 @@ class ReleasePlanner:
                     "chore: prepare next release",
                     "-m",
                     summary,
-                ],
+                ]
             )
         )
 
         # Baseline tags
-        for name, bump in sorted(bumps.items()):
-            tag = f"{name}/v{bump.new_version}-base"
-            cmds.append(
-                PlanCommand(
-                    args=["git", "tag", tag],
-                    label=f"Baseline {tag}",
-                )
-            )
+        for name, pkg in sorted(changed.items()):
+            tag = f"{name}/v{pkg.next_version}-base"
+            cmds.append(PlanCommand(args=["git", "tag", tag], label=f"Baseline {tag}"))
 
         # Push
         if self.config.ci_publish:
@@ -543,26 +479,20 @@ class ReleasePlanner:
 
     def _check_tag_conflicts(
         self,
-        changed: dict[str, PackageInfo],
-        bumps: dict[str, BumpPlan],
+        changed: dict[str, ChangedPackage],
         all_git_tags: set[str],
         all_gh_releases: set[str],
     ) -> None:
         """Verify that no tags or releases the plan will create already exist."""
         from .shell import fatal
 
-        # Collect all tags the plan will create
         planned_tags: list[str] = []
-        for name, info in changed.items():
-            planned_tags.append(f"{name}/v{info.version}")
-        for name, bump in bumps.items():
-            planned_tags.append(f"{name}/v{bump.new_version}-base")
+        for name, pkg in changed.items():
+            planned_tags.append(f"{name}/v{pkg.release_version}")
+            planned_tags.append(f"{name}/v{pkg.next_version}-base")
 
-        # Check git tags
         tag_conflicts = [t for t in planned_tags if t in all_git_tags]
-
-        # Check GitHub releases (release tags created by publish action)
-        release_tags = [f"{n}/v{changed[n].version}" for n in changed]
+        release_tags = [f"{n}/v{changed[n].release_version}" for n in changed]
         release_conflicts = [t for t in release_tags if t in all_gh_releases]
 
         conflicts = sorted(set(tag_conflicts + release_conflicts))
@@ -571,7 +501,6 @@ class ReleasePlanner:
 
         lines = "\n".join(f"  {t}" for t in conflicts)
 
-        # Compute what --post would produce for each conflicting release
         post_versions = []
         for t in conflicts:
             if t in all_gh_releases:
@@ -588,7 +517,6 @@ class ReleasePlanner:
         else:
             post_hint = "  1. Use --post to publish a post-release\n"
 
-        # Compute bump commands for each conflicting package
         bump_cmds = []
         for t in conflicts:
             if t in all_gh_releases:
@@ -635,50 +563,6 @@ class ReleasePlanner:
                 )
         return versions
 
-    def _expand_matrix(
-        self,
-        changed_names: list[str] | set[str],
-        changed: dict[str, PackageInfo],
-    ) -> list[MatrixEntry]:
-        entries: list[MatrixEntry] = []
-        for name in sorted(changed_names):
-            info = changed[name]
-            runners = self.config.matrix.get(name, [["ubuntu-latest"]])
-            for runner in runners:
-                entries.append(
-                    MatrixEntry(
-                        package=name,
-                        runner=runner,
-                        path=info.path,
-                        version=info.version,
-                    )
-                )
-        return entries
-
-    def _build_publish_matrix(
-        self,
-        changed_names: list[str] | set[str],
-        changed: dict[str, PackageInfo],
-        release_notes: dict[str, str],
-    ) -> list[PublishEntry]:
-        root_doc = load_pyproject(Path.cwd() / "pyproject.toml")
-        latest_pkg = get_uvr_config(root_doc).get("latest", "")
-        entries: list[PublishEntry] = []
-        for name in sorted(changed_names):
-            info = changed[name]
-            entries.append(
-                PublishEntry(
-                    package=name,
-                    version=info.version,
-                    tag=f"{name}/v{info.version}",
-                    title=f"{name} {info.version}",
-                    body=release_notes.get(name, ""),
-                    make_latest=name == latest_pkg,
-                    dist_name=canonicalize_name(name).replace("-", "_"),
-                )
-            )
-        return entries
-
     @staticmethod
     def _collect_deps(
         names: set[str], all_packages: dict[str, PackageInfo]
@@ -697,7 +581,6 @@ class ReleasePlanner:
         return visited
 
 
-# Keep build_plan as a thin wrapper for backward compatibility
-def build_plan(config: PlanConfig) -> tuple[ReleasePlan, list[PinChange]]:
-    """Run discovery locally and return a ReleasePlan and pin change details."""
+def build_plan(config: PlanConfig) -> ReleasePlan:
+    """Run discovery locally and return a ReleasePlan."""
     return ReleasePlanner(config).plan()

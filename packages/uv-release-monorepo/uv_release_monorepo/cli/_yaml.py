@@ -106,6 +106,20 @@ def _load_yaml(path: Path) -> dict:
     return doc or {}
 
 
+def _literalize_multiline(node: Any) -> Any:
+    """Recursively wrap multiline strings as LiteralScalarString for block style."""
+    from ruamel.yaml.scalarstring import LiteralScalarString
+
+    if isinstance(node, dict):
+        return {k: _literalize_multiline(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_literalize_multiline(v) for v in node]
+    if isinstance(node, str) and "\n" in node:
+        # Ensure trailing newline for clean block scalar rendering
+        return LiteralScalarString(node if node.endswith("\n") else node + "\n")
+    return node
+
+
 def _dump_yaml(doc: Any) -> str:
     """Serialize a dict to YAML string using ruamel.yaml."""
     from ruamel.yaml import YAML
@@ -114,7 +128,7 @@ def _dump_yaml(doc: Any) -> str:
     yaml.preserve_quotes = True
     yaml.width = 2**31  # effectively infinite -- never line-wrap
     stream = StringIO()
-    yaml.dump(doc, stream)
+    yaml.dump(_literalize_multiline(doc), stream)
     return stream.getvalue()
 
 

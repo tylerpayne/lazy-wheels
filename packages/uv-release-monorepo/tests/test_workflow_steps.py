@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from uv_release_monorepo.shared.models import (
     BuildStage,
-    MatrixEntry,
+    ChangedPackage,
     PackageInfo,
     PlanCommand,
     ReleasePlan,
@@ -25,26 +25,27 @@ def _make_plan_json(
     finalize_commands: list | None = None,
 ) -> str:
     """Helper to build a minimal ReleasePlan JSON string."""
-    all_pkgs = changed + unchanged
-    packages = {
+    changed_pkgs = {
+        name: ChangedPackage(
+            path=f"packages/{name}",
+            version="1.0.0",
+            deps=[],
+            current_version="1.0.0",
+            release_version="1.0.0",
+            next_version="1.0.1.dev0",
+            runners=[["ubuntu-latest"]],
+        )
+        for name in changed
+    }
+    unchanged_pkgs = {
         name: PackageInfo(path=f"packages/{name}", version="1.0.0", deps=[])
-        for name in all_pkgs
+        for name in unchanged
     }
     plan = ReleasePlan(
         uvr_version="0.3.0",
         rebuild_all=False,
-        changed={name: packages[name] for name in changed},
-        unchanged={name: packages[name] for name in unchanged},
-        release_tags={name: None for name in all_pkgs},
-        matrix=[
-            MatrixEntry(
-                package=name,
-                runner=["ubuntu-latest"],
-                path=f"packages/{name}",
-                version="1.0.0",
-            )
-            for name in changed
-        ],
+        changed=changed_pkgs,
+        unchanged=unchanged_pkgs,
         ci_publish=ci_publish,
         build_commands=build_commands or {},
         finalize_commands=finalize_commands or [],

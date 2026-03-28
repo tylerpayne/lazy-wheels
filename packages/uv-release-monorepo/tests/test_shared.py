@@ -19,7 +19,7 @@ from uv_release_monorepo.shared.discovery import (
     find_release_tags,
     get_baseline_tags,
 )
-from uv_release_monorepo.shared.publish import generate_release_notes
+from uv_release_monorepo.shared.git.local import generate_release_notes
 
 
 class TestFindReleaseTags:
@@ -33,82 +33,55 @@ class TestFindReleaseTags:
             "pkg-b": PackageInfo(path="packages/b", version="1.0.1.dev0", deps=[]),
         }
 
-    @patch("uv_release_monorepo.shared.discovery.gh")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_returns_per_package_releases(
         self,
-        mock_step: MagicMock,
-        mock_gh: MagicMock,
+        _mock_step: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns the most recent release for each package."""
-        import json
+        gh_releases = {"pkg-a/v1.0.0", "pkg-a/v0.9.0", "pkg-b/v1.0.0"}
 
-        mock_gh.return_value = json.dumps(
-            [
-                {"tagName": "pkg-a/v1.0.0"},
-                {"tagName": "pkg-a/v0.9.0"},
-                {"tagName": "pkg-b/v1.0.0"},
-            ]
-        )
-
-        result = find_release_tags(sample_packages)
+        result = find_release_tags(sample_packages, gh_releases)
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v1.0.0"}
 
-    @patch("uv_release_monorepo.shared.discovery.gh")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_returns_none_for_new_packages(
         self,
-        mock_step: MagicMock,
-        mock_gh: MagicMock,
+        _mock_step: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns None for packages with no releases."""
-        import json
+        gh_releases = {"pkg-a/v1.0.0"}
 
-        mock_gh.return_value = json.dumps([{"tagName": "pkg-a/v1.0.0"}])
-
-        result = find_release_tags(sample_packages)
+        result = find_release_tags(sample_packages, gh_releases)
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": None}
 
-    @patch("uv_release_monorepo.shared.discovery.gh")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_all_new_packages(
         self,
-        mock_step: MagicMock,
-        mock_gh: MagicMock,
+        _mock_step: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """When no releases exist, all return None."""
-        mock_gh.return_value = ""
-
-        result = find_release_tags(sample_packages)
+        result = find_release_tags(sample_packages, set())
 
         assert result == {"pkg-a": None, "pkg-b": None}
 
-    @patch("uv_release_monorepo.shared.discovery.gh")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_excludes_future_versions(
         self,
-        mock_step: MagicMock,
-        mock_gh: MagicMock,
+        _mock_step: MagicMock,
     ) -> None:
         """Releases with versions >= current base are excluded."""
-        import json
-
         packages = {
             "pkg-a": PackageInfo(path="packages/a", version="1.0.1.dev0", deps=[]),
         }
-        mock_gh.return_value = json.dumps(
-            [
-                {"tagName": "pkg-a/v1.0.1"},
-                {"tagName": "pkg-a/v1.0.0"},
-            ]
-        )
+        gh_releases = {"pkg-a/v1.0.1", "pkg-a/v1.0.0"}
 
-        result = find_release_tags(packages)
+        result = find_release_tags(packages, gh_releases)
 
         # v1.0.1 is >= current base 1.0.1, so only v1.0.0 matches
         assert result == {"pkg-a": "pkg-a/v1.0.0"}
@@ -125,60 +98,46 @@ class TestGetBaselineTags:
             "pkg-b": PackageInfo(path="packages/b", version="1.0.1", deps=[]),
         }
 
-    @patch("uv_release_monorepo.shared.discovery.git")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_returns_base_tags(
         self,
-        mock_step: MagicMock,
-        mock_git: MagicMock,
+        _mock_step: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns the -base tag derived from pyproject.toml version."""
-        mock_git.side_effect = [
-            "pkg-a/v1.0.1-base",  # base tag for pkg-a exists
-            "pkg-b/v1.0.1-base",  # base tag for pkg-b exists
-        ]
+        all_tags = {"pkg-a/v1.0.1-base", "pkg-b/v1.0.1-base"}
 
-        result = get_baseline_tags(sample_packages)
+        result = get_baseline_tags(sample_packages, all_tags)
 
         assert result == {
             "pkg-a": "pkg-a/v1.0.1-base",
             "pkg-b": "pkg-b/v1.0.1-base",
         }
 
-    @patch("uv_release_monorepo.shared.discovery.git")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_returns_none_when_no_base_tag(
         self,
-        mock_step: MagicMock,
-        mock_git: MagicMock,
+        _mock_step: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns None when no -base tag exists for a package."""
-        mock_git.side_effect = [
-            "",  # pkg-a: no -base tag
-            "pkg-b/v1.0.1-base",  # pkg-b: has -base tag
-        ]
+        all_tags = {"pkg-b/v1.0.1-base"}
 
-        result = get_baseline_tags(sample_packages)
+        result = get_baseline_tags(sample_packages, all_tags)
 
         assert result == {
             "pkg-a": None,
             "pkg-b": "pkg-b/v1.0.1-base",
         }
 
-    @patch("uv_release_monorepo.shared.discovery.git")
     @patch("uv_release_monorepo.shared.discovery.step")
     def test_returns_none_for_new_packages(
         self,
-        mock_step: MagicMock,
-        mock_git: MagicMock,
+        _mock_step: MagicMock,
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns None for packages with no tags at all."""
-        mock_git.return_value = ""
-
-        result = get_baseline_tags(sample_packages)
+        result = get_baseline_tags(sample_packages, set())
 
         assert result == {"pkg-a": None, "pkg-b": None}
 
@@ -498,7 +457,7 @@ class TestBuildPlan:
         }
         mock_detect.return_value = ["pkg-a"]
 
-        plan, pin_updates = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
@@ -507,7 +466,6 @@ class TestBuildPlan:
         assert "pkg-b" in plan.unchanged
         assert plan.uvr_version == "0.3.0"
         assert plan.rebuild_all is False
-        assert pin_updates == []  # no deps, no pins to update
 
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
@@ -530,7 +488,7 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": None, "pkg-b": None}
         mock_detect.return_value = ["pkg-a"]  # only pkg-a changed
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(
                 rebuild_all=False,
                 matrix={
@@ -542,11 +500,11 @@ class TestBuildPlan:
             )
         )
 
-        # Only pkg-a gets matrix entries; pkg-b is unchanged
-        packages_in_matrix = {e.package for e in plan.matrix}
-        assert "pkg-a" in packages_in_matrix
-        assert "pkg-b" not in packages_in_matrix
-        assert len(plan.matrix) == 2  # ubuntu-latest + macos-14 for pkg-a
+        # Only pkg-a is changed; it has two runners
+        assert "pkg-a" in plan.changed
+        assert "pkg-b" not in plan.changed
+        assert plan.changed["pkg-a"].runners == [["ubuntu-latest"], ["macos-14"]]
+        assert len(plan.build_matrix) == 2  # ubuntu-latest + macos-14
 
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
@@ -566,13 +524,12 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": None}
         mock_detect.return_value = ["pkg-a"]
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
-        assert len(plan.matrix) == 1
-        assert plan.matrix[0].package == "pkg-a"
-        assert plan.matrix[0].runner == ["ubuntu-latest"]
+        assert plan.changed["pkg-a"].runners == [["ubuntu-latest"]]
+        assert len(plan.build_matrix) == 1
 
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
@@ -592,7 +549,7 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": "pkg-a/v1.0.0-dev"}
         mock_detect.return_value = []
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
@@ -604,7 +561,7 @@ class TestBuildPlan:
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
     @patch("uv_release_monorepo.shared.plan.find_release_tags")
     @patch("uv_release_monorepo.shared.plan.discover_packages")
-    def test_populates_publish_matrix_and_ci_publish(
+    def test_populates_release_matrix_and_ci_publish(
         self,
         mock_discover: MagicMock,
         mock_find_release: MagicMock,
@@ -612,7 +569,7 @@ class TestBuildPlan:
         mock_detect: MagicMock,
         mock_gen_notes: MagicMock,
     ) -> None:
-        """build_plan populates publish_matrix with precomputed notes and sets ci_publish=True."""
+        """build_plan populates release_matrix with precomputed notes and sets ci_publish=True."""
         packages = {
             "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
         }
@@ -622,31 +579,31 @@ class TestBuildPlan:
         mock_detect.return_value = ["pkg-a"]
         mock_gen_notes.return_value = "**Released:** pkg-a 1.0.0"
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
         assert plan.ci_publish is True
-        assert len(plan.publish_matrix) == 1
-        entry = plan.publish_matrix[0]
-        assert entry.package == "pkg-a"
-        assert entry.version == "1.0.0"
-        assert entry.tag == "pkg-a/v1.0.0"
-        assert entry.title == "pkg-a 1.0.0"
-        assert entry.body == "**Released:** pkg-a 1.0.0"
+        assert len(plan.release_matrix) == 1
+        entry = plan.release_matrix[0]
+        assert entry["package"] == "pkg-a"
+        assert entry["version"] == "1.0.0"
+        assert entry["tag"] == "pkg-a/v1.0.0"
+        assert entry["title"] == "pkg-a 1.0.0"
+        assert entry["body"] == "**Released:** pkg-a 1.0.0"
 
     @patch("uv_release_monorepo.shared.plan.detect_changes")
     @patch("uv_release_monorepo.shared.plan.get_baseline_tags")
     @patch("uv_release_monorepo.shared.plan.find_release_tags")
     @patch("uv_release_monorepo.shared.plan.discover_packages")
-    def test_matrix_entries_include_path_and_version(
+    def test_changed_package_includes_path_and_version(
         self,
         mock_discover: MagicMock,
         mock_find_release: MagicMock,
         mock_find_dev: MagicMock,
         mock_detect: MagicMock,
     ) -> None:
-        """MatrixEntry includes path and version from the plan."""
+        """ChangedPackage includes path and release version."""
         packages = {
             "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
         }
@@ -655,12 +612,12 @@ class TestBuildPlan:
         mock_find_dev.return_value = {"pkg-a": None}
         mock_detect.return_value = ["pkg-a"]
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
-        assert plan.matrix[0].path == "packages/a"
-        assert plan.matrix[0].version == "1.0.0"
+        assert plan.changed["pkg-a"].path == "packages/a"
+        assert plan.changed["pkg-a"].release_version == "1.0.0"
 
 
 class TestBuildCommandStages:
@@ -704,7 +661,7 @@ class TestBuildCommandStages:
         mock_find_dev.return_value = {n: None for n in packages}
         mock_detect.return_value = list(packages)
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
@@ -763,7 +720,7 @@ class TestBuildCommandStages:
         mock_find_dev.return_value = {n: None for n in packages}
         mock_detect.return_value = list(packages)
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
         )
 
@@ -797,7 +754,7 @@ class TestBuildCommandStages:
         mock_find_dev.return_value = {n: None for n in packages}
         mock_detect.return_value = list(packages)
 
-        plan, _ = build_plan(
+        plan = build_plan(
             PlanConfig(
                 rebuild_all=False,
                 matrix={
@@ -825,7 +782,7 @@ class TestBuildCommandStages:
 class TestGenerateReleaseNotes:
     """Tests for generate_release_notes()."""
 
-    @patch("uv_release_monorepo.shared.publish.commit_log")
+    @patch("uv_release_monorepo.shared.git.local.commit_log")
     def test_with_baseline_and_commits(self, mock_log: MagicMock) -> None:
         """Includes commit log when baseline tag exists."""
         mock_log.return_value = ["abc1234 fix: something", "def5678 feat: another"]
@@ -838,7 +795,7 @@ class TestGenerateReleaseNotes:
         assert "- abc1234 fix: something" in result
         assert "- def5678 feat: another" in result
 
-    @patch("uv_release_monorepo.shared.publish.commit_log")
+    @patch("uv_release_monorepo.shared.git.local.commit_log")
     def test_without_baseline(self, mock_log: MagicMock) -> None:
         """No commit log when no baseline tag."""
         info = PackageInfo(path="packages/a", version="1.0.0", deps=[])
@@ -848,7 +805,7 @@ class TestGenerateReleaseNotes:
         assert result == "**Released:** pkg-a 1.0.0"
         mock_log.assert_not_called()
 
-    @patch("uv_release_monorepo.shared.publish.commit_log")
+    @patch("uv_release_monorepo.shared.git.local.commit_log")
     def test_with_baseline_no_commits(self, mock_log: MagicMock) -> None:
         """No commit section when git log returns empty."""
         mock_log.return_value = []

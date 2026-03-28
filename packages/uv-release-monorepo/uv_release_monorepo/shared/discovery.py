@@ -6,17 +6,13 @@ import glob as _glob
 from pathlib import Path
 
 
-from .deps import dep_canonical_name
+from packaging.utils import canonicalize_name
+
+from .config import get_uvr_config, get_workspace_member_globs
+from .deps import dep_canonical_name, get_all_dependency_strings
 from .models import PackageInfo
-from .shell import fatal, gh, git, step
-from .toml import (
-    get_all_dependency_strings,
-    get_project_name,
-    get_project_version,
-    get_uvr_config,
-    get_workspace_member_globs,
-    load_pyproject,
-)
+from .shell import fatal, step
+from .toml import load_pyproject
 
 
 def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
@@ -58,10 +54,10 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
 
     for d in member_dirs:
         doc = load_pyproject(d / "pyproject.toml")
-        name = get_project_name(doc, d.name)
+        name = canonicalize_name(doc.get("project", {}).get("name", d.name))
         packages[name] = PackageInfo(
             path=str(d.relative_to(root)),
-            version=get_project_version(doc),
+            version=doc.get("project", {}).get("version", "0.0.0"),
         )
         raw_deps[name] = get_all_dependency_strings(doc)
 
@@ -98,7 +94,7 @@ def discover_packages(root: Path | None = None) -> dict[str, PackageInfo]:
 
 def find_release_tags(
     packages: dict[str, PackageInfo],
-    gh_releases: set[str] | None = None,
+    gh_releases: set[str],
 ) -> dict[str, str | None]:
     """Find the most recent GitHub release tag for each package.
 
@@ -108,8 +104,7 @@ def find_release_tags(
 
     Args:
         packages: Map of package name -> PackageInfo.
-        gh_releases: Pre-fetched set of GitHub release tag names. When
-            provided the ``gh release list`` subprocess call is skipped.
+        gh_releases: Set of GitHub release tag names (from :func:`git.remote.list_release_tag_names`).
 
     Returns:
         Map of package name to its last release tag, or None if no release exists.
@@ -118,21 +113,7 @@ def find_release_tags(
 
     step("Finding last release tags")
 
-    # Use pre-fetched releases or fetch them now
-    if gh_releases is not None:
-        release_tag_names = gh_releases
-    else:
-        release_tag_names = set()
-        raw = gh("release", "list", "--json", "tagName", "--limit", "1000", check=False)
-        if raw:
-            import json
-
-            try:
-                for entry in json.loads(raw):
-                    release_tag_names.add(entry["tagName"])
-            except (json.JSONDecodeError, KeyError):
-                pass
-
+    release_tag_names = gh_releases
     release_tags: dict[str, str | None] = {}
     for name, info in packages.items():
         current_base = parse_version(info.version)
@@ -159,7 +140,7 @@ def find_release_tags(
 
 def get_baseline_tags(
     packages: dict[str, PackageInfo],
-    all_tags: set[str] | None = None,
+    all_tags: set[str],
 ) -> dict[str, str | None]:
     """Derive baseline tags from each package's pyproject.toml version.
 
@@ -168,8 +149,7 @@ def get_baseline_tags(
 
     Args:
         packages: Map of package name -> PackageInfo.
-        all_tags: Pre-fetched set of all git tag names. When provided the
-            per-package ``git tag --list`` subprocess calls are skipped.
+        all_tags: Set of all git tag names (from :func:`git.local.list_tags`).
 
     Returns:
         Map of package name to its baseline tag, or None if no tag exists.
@@ -179,11 +159,7 @@ def get_baseline_tags(
     baselines: dict[str, str | None] = {}
     for name, info in packages.items():
         base_tag = f"{name}/v{info.version}-base"
-        if all_tags is not None:
-            exists = base_tag in all_tags
-        else:
-            exists = bool(git("tag", "--list", base_tag, check=False).strip())
-        baselines[name] = base_tag if exists else None
+        baselines[name] = base_tag if base_tag in all_tags else None
         print(f"  {name}: {baselines[name] or '<none>'}")
 
     return baselines

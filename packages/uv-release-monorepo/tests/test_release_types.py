@@ -53,12 +53,19 @@ def _release_and_bump(
     changed = {"alpha": _pkg(pyproject_version)}
 
     tag_lines = existing_tags.splitlines() if existing_tags else []
-    versioned = planner._compute_release_versions(changed, {}, tag_lines)
+    release_versions = planner._compute_release_versions(changed, tag_lines)
 
-    bumps = planner._compute_bumps(versioned)
+    # Build versioned PackageInfo dict with release versions applied
+    versioned: dict[str, PackageInfo] = {}
+    for name, info in changed.items():
+        versioned[name] = PackageInfo(
+            path=info.path, version=release_versions[name], deps=info.deps
+        )
 
-    release_ver = versioned["alpha"].version
-    next_ver = bumps["alpha"].new_version
+    next_versions = planner._compute_next_versions(versioned)
+
+    release_ver = release_versions["alpha"]
+    next_ver = next_versions["alpha"]
 
     return release_ver, next_ver
 
@@ -140,7 +147,7 @@ class TestDevRelease:
         planner = _planner("dev")
         changed = {"alpha": _pkg("1.0.1")}
         with pytest.raises(SystemExit):
-            planner._compute_release_versions(changed, {}, [])
+            planner._compute_release_versions(changed, [])
 
 
 # ---------------------------------------------------------------------------
@@ -304,24 +311,38 @@ class TestTagConflicts:
 
     def test_errors_on_existing_baseline_tag(self) -> None:
         """Planner errors when a baseline tag already exists."""
-        from uv_release_monorepo.shared.models import BumpPlan
+        from uv_release_monorepo.shared.models import ChangedPackage
 
         planner = _planner("final")
-        changed = {"alpha": _pkg("1.0.1")}
-        bumps = {"alpha": BumpPlan(new_version="1.0.2.dev0")}
-        with pytest.raises(SystemExit):
-            planner._check_tag_conflicts(
-                changed, bumps, {"alpha/v1.0.2.dev0-base"}, set()
+        changed = {
+            "alpha": ChangedPackage(
+                path="packages/alpha",
+                version="1.0.1",
+                deps=[],
+                current_version="1.0.1",
+                release_version="1.0.1",
+                next_version="1.0.2.dev0",
             )
+        }
+        with pytest.raises(SystemExit):
+            planner._check_tag_conflicts(changed, {"alpha/v1.0.2.dev0-base"}, set())
 
     def test_passes_when_no_conflicts(self) -> None:
         """Planner proceeds when no tags conflict."""
-        from uv_release_monorepo.shared.models import BumpPlan
+        from uv_release_monorepo.shared.models import ChangedPackage
 
         planner = _planner("final")
-        changed = {"alpha": _pkg("1.0.1")}
-        bumps = {"alpha": BumpPlan(new_version="1.0.2.dev0")}
+        changed = {
+            "alpha": ChangedPackage(
+                path="packages/alpha",
+                version="1.0.1",
+                deps=[],
+                current_version="1.0.1",
+                release_version="1.0.1",
+                next_version="1.0.2.dev0",
+            )
+        }
         # Should not raise
         planner._check_tag_conflicts(
-            changed, bumps, {"alpha/v1.0.0", "alpha/v1.0.1.dev0-base"}, set()
+            changed, {"alpha/v1.0.0", "alpha/v1.0.1.dev0-base"}, set()
         )

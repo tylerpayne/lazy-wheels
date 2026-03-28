@@ -6,16 +6,25 @@ import argparse
 import json
 from pathlib import Path
 
-from ..shared.models import JOB_ORDER, ReleasePlan
+from ..shared.models import ReleasePlan
 from ._common import __version__, _fatal, _read_matrix, _resolve_plan_json
+
+# Executor pipeline phases — the order ReleaseExecutor.run() executes them.
+# These are skip-condition names (what appears in plan.skip), not YAML job keys.
+_PIPELINE = ("build", "release", "finalize")
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
     """Merge --skip and --skip-to into a single set of job names to skip."""
     skipped: set[str] = set(args.skip or [])
-    if getattr(args, "skip_to", None):
-        idx = JOB_ORDER.index(args.skip_to)
-        skipped |= set(JOB_ORDER[:idx])
+
+    skip_to = getattr(args, "skip_to", None)
+    if skip_to:
+        if skip_to not in _PIPELINE:
+            _fatal(f"--skip-to requires a pipeline phase: {', '.join(_PIPELINE)}")
+        idx = _PIPELINE.index(skip_to)
+        skipped |= set(_PIPELINE[:idx])
+
     return skipped
 
 
@@ -65,10 +74,9 @@ def _print_plan(
         rel_strs: dict[str, str] = {}
         for name in all_names:
             if name in plan.changed:
-                cur_strs[name] = plan.current_versions.get(
-                    name, plan.changed[name].version
-                )
-                rel_strs[name] = plan.changed[name].version
+                pkg = plan.changed[name]
+                cur_strs[name] = pkg.current_version
+                rel_strs[name] = pkg.release_version
             else:
                 cur_strs[name] = plan.unchanged[name].version
                 rel_strs[name] = "—"
@@ -86,67 +94,71 @@ def _print_plan(
                 f"{cur_strs[name].ljust(cw)}  {rel_strs[name]}"
             )
 
-    # -- Pipeline (job-by-job with details inline) --
+    # -- Pipeline (phase-by-phase with details inline) --
     _section("Pipeline")
     _sw = 6  # width of "STATUS"
-    _D = " " * 14  # detail indent under job
+    _D = " " * 14  # detail indent under phase
     print(f"  {'STATUS'.ljust(_sw)}  JOB")
-    for job in JOB_ORDER:
-        if job in skipped:
-            print(f"  {'skip'.ljust(_sw)}  {job}  (--skip)")
-            continue
 
-        print(f"  {'run'.ljust(_sw)}  {job}")
+    def _phase(name: str) -> None:
+        if name in skipped:
+            print(f"  {'skip'.ljust(_sw)}  {name}  (--skip)")
+        else:
+            print(f"  {'run'.ljust(_sw)}  {name}")
 
-        if job == "build":
-            if plan.reuse_run_id:
-                print(f"{_D}artifacts from run {plan.reuse_run_id}")
-            elif plan.build_commands:
-                # Collect assigned packages per runner for marking transitive deps
-                assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
-                for me in plan.matrix:
-                    assigned_by_runner.setdefault(tuple(me.runner), set()).add(
-                        me.package
-                    )
+    # build
+    _phase("build")
+    if "build" not in skipped:
+        if plan.reuse_run_id:
+            print(f"{_D}artifacts from run {plan.reuse_run_id}")
+        elif plan.build_commands:
+            # Collect assigned packages per runner for marking transitive deps
+            assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
+            for name, pkg in plan.changed.items():
+                for runner in pkg.runners:
+                    assigned_by_runner.setdefault(tuple(runner), set()).add(name)
 
-                all_build_pkgs: list[str] = []
-                for stages in plan.build_commands.values():
-                    for stage in stages:
-                        all_build_pkgs.extend(stage.packages)
-                bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
+            all_build_pkgs: list[str] = []
+            for stages in plan.build_commands.values():
+                for stage in stages:
+                    all_build_pkgs.extend(stage.packages)
+            bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
 
-                for runner_key in sorted(plan.build_commands):
-                    assigned = assigned_by_runner.get(runner_key, set())
-                    print(f"{_D}[{', '.join(runner_key)}]")
-                    local_layer = 0
-                    for stage in plan.build_commands[runner_key]:
-                        pkgs = sorted(stage.packages)
-                        if not pkgs:
-                            continue
-                        print(f"{_D}  layer {local_layer}")
-                        local_layer += 1
-                        for pkg in pkgs:
-                            cur = plan.current_versions.get(pkg, "")
-                            ver = (
-                                plan.changed[pkg].version if pkg in plan.changed else ""
+            for runner_key in sorted(plan.build_commands):
+                assigned = assigned_by_runner.get(runner_key, set())
+                print(f"{_D}[{', '.join(runner_key)}]")
+                local_layer = 0
+                for stage in plan.build_commands[runner_key]:
+                    pkgs = sorted(stage.packages)
+                    if not pkgs:
+                        continue
+                    print(f"{_D}  layer {local_layer}")
+                    local_layer += 1
+                    for pkg in pkgs:
+                        cpkg = plan.changed.get(pkg)
+                        cur = cpkg.current_version if cpkg else ""
+                        ver = cpkg.release_version if cpkg else ""
+                        dep_marker = "" if pkg in assigned else " (dep)"
+                        if cur and ver and cur != ver:
+                            print(
+                                f"{_D}    {pkg.ljust(bw)}  {cur} -> {ver}{dep_marker}"
                             )
-                            dep_marker = "" if pkg in assigned else " (dep)"
-                            if cur and ver and cur != ver:
-                                print(
-                                    f"{_D}    {pkg.ljust(bw)}  "
-                                    f"{cur} -> {ver}{dep_marker}"
-                                )
-                            else:
-                                print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
+                        else:
+                            print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
 
-        if job == "publish" and plan.publish_matrix:
-            for entry in plan.publish_matrix:
-                print(f"{_D}{entry.tag}")
+    # publish
+    _phase("release")
+    if "release" not in skipped and plan.release_matrix:
+        for entry in plan.release_matrix:
+            print(f"{_D}{entry['tag']}")
 
-        if job == "finalize" and plan.bumps:
-            fw = max(len(n) for n in plan.bumps)
-            for name, bump in sorted(plan.bumps.items()):
-                print(f"{_D}{name.ljust(fw)}  -> {bump.new_version}")
+    # finalize
+    _phase("finalize")
+    changed_with_bumps = {n: p for n, p in plan.changed.items() if p.next_version}
+    if "finalize" not in skipped and changed_with_bumps:
+        fw = max(len(n) for n in changed_with_bumps)
+        for name, pkg in sorted(changed_with_bumps.items()):
+            print(f"{_D}{name.ljust(fw)}  -> {pkg.next_version}")
 
     print()
 
@@ -244,7 +256,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         )
         if hook:
             config = hook.pre_plan(config)
-        plan, _pin_changes = _cli.ReleasePlanner(config).plan()
+        plan = _cli.ReleasePlanner(config).plan()
     finally:
         sys.stdout = old_stdout
 

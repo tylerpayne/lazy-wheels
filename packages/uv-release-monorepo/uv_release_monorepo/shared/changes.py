@@ -6,7 +6,8 @@ from collections.abc import Mapping
 
 import pygit2
 
-from .gitops import diff_files
+from .git.local import diff_files
+from .graph import _build_graph_maps
 from .models import PackageInfo
 from .shell import step
 
@@ -65,7 +66,7 @@ def detect_changes(
     step("Detecting changes")
 
     if repo is None:
-        from .gitops import open_repo
+        from .git.local import open_repo
 
         repo = open_repo()
 
@@ -93,10 +94,7 @@ def detect_changes(
                 print(f"  {name}: {reason}")
 
     # Build reverse dependency map
-    reverse_deps: dict[str, list[str]] = {n: [] for n in packages}
-    for name, info in packages.items():
-        for dep in info.deps:
-            reverse_deps[dep].append(name)
+    _, reverse_deps = _build_graph_maps(packages)
 
     # Propagate dirtiness to dependents using BFS
     queue = list(dirty)

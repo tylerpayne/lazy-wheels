@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uv_release_monorepo.shared.models import ReleaseWorkflow
+from uv_release_monorepo.shared.models.workflow import ReleaseWorkflow
 
 
 def _default_workflow() -> dict:
@@ -33,7 +33,7 @@ def test_workflow_job_needs_chain() -> None:
     doc = _default_workflow()
     jobs = doc["jobs"]
     assert jobs["release"]["needs"] == ["build"]
-    assert jobs["finalize"]["needs"] == ["publish"]
+    assert jobs["finalize"]["needs"] == ["release"]
 
 
 def test_workflow_default_permissions() -> None:

@@ -6,23 +6,30 @@ from pathlib import Path
 
 import tomlkit
 
-from uv_release_monorepo.shared.toml import (
-    get_all_dependency_strings,
-    get_project_name,
-    get_project_version,
+from uv_release_monorepo.shared.config import (
     get_uvr_hooks,
     get_uvr_matrix,
     get_workspace_member_globs,
-    load_pyproject,
-    save_pyproject,
     set_uvr_matrix,
 )
+from packaging.utils import canonicalize_name
+
+from uv_release_monorepo.shared.deps import get_all_dependency_strings
+from uv_release_monorepo.shared.toml import load_pyproject, save_pyproject
+
+
+def _get_project_name(doc: tomlkit.TOMLDocument, fallback: str) -> str:
+    return canonicalize_name(doc.get("project", {}).get("name", fallback))
+
+
+def _get_project_version(doc: tomlkit.TOMLDocument) -> str:
+    return doc.get("project", {}).get("version", "0.0.0")
 
 
 class TestLoadSavePyproject:
     def test_load(self, tmp_pyproject: Path) -> None:
         doc = load_pyproject(tmp_pyproject)
-        assert get_project_name(doc, "") == "test-package"
+        assert _get_project_name(doc, "") == "test-package"
 
     def test_save_preserves_content(self, tmp_pyproject: Path) -> None:
         doc = load_pyproject(tmp_pyproject)
@@ -31,34 +38,34 @@ class TestLoadSavePyproject:
         save_pyproject(tmp_pyproject, doc)
 
         reloaded = load_pyproject(tmp_pyproject)
-        assert get_project_version(reloaded) == "9.9.9"
-        assert get_project_name(reloaded, "") == "test-package"
+        assert _get_project_version(reloaded) == "9.9.9"
+        assert _get_project_name(reloaded, "") == "test-package"
 
 
 class TestGetProjectName:
     def test_returns_name(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
-        assert get_project_name(sample_toml_doc, "fallback") == "my-package"
+        assert _get_project_name(sample_toml_doc, "fallback") == "my-package"
 
     def test_normalizes_name(self) -> None:
         doc = tomlkit.parse('[project]\nname = "My_Package"')
-        assert get_project_name(doc, "fallback") == "my-package"
+        assert _get_project_name(doc, "fallback") == "my-package"
 
     def test_returns_fallback_when_missing(self) -> None:
         doc = tomlkit.parse("[project]")
-        assert get_project_name(doc, "my-fallback") == "my-fallback"
+        assert _get_project_name(doc, "my-fallback") == "my-fallback"
 
     def test_returns_fallback_when_no_project(self) -> None:
         doc = tomlkit.parse("")
-        assert get_project_name(doc, "fallback") == "fallback"
+        assert _get_project_name(doc, "fallback") == "fallback"
 
 
 class TestGetProjectVersion:
     def test_returns_version(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
-        assert get_project_version(sample_toml_doc) == "2.0.0"
+        assert _get_project_version(sample_toml_doc) == "2.0.0"
 
     def test_returns_default_when_missing(self) -> None:
         doc = tomlkit.parse("[project]")
-        assert get_project_version(doc) == "0.0.0"
+        assert _get_project_version(doc) == "0.0.0"
 
 
 class TestGetAllDependencyStrings:

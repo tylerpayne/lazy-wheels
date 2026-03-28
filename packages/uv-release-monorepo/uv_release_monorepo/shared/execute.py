@@ -56,7 +56,7 @@ class ReleaseExecutor:
     def publish(self) -> None:
         """Run publish commands."""
         self.hook.pre_release(self.plan)
-        self._run_commands_or_exit(self.plan.publish_commands)
+        self._run_commands_or_exit(self.plan.release_commands)
         self.hook.post_release(self.plan)
 
     def finalize(self) -> None:

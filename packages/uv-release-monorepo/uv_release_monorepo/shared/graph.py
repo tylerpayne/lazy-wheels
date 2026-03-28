@@ -10,6 +10,20 @@ from __future__ import annotations
 from .models import PackageInfo
 
 
+def _build_graph_maps(
+    packages: dict[str, PackageInfo],
+) -> tuple[dict[str, int], dict[str, list[str]]]:
+    """Build in-degree and reverse-dependency maps for Kahn's algorithm."""
+    in_degree = {n: 0 for n in packages}
+    reverse_deps: dict[str, list[str]] = {n: [] for n in packages}
+    for name, info in packages.items():
+        for dep in info.deps:
+            if dep in packages:
+                in_degree[name] += 1
+                reverse_deps[dep].append(name)
+    return in_degree, reverse_deps
+
+
 def topo_sort(packages: dict[str, PackageInfo]) -> list[str]:
     """Topologically sort packages by their internal dependencies.
 
@@ -30,21 +44,7 @@ def topo_sort(packages: dict[str, PackageInfo]) -> list[str]:
         If A depends on B, and B depends on C:
         topo_sort({A, B, C}) → [C, B, A]
     """
-    # Count incoming edges (dependencies) for each package
-    in_degree = {n: 0 for n in packages}
-    # Track reverse dependencies (who depends on each package)
-    reverse_deps: dict[str, list[str]] = {n: [] for n in packages}
-
-    for name, info in packages.items():
-        for dep in info.deps:
-            # Only count dependencies that are within the packages we're sorting
-            # (external deps or unchanged packages are already built)
-            if dep in packages:
-                in_degree[name] += 1
-                reverse_deps[dep].append(name)
-
-    # Start with packages that have no dependencies (in_degree == 0)
-    # Sort alphabetically for deterministic ordering
+    in_degree, reverse_deps = _build_graph_maps(packages)
     queue = sorted(n for n, d in in_degree.items() if d == 0)
     order: list[str] = []
 
@@ -84,15 +84,7 @@ def topo_layers(packages: dict[str, PackageInfo]) -> dict[str, int]:
     Raises:
         RuntimeError: If a dependency cycle is detected.
     """
-    in_degree = {n: 0 for n in packages}
-    reverse_deps: dict[str, list[str]] = {n: [] for n in packages}
-
-    for name, info in packages.items():
-        for dep in info.deps:
-            if dep in packages:
-                in_degree[name] += 1
-                reverse_deps[dep].append(name)
-
+    in_degree, reverse_deps = _build_graph_maps(packages)
     layers: dict[str, int] = {}
     queue = sorted(n for n, d in in_degree.items() if d == 0)
     for n in queue:
