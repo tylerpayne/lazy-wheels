@@ -279,30 +279,17 @@ def cmd_validate(args: argparse.Namespace) -> None:
     existing = _load_yaml(dest)
     rel = dest.relative_to(root)
 
-    # Report versions
-    uvr_version = __version__
-    template_version = _latest_template_version()
-    stored_version = (root / "pyproject.toml").exists() and get_config(
-        read_pyproject(root / "pyproject.toml")
-    ).get("template_version", "")
-    print(f"  uvr version:      {uvr_version}")
-    print(f"  template version: {template_version}")
-    if stored_version:
-        print(f"  installed version: {stored_version}")
-    else:
-        print("  installed version: (unknown — run `uvr init` to set)")
-    print()
-
     # Phase 1: Structural validation via pydantic
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         try:
             ReleaseWorkflow.model_validate(existing)
         except ValidationError as e:
-            print(f"Invalid: {rel}\n{e}")
+            print(f"FAIL: {rel}\n{e}")
             raise SystemExit(1) from None
 
     # Phase 2: Frozen-path diffing against bundled template
+    template_version = _latest_template_version()
     template = _load_template_yaml(template_version)
     frozen_warnings = _check_frozen_paths(existing, template)
 
@@ -313,13 +300,31 @@ def cmd_validate(args: argparse.Namespace) -> None:
     existing_text = dest.read_text()
     has_diff = fresh_text.rstrip() != existing_text.rstrip()
 
+    # Status line first
     if all_warnings:
-        print(f"Valid: {rel} (0 errors, {len(all_warnings)} warnings)\n")
+        print(f"SUCCESS: {rel} (0 errors, {len(all_warnings)} warnings)")
+    else:
+        print(f"SUCCESS: {rel} (0 errors, 0 warnings)")
+    print()
+
+    # Version info
+    uvr_version = __version__
+    stored_version = (root / "pyproject.toml").exists() and get_config(
+        read_pyproject(root / "pyproject.toml")
+    ).get("template_version", "")
+    print(f"  uvr version:       {uvr_version}")
+    print(f"  template version:  {template_version}")
+    if stored_version:
+        print(f"  installed version: {stored_version}")
+    else:
+        print("  installed version: (unknown — run `uvr init --upgrade` to set)")
+
+    # Warnings
+    if all_warnings:
+        print()
         print("Warnings:")
         for w in all_warnings:
             print(f"  {w}")
-    else:
-        print(f"Valid: {rel} (0 errors, 0 warnings)")
 
     if has_diff:
         print()
