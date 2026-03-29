@@ -539,10 +539,15 @@ class ReleasePlanner:
             pkg_name = t.split("/v")[0]
             if pkg_name in changed:
                 ver = parse_tag_version(t)
-                next_ver = make_dev(bump_patch(ver))
-                bump_cmds.append(
-                    f"     uv version {next_ver} --directory {changed[pkg_name].path}"
-                )
+                try:
+                    next_ver = make_dev(bump_patch(ver))
+                    bump_cmds.append(
+                        f"     uv version {next_ver} --directory {changed[pkg_name].path}"
+                    )
+                except ValueError:
+                    bump_cmds.append(
+                        f"     uv version <next-version> --directory {changed[pkg_name].path}"
+                    )
 
         bump_hint = ""
         if bump_cmds:
