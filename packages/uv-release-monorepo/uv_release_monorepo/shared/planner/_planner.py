@@ -116,14 +116,15 @@ class ReleasePlanner:
         # Compute next-dev versions
         next_versions = self._compute_next_versions(versioned)
 
-        # Generate release notes (from baseline tag, not release tag —
-        # the baseline marks where the current dev cycle started)
+        # Generate release notes — find previous release relative to the
+        # version being published (uses inverse bump, respects kind chain)
         notes: dict[str, str] = {}
         for name in changed_names:
             info = versioned[name]
-            baseline = baselines.get(name)
+            prev = find_previous_release(info.version, name, self.ctx.repo)
+            prev_tag = f"{name}/v{prev}" if prev else None
             notes[name] = generate_release_notes(
-                name, info, baseline, repo=self.ctx.repo
+                name, info, prev_tag, repo=self.ctx.repo
             )
 
         # Determine which package gets "Latest" on GitHub
