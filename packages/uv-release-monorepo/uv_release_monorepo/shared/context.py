@@ -63,7 +63,7 @@ def build_context(*, progress: Progress | None = None) -> RepositoryContext:
     # Fetch GitHub releases and find baselines in parallel
     # (network I/O overlaps with local git tag operations)
     if progress:
-        progress.update("Fetching releases")
+        progress.update("Scanning GitHub releases")
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         releases_future = pool.submit(list_release_tag_names)
@@ -72,7 +72,7 @@ def build_context(*, progress: Progress | None = None) -> RepositoryContext:
         baselines = baselines_future.result()
 
     if progress:
-        progress.complete(f"Fetched {len(github_releases)} GitHub releases")
+        progress.complete(f"Scanned {len(github_releases)} GitHub releases")
     baselined = sum(1 for b in baselines.values() if b)
     if progress:
         progress.complete(f"Found {baselined} baselines")
