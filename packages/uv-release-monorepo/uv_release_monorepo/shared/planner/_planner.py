@@ -35,6 +35,7 @@ from ..utils.versions import (
     make_post,
     make_pre,
     parse_tag_version,
+    resolve_baseline,
     strip_dev,
 )
 
@@ -65,7 +66,19 @@ class ReleasePlanner:
     def plan(self) -> ReleasePlan:
         """Detect changes and return a ReleasePlan."""
         packages = self.ctx.packages
-        baselines = self.ctx.baselines
+
+        # Resolve baselines per release type — overrides the default
+        # version-based baselines from context with release-type-aware ones
+        baselines: dict[str, str | None] = {}
+        for name, info in packages.items():
+            baselines[name] = resolve_baseline(
+                info.version,
+                self.config.release_type,
+                self.config.pre_kind,
+                name,
+                self.ctx.repo,
+            )
+
         changed_names = detect_changes(
             packages, baselines, self.config.rebuild_all, ctx=self.ctx
         )

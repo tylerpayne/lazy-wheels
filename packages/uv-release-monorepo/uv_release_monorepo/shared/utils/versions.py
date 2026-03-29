@@ -140,6 +140,14 @@ def make_post(version_str: str, n: int = 0) -> str:
 
 
 _PRE_KINDS = ("rc", "b", "a")  # ordered high to low for kind chain
+_PRE_KIND_ORDER = {"a": 0, "b": 1, "rc": 2}  # ordered low to high for comparison
+_PRE_KIND_RE = re.compile(r"(a|b|rc)\d+")
+
+
+def _extract_pre_kind(version_str: str) -> str:
+    """Extract the pre-release kind (a, b, rc) from a version string."""
+    m = _PRE_KIND_RE.search(version_str)
+    return m.group(1) if m else ""
 
 
 def find_previous_release(
@@ -182,16 +190,41 @@ def find_previous_release(
         return repo.references.get(f"refs/tags/{name}/v{ver}") is not None  # type: ignore[union-attr]
 
     def _glob_highest(prefix: str) -> str | None:
-        """Find highest version matching a tag prefix via ref scan."""
-        ref_prefix = f"refs/tags/{name}/v{prefix}"
+        """Find highest version matching a tag prefix.
+
+        Uses filesystem glob on .git/refs/tags/ when available (fast),
+        falls back to pygit2 ref scan for packed refs or mock repos.
+        """
+        from pathlib import Path
+
         candidates = []
-        for ref in repo.listall_references():  # type: ignore[union-attr]
-            if ref.startswith(ref_prefix) and not ref.endswith("-base"):
-                ver_str = ref.split("/v")[-1]
-                try:
-                    candidates.append((parse_version(ver_str), ver_str))
-                except (ValueError, TypeError):
-                    continue
+
+        # Fast path: filesystem glob
+        try:
+            tag_dir = Path(repo.path) / "refs" / "tags" / name  # type: ignore[union-attr]
+            if tag_dir.is_dir():
+                for path in tag_dir.glob(f"v{prefix}*"):
+                    if path.name.endswith("-base"):
+                        continue
+                    ver_str = path.name[1:]  # strip leading "v"
+                    try:
+                        candidates.append((parse_version(ver_str), ver_str))
+                    except (ValueError, TypeError):
+                        continue
+        except (AttributeError, OSError):
+            pass
+
+        # Fallback: pygit2 ref scan (for packed refs or mocks)
+        if not candidates:
+            ref_prefix = f"refs/tags/{name}/v{prefix}"
+            for ref in repo.listall_references():  # type: ignore[union-attr]
+                if ref.startswith(ref_prefix) and not ref.endswith("-base"):
+                    ver_str = ref.split("/v")[-1]
+                    try:
+                        candidates.append((parse_version(ver_str), ver_str))
+                    except (ValueError, TypeError):
+                        continue
+
         if not candidates:
             return None
         candidates.sort(reverse=True)
@@ -270,6 +303,117 @@ def find_previous_release(
     # 4d: 0.0.0 — no previous release possible
     msg = f"Cannot determine previous release for {version_str} — version is 0.0.0"
     raise ValueError(msg)
+
+
+_POST_RE = re.compile(r"\.post\d+")
+
+
+def is_post(version_str: str) -> bool:
+    """Check if a version has a .postN suffix (ignoring any trailing .devN)."""
+    return _POST_RE.search(strip_dev(version_str)) is not None
+
+
+def resolve_baseline(
+    current_version: str,
+    release_type: str,
+    pre_kind: str,
+    name: str,
+    repo: object,
+) -> str | None:
+    """Determine the baseline tag for change detection.
+
+    Given the current pyproject.toml version and the requested release type,
+    returns the tag to diff against for determining which packages changed.
+
+    Args:
+        current_version: Version string from pyproject.toml.
+        release_type: One of "final", "dev", "pre", "post".
+        pre_kind: Pre-release kind ("a", "b", "rc") when release_type is "pre".
+        name: Package name (for tag prefix).
+        repo: pygit2.Repository for ref lookups.
+
+    Returns:
+        Baseline tag string (e.g. "pkg/v1.0.0" or "pkg/v1.0.1.dev0-base"),
+        or None if no previous release exists (package is new).
+
+    Raises:
+        ValueError: If the (current_version, release_type) combination is invalid.
+    """
+    has_dev = is_dev(current_version)
+    has_pre = is_pre(strip_dev(current_version))
+    has_post = is_post(current_version)
+
+    # --- Clean version (no .dev suffix) ---
+    if not has_dev:
+        prev = find_previous_release(current_version, name, repo)
+        if prev is None:
+            return None
+        return f"{name}/v{prev}"
+
+    # --- Dev version ---
+
+    # Validate: post-release dev + final/pre → invalid
+    if has_post and release_type in ("final", "pre"):
+        msg = (
+            f"Cannot {release_type}-release from post-release version {current_version}"
+        )
+        raise ValueError(msg)
+
+    # Validate: non-post dev + post → invalid
+    if not has_post and release_type == "post":
+        msg = f"Cannot post-release from unreleased version {current_version}"
+        raise ValueError(msg)
+
+    # Dev release → always use current version's own -base tag
+    if release_type == "dev":
+        return f"{name}/v{current_version}-base"
+
+    # Pre-release base → check if this is a kind upgrade, same-kind, or downgrade
+    if has_pre:
+        current_kind = _extract_pre_kind(strip_dev(current_version))
+        target_order = _PRE_KIND_ORDER.get(pre_kind, -1)
+        current_order = _PRE_KIND_ORDER.get(current_kind, -1)
+
+        # Validate: kind downgrade (b→a, rc→a, rc→b) is invalid
+        if release_type == "pre" and target_order < current_order:
+            msg = (
+                f"Cannot downgrade pre-release kind from "
+                f"{current_kind} to {pre_kind} ({current_version})"
+            )
+            raise ValueError(msg)
+
+        is_upgrade = release_type == "final" or (
+            release_type == "pre" and target_order > current_order
+        )
+        if is_upgrade:
+            # Kind upgrade (a→b, b→rc, etc.) or final → cumulative since last final
+            base = get_base_version(current_version)
+            prev = find_previous_release(base, name, repo)
+            if prev is None:
+                return None
+            return f"{name}/v{prev}"
+        # Same kind or demotion → incremental from dev0 baseline
+        dev_m = _DEV_NUM_RE.search(current_version)
+        if dev_m and int(dev_m.group(1)) > 0:
+            return f"{name}/v{strip_dev(current_version)}.dev0-base"
+        return f"{name}/v{current_version}-base"
+
+    # Post-release dev + post → use dev0 baseline
+    if has_post and release_type == "post":
+        dev_m = _DEV_NUM_RE.search(current_version)
+        if dev_m and int(dev_m.group(1)) > 0:
+            # devN (N > 0) → rewind to dev0-base
+            return f"{name}/v{strip_dev(current_version)}.dev0-base"
+        return f"{name}/v{current_version}-base"
+
+    # Final dev (X.X.X.devN) + non-dev release → use dev0 baseline
+    dev_m = _DEV_NUM_RE.search(current_version)
+    if dev_m and int(dev_m.group(1)) > 0:
+        # devN (N > 0) → rewind to dev0-base
+        return f"{name}/v{strip_dev(current_version)}.dev0-base"
+
+    # dev0 → current baseline
+    return f"{name}/v{current_version}-base"
 
 
 def parse_tag_version(tag: str) -> str:
