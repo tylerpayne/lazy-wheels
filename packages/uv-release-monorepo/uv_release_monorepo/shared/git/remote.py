@@ -140,18 +140,41 @@ def list_release_tag_names() -> set[str]:
 def check_release_exists(tag: str) -> bool:
     """Check if a GitHub release exists for the given tag.
 
-    Uses a targeted API call (O(1)) instead of listing all releases.
-    Returns False on auth/network failure.
+    Uses a targeted API call with ETag caching — returns cached result
+    on 304. Only makes a network call if the cache is missing or stale.
     """
     client = _get_client()
     repo = _get_repo()
     if not client or not repo:
         return False
+
+    # Load per-tag cache
+    cache = _load_cache()
+    tag_cache = cache.get("tags_checked", {})
+    cached = tag_cache.get(tag, {})
+    etag = cached.get("etag", "")
+
+    headers: dict[str, str] = {}
+    if etag:
+        headers["If-None-Match"] = etag
+
     try:
-        resp = client.get(f"/repos/{repo}/releases/tags/{tag}")
-        return resp.status_code == 200
+        resp = client.get(f"/repos/{repo}/releases/tags/{tag}", headers=headers)
+        if resp.status_code == 304:
+            return cached.get("exists", False)
+        exists = resp.status_code == 200
     except httpx.HTTPError:
-        return False
+        # Network error — use cached result if available
+        return cached.get("exists", False)
+
+    # Update cache
+    tag_cache[tag] = {
+        "etag": resp.headers.get("etag", ""),
+        "exists": exists,
+    }
+    cache["tags_checked"] = tag_cache
+    _save_cache(cache)
+    return exists
 
 
 def _next_page(link_header: str | None) -> str | None:
