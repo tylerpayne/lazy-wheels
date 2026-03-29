@@ -56,7 +56,45 @@ For each changed package, verify its public API against its docs:
    - Do all docs (READMEs, docs/, etc) accurately reflect the public API and internal functionality of the package? Audit natural language descriptions, code examples, and references.
 3. Fix any discrepancies before continuing
 
-## 4. Release
+## 4. Release Notes
+
+For each changed package, write release notes to `.uvr/release-notes/<pkg>/<version>.md`. This directory is gitignored — notes are ephemeral and consumed at release time.
+
+For each package, review the commits since the last release:
+
+```bash
+git log --oneline <pkg>/v<last-version>..HEAD -- packages/<pkg>
+```
+
+Then draft user-facing release notes. Do not dump commit messages — write prose that helps users understand what's new, changed, or fixed. Use markdown.
+
+**Present the draft to the user for approval before writing the file.** The user may want to adjust wording, add context, or skip notes for certain packages.
+
+Use [Keep a Changelog](https://keepachangelog.com/) format with a summary blurb at the top. Example:
+
+```bash
+mkdir -p .uvr/release-notes/my-lib
+cat > .uvr/release-notes/my-lib/1.2.0.md << 'EOF'
+Dashboard support and stability improvements.
+
+### Added
+- New `Widget` class for building dashboards
+
+### Fixed
+- Parser no longer crashes on empty input
+EOF
+```
+
+Reference the files at release time:
+
+```bash
+uvr release \
+  --release-notes my-lib @.uvr/release-notes/my-lib/1.2.0.md
+```
+
+If no `--release-notes` flag is provided, the release gets a minimal header only.
+
+## 5. Dispatch
 
 ```bash
 git add -A
@@ -76,7 +114,7 @@ git push
 uvr release
 ```
 
-## 5. Monitor
+## 6. Monitor
 
 ```bash
 gh run list --workflow=release.yml --limit=1
@@ -100,7 +138,7 @@ uvr release
 
 If a later job failed but earlier jobs succeeded, use `--skip-to` and `--reuse-*` flags to resume without re-running what already passed. See `references/troubleshooting.md#resuming-a-partially-failed-release` for the full decision tree.
 
-## 6. Verify
+## 7. Verify
 
 ```bash
 gh release list --limit 15       # confirm per-package releases exist
@@ -108,7 +146,7 @@ gh release list --limit 15       # confirm per-package releases exist
 
 If something goes wrong, see `references/troubleshooting.md`.
 
-## 7. Merge
+## 8. Merge
 
 Merge the release branch back to main — unless the branch should not be merged.
 
@@ -125,9 +163,10 @@ git merge --no-ff <release-branch> -m "Merge release branch"
 git push
 ```
 
-After merging, verify:
+After merging, clean up release notes and verify:
 
 ```bash
+rm -rf .uvr/release-notes/
 uvr status                       # should show no changed packages
 ```
 
@@ -143,9 +182,11 @@ User says: "Let's release the new changes"
 4. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
 5. User says "yes, bump minor" — run `uv version --bump minor --directory packages/my-lib`
 6. Review docstrings and docs against current API — new `Parser` class exported but not documented. Fix docs.
-7. Commit, push, run `uvr release` and confirm
-8. Monitor workflow, verify GitHub releases
-9. Merge release branch back to main
+7. Draft release notes: "Added `Parser` class for structured input handling. Fixed crash on empty input." Present to user for approval.
+8. Write approved notes to `.uvr/release-notes/my-lib/0.3.0.md`
+9. Commit, push, run `uvr release --release-notes my-lib @.uvr/release-notes/my-lib/0.3.0.md` and confirm
+10. Monitor workflow, verify GitHub releases
+11. Merge release branch back to main, clean up `.uvr/release-notes/`
 
 ## References
 
