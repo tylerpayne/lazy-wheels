@@ -5,15 +5,33 @@
 Scaffold the GitHub Actions release workflow.
 
 ```
-uvr init [--force] [--workflow-dir DIR]
+uvr init [--force | --upgrade | --base-only] [--editor EDITOR] [--workflow-dir DIR]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--force` | -- | Overwrite existing `release.yml` with fresh defaults |
+| `--upgrade` | -- | Three-way merge the latest template into an existing `release.yml` |
+| `--base-only` | -- | Write merge bases to `.uvr/bases/` without touching actual files |
+| `--editor` | `$VISUAL` / `$EDITOR` | Editor for conflict resolution during upgrade |
 | `--workflow-dir` | `.github/workflows` | Directory to write the workflow file |
 
 Fails if `release.yml` already exists (use `--force` to overwrite).
+
+## `uvr skill init`
+
+Copy bundled Claude Code skills into your project.
+
+```
+uvr skill init [--force | --upgrade | --base-only] [--editor EDITOR]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--force` | -- | Overwrite existing skill files |
+| `--upgrade` | -- | Three-way merge the latest skills into existing files |
+| `--base-only` | -- | Write merge bases to `.uvr/bases/` without touching actual files |
+| `--editor` | `$VISUAL` / `$EDITOR` | Editor for conflict resolution during upgrade |
 
 ## `uvr validate`
 
