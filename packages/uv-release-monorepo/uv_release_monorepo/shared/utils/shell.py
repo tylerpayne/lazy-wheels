@@ -19,6 +19,9 @@ def exit_fatal(msg: str) -> None:
 
     Use for unrecoverable errors that should halt the pipeline.
     """
+    # Clear any in-progress progress bar line
+    sys.stderr.write("\r" + " " * 70 + "\r")
+    sys.stderr.flush()
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(1)
 

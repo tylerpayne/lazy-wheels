@@ -313,6 +313,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         if getattr(args, "json", False):
             print(plan.model_dump_json(indent=2))
         else:
+            print()
             print(
                 "Nothing changed since last release. Use --rebuild-all to rebuild all."
             )
