@@ -57,6 +57,22 @@ def _section(title: str) -> None:
     print("-" * len(title))
 
 
+def _load_workflow_jobs() -> list[str]:
+    """Load job names from the worktree release.yml, preserving order."""
+    from pathlib import Path
+
+    workflow = Path.cwd() / ".github" / "workflows" / "release.yml"
+    if not workflow.exists():
+        return []
+    try:
+        from ..cli._yaml import _load_yaml
+
+        doc = _load_yaml(workflow)
+        return list(doc.get("jobs", {}).keys())
+    except Exception:
+        return []
+
+
 def _print_plan(
     plan: ReleasePlan,
     skipped: set[str],
@@ -94,71 +110,79 @@ def _print_plan(
                 f"{cur_strs[name].ljust(cw)}  {rel_strs[name]}"
             )
 
-    # -- Pipeline (phase-by-phase with details inline) --
+    # -- Pipeline (all jobs from release.yml) --
     _section("Pipeline")
     _sw = 6  # width of "STATUS"
     _D = " " * 14  # detail indent under phase
     print(f"  {'STATUS'.ljust(_sw)}  JOB")
 
-    def _phase(name: str) -> None:
-        if name in skipped:
-            print(f"  {'skip'.ljust(_sw)}  {name}  (--skip)")
+    workflow_jobs = _load_workflow_jobs()
+    # Ensure core jobs appear even if workflow can't be loaded
+    if not workflow_jobs:
+        workflow_jobs = ["validate_plan", "build", "release", "finalize"]
+
+    for job in workflow_jobs:
+        if job in skipped:
+            print(f"  {'skip'.ljust(_sw)}  {job}  (--skip)")
         else:
-            print(f"  {'run'.ljust(_sw)}  {name}")
+            print(f"  {'run'.ljust(_sw)}  {job}")
 
-    # build
-    _phase("build")
-    if "build" not in skipped:
-        if plan.reuse_run_id:
-            print(f"{_D}artifacts from run {plan.reuse_run_id}")
-        elif plan.build_commands:
-            # Collect assigned packages per runner for marking transitive deps
-            assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
-            for name, pkg in plan.changed.items():
-                for runner in pkg.runners:
-                    assigned_by_runner.setdefault(tuple(runner), set()).add(name)
+        if job in skipped:
+            continue
 
-            all_build_pkgs: list[str] = []
-            for stages in plan.build_commands.values():
-                for stage in stages:
-                    all_build_pkgs.extend(stage.packages)
-            bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
+        # Build details
+        if job == "build":
+            if plan.reuse_run_id:
+                print(f"{_D}artifacts from run {plan.reuse_run_id}")
+            elif plan.build_commands:
+                assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
+                for name, pkg in plan.changed.items():
+                    for runner in pkg.runners:
+                        assigned_by_runner.setdefault(tuple(runner), set()).add(name)
 
-            for runner_key in sorted(plan.build_commands):
-                assigned = assigned_by_runner.get(runner_key, set())
-                print(f"{_D}[{', '.join(runner_key)}]")
-                local_layer = 0
-                for stage in plan.build_commands[runner_key]:
-                    pkgs = sorted(stage.packages)
-                    if not pkgs:
-                        continue
-                    print(f"{_D}  layer {local_layer}")
-                    local_layer += 1
-                    for pkg in pkgs:
-                        cpkg = plan.changed.get(pkg)
-                        cur = cpkg.current_version if cpkg else ""
-                        ver = cpkg.release_version if cpkg else ""
-                        dep_marker = "" if pkg in assigned else " (dep)"
-                        if cur and ver and cur != ver:
-                            print(
-                                f"{_D}    {pkg.ljust(bw)}  {cur} -> {ver}{dep_marker}"
-                            )
-                        else:
-                            print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
+                all_build_pkgs: list[str] = []
+                for stages in plan.build_commands.values():
+                    for stage in stages:
+                        all_build_pkgs.extend(stage.packages)
+                bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
 
-    # publish
-    _phase("release")
-    if "release" not in skipped and plan.release_matrix:
-        for entry in plan.release_matrix:
-            print(f"{_D}{entry['tag']}")
+                for runner_key in sorted(plan.build_commands):
+                    assigned = assigned_by_runner.get(runner_key, set())
+                    print(f"{_D}[{', '.join(runner_key)}]")
+                    local_layer = 0
+                    for stage in plan.build_commands[runner_key]:
+                        pkgs = sorted(stage.packages)
+                        if not pkgs:
+                            continue
+                        print(f"{_D}  layer {local_layer}")
+                        local_layer += 1
+                        for pkg in pkgs:
+                            cpkg = plan.changed.get(pkg)
+                            cur = cpkg.current_version if cpkg else ""
+                            ver = cpkg.release_version if cpkg else ""
+                            dep_marker = "" if pkg in assigned else " (dep)"
+                            if cur and ver and cur != ver:
+                                print(
+                                    f"{_D}    {pkg.ljust(bw)}  "
+                                    f"{cur} -> {ver}{dep_marker}"
+                                )
+                            else:
+                                print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
 
-    # finalize
-    _phase("finalize")
-    changed_with_bumps = {n: p for n, p in plan.changed.items() if p.next_version}
-    if "finalize" not in skipped and changed_with_bumps:
-        fw = max(len(n) for n in changed_with_bumps)
-        for name, pkg in sorted(changed_with_bumps.items()):
-            print(f"{_D}{name.ljust(fw)}  -> {pkg.next_version}")
+        # Release details
+        elif job == "release" and plan.release_matrix:
+            for entry in plan.release_matrix:
+                print(f"{_D}{entry['tag']}")
+
+        # Finalize details
+        elif job == "finalize":
+            changed_with_bumps = {
+                n: p for n, p in plan.changed.items() if p.next_version
+            }
+            if changed_with_bumps:
+                fw = max(len(n) for n in changed_with_bumps)
+                for name, pkg in sorted(changed_with_bumps.items()):
+                    print(f"{_D}{name.ljust(fw)}  -> {pkg.next_version}")
 
     print()
 
