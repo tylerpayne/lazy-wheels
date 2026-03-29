@@ -1,8 +1,8 @@
-"""Tests for uv_release_monorepo.shared.planner._versions."""
+"""Tests for uv_release_monorepo.shared.utils.versions."""
 
 from __future__ import annotations
 
-from uv_release_monorepo.shared.planner._versions import (
+from uv_release_monorepo.shared.utils.versions import (
     bump_dev,
     bump_patch,
     get_base_version,

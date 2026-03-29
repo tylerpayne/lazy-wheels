@@ -14,8 +14,10 @@ from ..models import PackageInfo
 from ..shell import exit_fatal, print_step
 from ..toml import get_path, read_pyproject
 
+from .dependencies import _get_dependency_sections
 
-def _canonicalize_dependency(dep_str: str) -> str:
+
+def canonicalize_dependency(dep_str: str) -> str:
     """Extract the canonical package name from a PEP 508 dependency string.
 
     Handles version specifiers, extras, and normalizes the name per PEP 503
@@ -28,27 +30,7 @@ def _canonicalize_dependency(dep_str: str) -> str:
     return canonicalize_name(Requirement(dep_str).name)
 
 
-def _get_dependency_sections(doc: tomlkit.TOMLDocument) -> list[list]:
-    """Return every mutable dependency list from a pyproject.toml.
-
-    Covers [project].dependencies, [project].optional-dependencies.*,
-    and [dependency-groups].*.  Does NOT include [build-system].requires.
-    """
-    result: list[list] = []
-    project = doc.get("project", {})
-    deps = project.get("dependencies")
-    if isinstance(deps, list):
-        result.append(deps)
-    for group in project.get("optional-dependencies", {}).values():
-        if isinstance(group, list):
-            result.append(group)
-    for group in doc.get("dependency-groups", {}).values():
-        if isinstance(group, list):
-            result.append(group)
-    return result
-
-
-def _get_dependencies(doc: tomlkit.TOMLDocument) -> list[str]:
+def get_dependencies(doc: tomlkit.TOMLDocument) -> list[str]:
     """Collect all dependency strings from a pyproject.toml.
 
     Gathers dependencies from four locations:
@@ -65,7 +47,7 @@ def _get_dependencies(doc: tomlkit.TOMLDocument) -> list[str]:
     return deps
 
 
-def _find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
+def find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     """Scan the workspace and discover all packages.
 
     Reads [tool.uv.workspace].members from root pyproject.toml to find
@@ -114,7 +96,7 @@ def _find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
             path=str(d.relative_to(root)),
             version=get_path(doc, "project", "version", default="0.0.0"),
         )
-        raw_deps[name] = _get_dependencies(doc)
+        raw_deps[name] = get_dependencies(doc)
 
     # Apply include/exclude filters from [tool.uvr.config]
     uvr_config = get_config(root_doc)
@@ -133,7 +115,7 @@ def _find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     for name, deps in raw_deps.items():
         seen: set[str] = set()
         for dep_str in deps:
-            dep_name = _canonicalize_dependency(dep_str)
+            dep_name = canonicalize_dependency(dep_str)
             # Only track internal deps, ignore external packages
             if dep_name in workspace_names and dep_name not in seen:
                 packages[name].deps.append(dep_name)

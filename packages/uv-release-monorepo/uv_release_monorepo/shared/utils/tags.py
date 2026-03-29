@@ -1,34 +1,41 @@
-"""Release tag discovery: find the most recent GitHub release for each package."""
+"""Tag discovery: find baseline and release tags for packages."""
 
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import semver
 
 from ..models import PackageInfo
 from ..shell import print_step
 
+from .versions import parse_version
 
-def _parse_version(version_str: str) -> semver.Version:
-    """Parse a version string into a semver.Version object.
 
-    Strips all dev/pre/post suffixes first, then handles incomplete versions
-    by padding with zeros.
+def find_baseline_tags(
+    packages: dict[str, PackageInfo],
+    all_tags: set[str],
+) -> dict[str, str | None]:
+    """Derive baseline tags from each package's pyproject.toml version.
+
+    The baseline tag is ``{name}/v{version}-base`` where *version* comes from
+    pyproject.toml. If the tag does not exist, returns None for that package.
+
+    Args:
+        packages: Map of package name -> PackageInfo.
+        all_tags: Set of all git tag names.
+
+    Returns:
+        Map of package name to its baseline tag, or None if no tag exists.
     """
-    import semver as _semver
+    print_step("Finding baselines")
 
-    from ..planner._versions import get_base_version
+    baselines: dict[str, str | None] = {}
+    for name, info in packages.items():
+        base_tag = f"{name}/v{info.version}-base"
+        baselines[name] = base_tag if base_tag in all_tags else None
+        print(f"  {name}: {baselines[name] or '<none>'}")
 
-    cleaned = get_base_version(version_str)
-    parts = cleaned.split(".")
-    while len(parts) < 3:
-        parts.append("0")
-    return _semver.Version.parse(".".join(parts[:3]))
+    return baselines
 
 
-def _find_release_tags(
+def find_release_tags(
     packages: dict[str, PackageInfo],
     gh_releases: set[str],
 ) -> dict[str, str | None]:
@@ -50,7 +57,7 @@ def _find_release_tags(
     release_tag_names = gh_releases
     release_tags: dict[str, str | None] = {}
     for name, info in packages.items():
-        current_base = _parse_version(info.version)
+        current_base = parse_version(info.version)
         # Filter to this package's releases, sorted by version descending
         pkg_releases = []
         prefix = f"{name}/v"
@@ -59,7 +66,7 @@ def _find_release_tags(
                 continue
             tag_ver_str = tag[len(prefix) :]
             try:
-                tag_ver = _parse_version(tag_ver_str)
+                tag_ver = parse_version(tag_ver_str)
             except (ValueError, TypeError):
                 continue
             if tag_ver < current_base:

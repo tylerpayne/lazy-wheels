@@ -400,7 +400,7 @@ Run 'uvr <command> --help' for details on a specific command.
 
     def _cmd_pin_deps(a: argparse.Namespace) -> None:
         from pathlib import Path
-        from ..shared.planner._dependencies import pin_dependencies
+        from ..shared.utils.dependencies import pin_dependencies
 
         versions: dict[str, str] = {}
         for spec in a.specs:

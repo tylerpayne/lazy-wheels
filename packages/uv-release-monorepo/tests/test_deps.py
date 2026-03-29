@@ -4,49 +4,52 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from uv_release_monorepo.shared.context._packages import _canonicalize_dependency
-from uv_release_monorepo.shared.planner._dependencies import (
-    _pin,
+from uv_release_monorepo.shared.utils.dependencies import (
+    pin_dependency,
     pin_dependencies,
     set_version,
 )
+from uv_release_monorepo.shared.utils.packages import canonicalize_dependency
 
 
 class TestDepCanonicalName:
     def test_simple_name(self) -> None:
-        assert _canonicalize_dependency("requests") == "requests"
+        assert canonicalize_dependency("requests") == "requests"
 
     def test_with_version_spec(self) -> None:
-        assert _canonicalize_dependency("requests>=2.0") == "requests"
+        assert canonicalize_dependency("requests>=2.0") == "requests"
 
     def test_with_version_bound(self) -> None:
-        assert _canonicalize_dependency("requests>=2.0,<3.0") == "requests"
+        assert canonicalize_dependency("requests>=2.0,<3.0") == "requests"
 
     def test_with_extras(self) -> None:
-        assert _canonicalize_dependency("requests[security]>=2.0") == "requests"
+        assert canonicalize_dependency("requests[security]>=2.0") == "requests"
 
     def test_normalizes_underscores(self) -> None:
-        assert _canonicalize_dependency("my_package>=1.0") == "my-package"
+        assert canonicalize_dependency("my_package>=1.0") == "my-package"
 
     def test_normalizes_case(self) -> None:
-        assert _canonicalize_dependency("MyPackage>=1.0") == "mypackage"
+        assert canonicalize_dependency("MyPackage>=1.0") == "mypackage"
 
 
 class TestPinDep:
     def test_simple_dep(self) -> None:
-        assert _pin("requests", "2.31.0") == "requests>=2.31.0"
+        assert pin_dependency("requests", "2.31.0") == "requests>=2.31.0"
 
     def test_dep_with_existing_version(self) -> None:
-        assert _pin("requests>=2.0", "2.31.0") == "requests>=2.31.0"
+        assert pin_dependency("requests>=2.0", "2.31.0") == "requests>=2.31.0"
 
     def test_dep_with_existing_version_bound(self) -> None:
-        assert _pin("requests>=2.0,<3.0", "2.31.0") == "requests>=2.31.0"
+        assert pin_dependency("requests>=2.0,<3.0", "2.31.0") == "requests>=2.31.0"
 
     def test_preserves_extras(self) -> None:
-        assert _pin("requests[security]>=2.0", "2.31.0") == "requests[security]>=2.31.0"
+        assert (
+            pin_dependency("requests[security]>=2.0", "2.31.0")
+            == "requests[security]>=2.31.0"
+        )
 
     def test_preserves_multiple_extras_sorted(self) -> None:
-        result = _pin("pkg[z,a,m]>=1.0", "3.0.0")
+        result = pin_dependency("pkg[z,a,m]>=1.0", "3.0.0")
         assert result == "pkg[a,m,z]>=3.0.0"
 
 

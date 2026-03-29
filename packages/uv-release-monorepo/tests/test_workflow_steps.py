@@ -115,7 +115,7 @@ def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     mock_run.assert_not_called()
 
 
-@patch("uv_release_monorepo.shared.planner._dependencies.pin_dependencies")
+@patch("uv_release_monorepo.shared.utils.dependencies.pin_dependencies")
 def test_pin_deps_writes(mock_pd: MagicMock) -> None:
     """uvr pin-deps calls pin_dependencies."""
     with patch.object(

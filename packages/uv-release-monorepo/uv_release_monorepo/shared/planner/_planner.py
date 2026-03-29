@@ -19,10 +19,11 @@ from ..models import (
 )
 from ..toml import read_pyproject
 
-from ._changes import detect_changes
-from ._dependencies import pin_dependencies, set_version
 from ._graph import topo_layers
-from ._versions import (
+from ..git.local import generate_release_notes, list_tags
+from ..utils.changes import detect_changes
+from ..utils.dependencies import pin_dependencies, set_version
+from ..utils.versions import (
     bump_dev,
     bump_patch,
     get_base_version,
@@ -34,7 +35,6 @@ from ._versions import (
     next_pre_number,
     parse_tag_version,
 )
-from ..git.local import generate_release_notes, list_tags
 
 
 def _dist_name(name: str) -> str:

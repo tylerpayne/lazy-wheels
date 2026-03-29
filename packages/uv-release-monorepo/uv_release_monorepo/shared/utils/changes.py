@@ -11,7 +11,7 @@ from ..git.local import diff_files
 from ..models import PackageInfo
 from ..shell import print_step
 
-from ._graph import _build_graph_maps
+from ..planner._graph import build_graph_maps
 
 if TYPE_CHECKING:
     from ..context import RepositoryContext
@@ -31,9 +31,6 @@ def _check_package(
     if any(f.startswith(prefix) for f in changed_files):
         return name, f"changed since {baseline}"
 
-    if "pyproject.toml" in changed_files:
-        return name, f"root config changed since {baseline}"
-
     return name, None
 
 
@@ -51,10 +48,7 @@ def detect_changes(
     1. rebuild_all is True (rebuild everything)
     2. No previous baseline tag exists for the package (first release)
     3. Any file in the package directory changed since its baseline
-    4. Root pyproject.toml changed since its baseline (workspace-level config
-       such as dependency overrides or build settings can affect any package,
-       so root changes conservatively trigger a rebuild for all packages)
-    5. Any of its dependencies are dirty (transitive dirtiness)
+    4. Any of its dependencies are dirty (transitive dirtiness)
 
     The baseline tag ({pkg}/v{version}-base) is placed on the version
     bump commit after each release, so only real work after the bump
@@ -103,7 +97,7 @@ def detect_changes(
                 print(f"  {name}: {reason}")
 
     # Build reverse dependency map
-    _, reverse_deps = _build_graph_maps(packages)
+    _, reverse_deps = build_graph_maps(packages)
 
     # Propagate dirtiness to dependents using BFS
     queue = list(dirty)

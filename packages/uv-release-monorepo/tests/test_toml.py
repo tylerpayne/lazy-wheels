@@ -14,7 +14,7 @@ from uv_release_monorepo.shared.config import (
 )
 from packaging.utils import canonicalize_name
 
-from uv_release_monorepo.shared.context._packages import _get_dependencies
+from uv_release_monorepo.shared.utils.packages import get_dependencies
 from uv_release_monorepo.shared.toml import read_pyproject, write_pyproject
 
 
@@ -70,19 +70,19 @@ class TestGetProjectVersion:
 
 class TestGetDependencies:
     def test_gets_main_deps(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
-        deps = _get_dependencies(sample_toml_doc)
+        deps = get_dependencies(sample_toml_doc)
         assert "click>=8.0" in deps
         assert "pydantic>=2.0" in deps
 
     def test_gets_optional_deps(self, sample_toml_doc: tomlkit.TOMLDocument) -> None:
-        deps = _get_dependencies(sample_toml_doc)
+        deps = get_dependencies(sample_toml_doc)
         assert "pytest>=8.0" in deps
         assert "sphinx>=7.0" in deps
 
     def test_gets_dependency_groups(
         self, sample_toml_doc: tomlkit.TOMLDocument
     ) -> None:
-        deps = _get_dependencies(sample_toml_doc)
+        deps = get_dependencies(sample_toml_doc)
         assert "hypothesis>=6.0" in deps
 
     def test_gets_build_system_requires(self) -> None:
@@ -90,14 +90,14 @@ class TestGetDependencies:
             '[build-system]\nrequires = ["hatchling", "my-tool>=1.0"]\n'
             "[project]\nname = 'foo'\ndependencies = ['click>=8.0']\n"
         )
-        deps = _get_dependencies(doc)
+        deps = get_dependencies(doc)
         assert "hatchling" in deps
         assert "my-tool>=1.0" in deps
         assert "click>=8.0" in deps
 
     def test_empty_when_no_deps(self) -> None:
         doc = tomlkit.parse("[project]\nname = 'foo'")
-        assert _get_dependencies(doc) == []
+        assert get_dependencies(doc) == []
 
 
 class TestGetWorkspaceMemberGlobs:

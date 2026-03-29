@@ -10,7 +10,7 @@ from __future__ import annotations
 from ..models import PackageInfo
 
 
-def _build_graph_maps(
+def build_graph_maps(
     packages: dict[str, PackageInfo],
 ) -> tuple[dict[str, int], dict[str, list[str]]]:
     """Build in-degree and reverse-dependency maps for Kahn's algorithm."""
@@ -42,7 +42,7 @@ def topo_layers(packages: dict[str, PackageInfo]) -> dict[str, int]:
     Raises:
         RuntimeError: If a dependency cycle is detected.
     """
-    in_degree, reverse_deps = _build_graph_maps(packages)
+    in_degree, reverse_deps = build_graph_maps(packages)
     layers: dict[str, int] = {}
     queue = sorted(n for n, d in in_degree.items() if d == 0)
     for n in queue:
