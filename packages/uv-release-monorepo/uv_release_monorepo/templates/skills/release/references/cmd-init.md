@@ -12,10 +12,32 @@ The generated workflow contains only the core pipeline. You can add custom jobs 
 
 ## Flags
 
+`--force`, `--upgrade`, and `--base-only` are mutually exclusive.
+
 | Flag | Description |
 |------|-------------|
 | `--force` | Overwrite an existing `release.yml` (loses any custom jobs you added) |
+| `--upgrade` | Three-way merge the latest template into an existing `release.yml`, preserving your custom jobs |
+| `--base-only` | Write merge bases to `.uvr/bases/` without touching actual files |
+| `--editor EDITOR` | Editor to use for conflict resolution during upgrade (e.g. `code`, `vim`) |
 | `--workflow-dir DIR` | Write to a different directory (default: `.github/workflows`) |
+
+## Upgrading
+
+When a new version of `uvr` ships template changes, run:
+
+```bash
+uvr init --upgrade
+```
+
+This performs a three-way merge between your current workflow, the old template (stored in `.uvr/bases/`), and the new template. Custom jobs you added are preserved. If conflicts arise, your `--editor` is opened.
+
+If merge bases are missing (e.g. you upgraded from an older `uvr` that didn't track them), `uvr` will prompt you. To recover bases without modifying files:
+
+```bash
+uvx --from uv-release-monorepo==<old-version> uvr init --base-only
+uvr init --upgrade
+```
 
 ## Notes
 
@@ -23,3 +45,4 @@ The generated workflow contains only the core pipeline. You can add custom jobs 
 - After scaffolding, edit the workflow to add custom jobs for your project's quality gates.
 - Run `uvr validate` after manual edits to catch schema errors (see `cmd-validate.md`).
 - `--force` overwrites the entire file. If you have custom jobs, back up first or re-add them after.
+- `.uvr/bases/` stores merge bases for three-way upgrades. This directory is created automatically and should be committed to version control.

@@ -8,7 +8,7 @@ import tempfile
 from importlib.resources import files
 from pathlib import Path
 
-from ..shared.utils.toml import read_pyproject, write_pyproject
+from ..shared.utils.toml import get_path, read_pyproject, write_pyproject
 from ._common import _fatal
 from .init import _editor_cmd, _read_base, _resolve_editor, _write_base
 
@@ -147,6 +147,38 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 "Skill files have uncommitted changes.\n"
                 "  Commit or stash them before upgrading."
             )
+
+    # Check if any existing skill files are missing merge bases
+    any_missing_base = any(
+        (dest_base / name / rel_path).exists()
+        and not _read_base(root, f".claude/skills/{name}/{rel_path}")
+        for name in _SKILL_FILES
+        for rel_path in _SKILL_FILES[name]
+    )
+    if any_missing_base:
+        pyproject = root / "pyproject.toml"
+        stored_version = ""
+        if pyproject.exists():
+            stored_version = get_path(
+                read_pyproject(pyproject),
+                "tool",
+                "uvr",
+                "config",
+                "skill_version",
+                default="",
+            )
+        if stored_version:
+            print(
+                f"No merge bases found for skills. For a cleaner upgrade, recover them first:\n"
+                f"  uvx --from uv-release-monorepo=={stored_version} uvr skill init --base-only\n"
+                f"  uvr skill init --upgrade\n"
+            )
+            try:
+                answer = input("Continue with two-way merge? [y/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            if answer != "y":
+                return
 
     upgraded = 0
     up_to_date = 0

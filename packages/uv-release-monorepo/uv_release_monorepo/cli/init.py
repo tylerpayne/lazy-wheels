@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ..shared.models.workflow import ReleaseWorkflow, frozen_paths
 from ..shared.utils.config import get_config
-from ..shared.utils.toml import read_pyproject, write_pyproject
+from ..shared.utils.toml import get_path, read_pyproject, write_pyproject
 from ._common import _fatal
 from ._yaml import _MISSING, _load_yaml, _yaml_get
 
@@ -137,8 +137,8 @@ def _resolve_editor(args: argparse.Namespace, root: Path) -> str | None:
     return None
 
 
-def _store_template_version(root: Path) -> None:
-    """Store the current uvr package version as template_version in [tool.uvr.config]."""
+def _store_workflow_version(root: Path) -> None:
+    """Store the current uvr package version as workflow_version in [tool.uvr.config]."""
     from ._common import __version__
 
     pyproject = root / "pyproject.toml"
@@ -148,7 +148,7 @@ def _store_template_version(root: Path) -> None:
     tool = doc.setdefault("tool", {})
     uvr = tool.setdefault("uvr", {})
     config = uvr.setdefault("config", {})
-    config["template_version"] = __version__
+    config["workflow_version"] = __version__
     # Remove legacy keys if present
     config.pop("init_commit", None)
     write_pyproject(pyproject, doc)
@@ -210,7 +210,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     # Save merge base and store version
     rel_dest = str(dest.relative_to(root))
     _write_base(root, rel_dest, template_text)
-    _store_template_version(root)
+    _store_workflow_version(root)
 
     print(f"OK: Wrote workflow to {rel_dest} (uvr v{__version__})")
     print()
@@ -241,9 +241,16 @@ def cmd_validate(args: argparse.Namespace) -> None:
     from ._common import __version__
 
     # Resolve versions
-    stored_version = (root / "pyproject.toml").exists() and get_config(
-        read_pyproject(root / "pyproject.toml")
-    ).get("template_version", "")
+    stored_version = ""
+    if (root / "pyproject.toml").exists():
+        stored_version = get_path(
+            read_pyproject(root / "pyproject.toml"),
+            "tool",
+            "uvr",
+            "config",
+            "workflow_version",
+            default="",
+        )
     local_label = f"v{stored_version}" if stored_version else "unknown"
 
     # Header
@@ -382,9 +389,16 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
     # Read merge base from .uvr/bases/ (empty string → two-way merge)
     base_text = _read_base(root, rel_dest)
     if not base_text:
-        stored_version = get_config(read_pyproject(root / "pyproject.toml")).get(
-            "template_version", ""
-        )
+        stored_version = ""
+        if (root / "pyproject.toml").exists():
+            stored_version = get_path(
+                read_pyproject(root / "pyproject.toml"),
+                "tool",
+                "uvr",
+                "config",
+                "workflow_version",
+                default="",
+            )
         if stored_version:
             print(
                 f"No merge base found. For a cleaner upgrade, recover the base first:\n"
@@ -403,7 +417,7 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
 
     if merged_text.rstrip() == existing_text.rstrip():
         _write_base(root, rel_dest, fresh_text)
-        _store_template_version(root)
+        _store_workflow_version(root)
         print("Already up to date.")
         return
 
@@ -411,7 +425,7 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
 
     if not (has_conflicts or "<<<<<<" in merged_text):
         _write_base(root, rel_dest, fresh_text)
-        _store_template_version(root)
+        _store_workflow_version(root)
         print(f"OK: Upgraded {rel_dest} (uvr v{__version__})")
         return
 
@@ -446,10 +460,10 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
             print("Reverted. No changes applied.")
             return
         _write_base(root, rel_dest, fresh_text)
-        _store_template_version(root)
+        _store_workflow_version(root)
         print(f"  Resolve markers in {rel_dest}, then commit.")
         return
 
     _write_base(root, rel_dest, fresh_text)
-    _store_template_version(root)
+    _store_workflow_version(root)
     print(f"OK: Upgraded {rel_dest} (uvr v{__version__})")
