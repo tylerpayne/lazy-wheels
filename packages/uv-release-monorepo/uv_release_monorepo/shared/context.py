@@ -6,7 +6,7 @@ from dataclasses import dataclass, field as dataclass_field
 
 import pygit2
 
-from .git.local import list_tags, open_repo
+from .utils.git import list_tags, open_repo
 from .models import PackageInfo, PlanConfig
 from .utils.packages import find_packages
 from .utils.shell import Progress

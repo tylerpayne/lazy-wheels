@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pygit2
 
-from ..git.local import diff_files
+from .git import diff_files
 from ..models import PackageInfo
 from .shell import print_step
 
@@ -69,7 +69,7 @@ def detect_changes(
     if ctx is not None:
         repo = ctx.repo
     elif repo is None:
-        from ..git.local import open_repo
+        from .git import open_repo
 
         repo = open_repo()
 

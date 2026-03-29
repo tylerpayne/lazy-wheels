@@ -21,7 +21,7 @@ from ..models import (
 from ..utils.toml import read_pyproject
 
 from ._graph import topo_layers
-from ..git.local import generate_release_notes
+from ..utils.git import generate_release_notes
 from ..utils.changes import detect_changes
 from ..utils.dependencies import pin_dependencies, set_version
 from ..utils.versions import (

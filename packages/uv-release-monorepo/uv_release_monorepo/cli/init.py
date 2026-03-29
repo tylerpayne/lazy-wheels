@@ -151,7 +151,7 @@ def _git_commit_and_record(
 
     Prompts the user for confirmation before committing.
     """
-    from ..shared.git.local import open_repo
+    from ..shared.utils.git import open_repo
 
     rel_files = [str(Path(f).relative_to(root)) for f in files_to_commit]
     print()
