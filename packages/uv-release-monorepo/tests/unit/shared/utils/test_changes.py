@@ -45,8 +45,8 @@ class TestDetectChanges:
         """No packages have tags (first release)."""
         return {"pkg-a": None, "pkg-b": None, "pkg-c": None}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit")
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag")
     @patch(f"{_MOD}.print_step")
     def test_first_release_all_changed(
         self,
@@ -62,8 +62,8 @@ class TestDetectChanges:
         )
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit")
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag")
     @patch(f"{_MOD}.print_step")
     def test_rebuild_all_marks_everything_dirty(
         self,
@@ -79,8 +79,8 @@ class TestDetectChanges:
         )
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_single_package_changed(
         self,
@@ -102,8 +102,8 @@ class TestDetectChanges:
         )
         assert set(changed) == {"pkg-c"}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_dependency_change_propagates(
         self,
@@ -125,8 +125,8 @@ class TestDetectChanges:
         )
         assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_middle_package_change_propagates_to_dependents(
         self,
@@ -148,8 +148,8 @@ class TestDetectChanges:
         )
         assert set(changed) == {"pkg-b", "pkg-c"}
 
-    @patch(f"{_MOD}._path_changed", return_value=False)
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed", return_value=False)
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_root_pyproject_change_does_not_mark_packages_dirty(
         self,
@@ -165,8 +165,8 @@ class TestDetectChanges:
         )
         assert changed == []
 
-    @patch(f"{_MOD}._path_changed", return_value=False)
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed", return_value=False)
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_no_changes_returns_empty(
         self,
@@ -210,8 +210,8 @@ class TestDetectChangesDiamondDeps:
             "top": "top/v1.0.0",
         }
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_bottom_change_propagates_to_all(
         self,
@@ -231,8 +231,8 @@ class TestDetectChangesDiamondDeps:
         )
         assert set(changed) == {"bottom", "left", "right", "top"}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_left_change_propagates_to_top_only(
         self,
@@ -252,8 +252,8 @@ class TestDetectChangesDiamondDeps:
         )
         assert set(changed) == {"left", "top"}
 
-    @patch(f"{_MOD}._path_changed")
-    @patch(f"{_MOD}._resolve_commit", return_value=MagicMock())
+    @patch(f"{_MOD}.path_changed")
+    @patch(f"{_MOD}._resolve_tag", return_value=MagicMock())
     @patch(f"{_MOD}.print_step")
     def test_top_change_only_affects_top(
         self,

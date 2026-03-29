@@ -31,18 +31,69 @@ def list_tags(
     return tags
 
 
-def diff_files(repo: pygit2.Repository, tag_name: str) -> set[str]:
-    """Return file paths changed between *tag_name* and HEAD."""
+# ---------------------------------------------------------------------------
+# Subtree OID comparison — O(depth) instead of O(files)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_tag(repo: pygit2.Repository, tag_name: str) -> pygit2.Commit | None:
+    """Resolve a tag name to its underlying commit."""
     tag_ref = repo.references.get(f"refs/tags/{tag_name}")
     if tag_ref is None:
-        return set()
+        return None
     target = repo.get(tag_ref.target)
-    # Peel annotated tags to the underlying commit
     if isinstance(target, pygit2.Tag):
         target = repo.get(target.target)
-    head = repo.revparse_single("HEAD")
-    diff: pygit2.Diff = repo.diff(target, head)  # type: ignore[arg-type]
-    return {patch.delta.new_file.path or patch.delta.old_file.path for patch in diff}
+    return target  # type: ignore[return-value]
+
+
+def _subtree_oid(
+    repo: pygit2.Repository, commit: pygit2.Commit, path: str
+) -> pygit2.Oid | None:
+    """Return the OID of the subtree at *path* in *commit*, or None if absent.
+
+    Walks the tree hierarchy by path components — O(depth), not O(files).
+    """
+    tree: pygit2.Tree = commit.peel(pygit2.Tree)
+    for part in path.rstrip("/").split("/"):
+        try:
+            entry = tree[part]
+        except KeyError:
+            return None
+        obj = repo.get(entry.id)
+        if obj is None:
+            return None
+        tree = obj  # type: ignore[assignment]
+    return tree.id
+
+
+def path_changed(
+    repo: pygit2.Repository,
+    old_commit: pygit2.Commit,
+    new_commit: pygit2.Commit,
+    path: str,
+) -> bool:
+    """Check if any files under *path* differ between two commits.
+
+    Compares subtree OIDs — O(depth), not O(files in repo).
+    """
+    return _subtree_oid(repo, old_commit, path) != _subtree_oid(repo, new_commit, path)
+
+
+def commit_touches_path(
+    repo: pygit2.Repository, commit: pygit2.Commit, path: str
+) -> bool:
+    """Check if *commit* modified any files under *path*.
+
+    Compares the subtree OID between the commit and its first parent.
+    O(depth) per commit instead of O(files) full diff.
+    """
+    if not commit.parents:
+        # Root commit — check if path exists
+        return _subtree_oid(repo, commit, path) is not None
+    return _subtree_oid(repo, commit.parents[0], path) != _subtree_oid(
+        repo, commit, path
+    )
 
 
 def commit_log(
@@ -53,13 +104,9 @@ def commit_log(
     """Return oneline commit messages between *tag_name* and HEAD for *path_prefix*.
 
     Equivalent to ``git log --oneline <tag>..HEAD -- <path>``.
+    Uses subtree OID comparison per commit — O(depth) instead of full diff.
     """
-    tag_ref = repo.references.get(f"refs/tags/{tag_name}")
-    if tag_ref is None:
-        return []
-    target = repo.get(tag_ref.target)
-    if isinstance(target, pygit2.Tag):
-        target = repo.get(target.target)
+    target = _resolve_tag(repo, tag_name)
     if target is None:
         return []
 
@@ -69,18 +116,10 @@ def commit_log(
 
     entries: list[str] = []
     for commit in walker:
-        if not commit.parents:
-            continue
-        diff: pygit2.Diff = repo.diff(commit.parents[0], commit)
-        for patch in diff:
-            if patch is None:
-                continue
-            p = patch.delta.new_file.path
-            if p and p.startswith(path_prefix):
-                short = str(commit.id)[:7]
-                msg = commit.message.split("\n")[0]
-                entries.append(f"{short} {msg}")
-                break
+        if commit_touches_path(repo, commit, path_prefix):
+            short = str(commit.id)[:7]
+            msg = commit.message.split("\n")[0]
+            entries.append(f"{short} {msg}")
     return entries
 
 

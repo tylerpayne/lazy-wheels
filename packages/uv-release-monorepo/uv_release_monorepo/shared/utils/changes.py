@@ -8,66 +8,13 @@ from typing import TYPE_CHECKING
 import pygit2
 
 from ..models import PackageInfo
+from .git import _resolve_tag, path_changed
 from .shell import print_step
 
 from ..planner._graph import build_graph_maps
 
 if TYPE_CHECKING:
     from ..context import RepositoryContext
-
-
-def _resolve_commit(repo: pygit2.Repository, tag_name: str) -> pygit2.Commit | None:
-    """Resolve a tag name to its underlying commit object."""
-    tag_ref = repo.references.get(f"refs/tags/{tag_name}")
-    if tag_ref is None:
-        return None
-    target = repo.get(tag_ref.target)
-    if isinstance(target, pygit2.Tag):
-        target = repo.get(target.target)
-    return target  # type: ignore[return-value]
-
-
-def _path_changed(
-    repo: pygit2.Repository,
-    old_commit: pygit2.Commit,
-    new_commit: pygit2.Commit,
-    path: str,
-) -> bool:
-    """Check if any files under *path* differ between two commits.
-
-    Compares subtrees directly — O(files in path), not O(files in repo).
-    """
-    prefix = path.rstrip("/") + "/"
-    parts = prefix.rstrip("/").split("/")
-
-    # Walk the tree path to find the subtree entry
-    old_tree = old_commit.peel(pygit2.Tree)
-    new_tree = new_commit.peel(pygit2.Tree)
-
-    for part in parts:
-        try:
-            old_entry = old_tree[part] if old_tree else None  # type: ignore[index]
-        except KeyError:
-            old_entry = None
-        try:
-            new_entry = new_tree[part] if new_tree else None  # type: ignore[index]
-        except KeyError:
-            new_entry = None
-
-        if old_entry is None and new_entry is None:
-            return False  # path doesn't exist in either
-        if old_entry is None or new_entry is None:
-            return True  # path exists in one but not the other
-
-        # Same OID → identical subtree, no changes
-        if old_entry.id == new_entry.id:
-            return False
-
-        old_tree = repo.get(old_entry.id)
-        new_tree = repo.get(new_entry.id)
-
-    # Subtrees differ — something changed under this path
-    return True
 
 
 def detect_changes(
@@ -131,7 +78,7 @@ def detect_changes(
 
         for name, info, baseline in to_check:
             if baseline not in commit_cache:
-                commit_cache[baseline] = _resolve_commit(repo, baseline)
+                commit_cache[baseline] = _resolve_tag(repo, baseline)
 
             base_commit = commit_cache[baseline]
             if base_commit is None:
@@ -139,7 +86,7 @@ def detect_changes(
                 print(f"  {name}: baseline tag missing ({baseline})")
                 continue
 
-            if _path_changed(repo, base_commit, head, info.path):  # type: ignore[arg-type]
+            if path_changed(repo, base_commit, head, info.path):  # type: ignore[arg-type]
                 dirty.add(name)
                 print(f"  {name}: changed since {baseline}")
 
