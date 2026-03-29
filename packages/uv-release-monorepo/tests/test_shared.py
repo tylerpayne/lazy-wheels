@@ -283,19 +283,19 @@ class TestDetectChanges:
 
     @patch("uv_release_monorepo.shared.planner._changes.diff_files")
     @patch("uv_release_monorepo.shared.planner._changes.print_step")
-    def test_root_pyproject_change_marks_package_dirty(
+    def test_root_pyproject_change_does_not_mark_packages_dirty(
         self,
         mock_step: MagicMock,
         mock_diff: MagicMock,
         sample_packages: dict[str, PackageInfo],
         all_tags: dict[str, str],
     ) -> None:
-        """When root pyproject.toml changes since a package's tag, it's marked dirty."""
+        """Root pyproject.toml changes alone don't trigger package rebuilds."""
         mock_diff.return_value = {"pyproject.toml"}
 
         changed = detect_changes(sample_packages, baselines=all_tags, rebuild_all=False)
 
-        assert set(changed) == {"pkg-a", "pkg-b", "pkg-c"}
+        assert changed == []
 
     @patch("uv_release_monorepo.shared.planner._changes.diff_files")
     @patch("uv_release_monorepo.shared.planner._changes.print_step")
