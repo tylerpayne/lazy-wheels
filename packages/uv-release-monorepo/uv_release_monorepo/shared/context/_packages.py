@@ -65,7 +65,7 @@ def _get_dependencies(doc: tomlkit.TOMLDocument) -> list[str]:
     return deps
 
 
-def _find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
+def find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
     """Scan the workspace and discover all packages.
 
     Reads [tool.uv.workspace].members from root pyproject.toml to find

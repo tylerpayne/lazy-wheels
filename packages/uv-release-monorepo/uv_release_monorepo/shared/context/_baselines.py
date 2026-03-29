@@ -6,7 +6,7 @@ from ..models import PackageInfo
 from ..shell import print_step
 
 
-def _find_baselines(
+def find_baselines(
     packages: dict[str, PackageInfo],
     all_tags: set[str],
 ) -> dict[str, str | None]:

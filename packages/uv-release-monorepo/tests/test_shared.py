@@ -9,9 +9,9 @@ import pygit2
 import pytest
 
 from uv_release_monorepo.shared.context import RepositoryContext
-from uv_release_monorepo.shared.context._baselines import _find_baselines
-from uv_release_monorepo.shared.context._packages import _find_packages
-from uv_release_monorepo.shared.context._releases import _find_release_tags
+from uv_release_monorepo.shared.context._baselines import find_baselines
+from uv_release_monorepo.shared.context._packages import find_packages
+from uv_release_monorepo.shared.context._releases import find_release_tags
 from uv_release_monorepo.shared.git.local import generate_release_notes
 from uv_release_monorepo.shared.models import (
     PackageInfo,
@@ -45,7 +45,7 @@ def _make_ctx(
 
 
 class TestFindReleaseTags:
-    """Tests for _find_release_tags()."""
+    """Tests for find_release_tags()."""
 
     @pytest.fixture
     def sample_packages(self) -> dict[str, PackageInfo]:
@@ -64,7 +64,7 @@ class TestFindReleaseTags:
         """Returns the most recent release for each package."""
         gh_releases = {"pkg-a/v1.0.0", "pkg-a/v0.9.0", "pkg-b/v1.0.0"}
 
-        result = _find_release_tags(sample_packages, gh_releases)
+        result = find_release_tags(sample_packages, gh_releases)
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": "pkg-b/v1.0.0"}
 
@@ -77,7 +77,7 @@ class TestFindReleaseTags:
         """Returns None for packages with no releases."""
         gh_releases = {"pkg-a/v1.0.0"}
 
-        result = _find_release_tags(sample_packages, gh_releases)
+        result = find_release_tags(sample_packages, gh_releases)
 
         assert result == {"pkg-a": "pkg-a/v1.0.0", "pkg-b": None}
 
@@ -88,7 +88,7 @@ class TestFindReleaseTags:
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """When no releases exist, all return None."""
-        result = _find_release_tags(sample_packages, set())
+        result = find_release_tags(sample_packages, set())
 
         assert result == {"pkg-a": None, "pkg-b": None}
 
@@ -103,14 +103,14 @@ class TestFindReleaseTags:
         }
         gh_releases = {"pkg-a/v1.0.1", "pkg-a/v1.0.0"}
 
-        result = _find_release_tags(packages, gh_releases)
+        result = find_release_tags(packages, gh_releases)
 
         # v1.0.1 is >= current base 1.0.1, so only v1.0.0 matches
         assert result == {"pkg-a": "pkg-a/v1.0.0"}
 
 
 class TestGetBaselineTags:
-    """Tests for _find_baselines()."""
+    """Tests for find_baselines()."""
 
     @pytest.fixture
     def sample_packages(self) -> dict[str, PackageInfo]:
@@ -129,7 +129,7 @@ class TestGetBaselineTags:
         """Returns the -base tag derived from pyproject.toml version."""
         all_tags = {"pkg-a/v1.0.1-base", "pkg-b/v1.0.1-base"}
 
-        result = _find_baselines(sample_packages, all_tags)
+        result = find_baselines(sample_packages, all_tags)
 
         assert result == {
             "pkg-a": "pkg-a/v1.0.1-base",
@@ -145,7 +145,7 @@ class TestGetBaselineTags:
         """Returns None when no -base tag exists for a package."""
         all_tags = {"pkg-b/v1.0.1-base"}
 
-        result = _find_baselines(sample_packages, all_tags)
+        result = find_baselines(sample_packages, all_tags)
 
         assert result == {
             "pkg-a": None,
@@ -159,7 +159,7 @@ class TestGetBaselineTags:
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns None for packages with no tags at all."""
-        result = _find_baselines(sample_packages, set())
+        result = find_baselines(sample_packages, set())
 
         assert result == {"pkg-a": None, "pkg-b": None}
 
@@ -415,11 +415,11 @@ class TestDetectChangesDiamondDeps:
 
 
 class TestDiscoverPackagesRoot:
-    """Tests for _find_packages() root parameter."""
+    """Tests for find_packages() root parameter."""
 
     @patch("uv_release_monorepo.shared.context._packages.print_step")
     def test_accepts_explicit_root(self, mock_step: MagicMock, tmp_path: Path) -> None:
-        """_find_packages() uses the provided root directory."""
+        """find_packages() uses the provided root directory."""
         root = tmp_path
         (root / "pyproject.toml").write_text(
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
@@ -430,7 +430,7 @@ class TestDiscoverPackagesRoot:
             '[project]\nname = "my-pkg"\nversion = "0.1.0"\n'
         )
 
-        result = _find_packages(root=root)
+        result = find_packages(root=root)
 
         assert "my-pkg" in result
         assert result["my-pkg"].version == "0.1.0"

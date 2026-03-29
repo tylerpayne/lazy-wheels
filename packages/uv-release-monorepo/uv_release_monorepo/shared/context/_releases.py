@@ -28,7 +28,7 @@ def _parse_version(version_str: str) -> semver.Version:
     return _semver.Version.parse(".".join(parts[:3]))
 
 
-def _find_release_tags(
+def find_release_tags(
     packages: dict[str, PackageInfo],
     gh_releases: set[str],
 ) -> dict[str, str | None]:
