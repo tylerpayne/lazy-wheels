@@ -283,7 +283,7 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     if plan.changed:
         progress.complete("Generated release plan")
-    progress.finish()
+    progress.finish(release_count=len(plan.changed))
 
     if not plan.changed:
         if getattr(args, "json", False):

@@ -76,7 +76,7 @@ class Progress:
         sys.stderr.flush()
         self._step_start = time.monotonic()
 
-    def finish(self, *, header: str = "Planning") -> None:
+    def finish(self, *, header: str = "Planning", release_count: int = 0) -> None:
         """Clear the progress bar and print a bar chart summary."""
         # Total from sum of completed steps (not wall clock)
         # so reported total matches the sum of individual steps
@@ -93,4 +93,5 @@ class Progress:
             filled = round(_CHART_WIDTH * secs / max_secs)
             bar = "#" * filled + "-" * (_CHART_WIDTH - filled)
             print(f"  |{bar}| {summary} ({_format_duration(secs)})")
-        print(f"  Planned in {_format_duration(total)}")
+        s = "s" if release_count != 1 else ""
+        print(f"  Planned {release_count} release{s} in {_format_duration(total)}")
