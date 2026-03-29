@@ -764,7 +764,7 @@ wheels = [
 
 [[package]]
 name = "uv-release-monorepo"
-version = "0.18.0a5.dev0"
+version = "0.18.0"
 source = { editable = "packages/uv-release-monorepo" }
 dependencies = [
     { name = "httpx" },
