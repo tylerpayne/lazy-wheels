@@ -72,13 +72,13 @@ class Job(BaseModel):
 # Shorthand for plan access in GitHub Actions expressions
 _P = "fromJSON(inputs.plan)"
 
-_CHECKOUT_STEP: dict = {
+_CHECKOUT = {
     "id": "checkout",
     "uses": "actions/checkout@v4",
     "with": {"fetch-depth": 0},
 }
-_SETUP_UV_STEP: dict = {"id": "setup-uv", "uses": "astral-sh/setup-uv@v5"}
-_SETUP_PYTHON_STEP: dict = {
+_SETUP_UV = {"id": "setup-uv", "uses": "astral-sh/setup-uv@v5"}
+_SETUP_PY = {
     "id": "setup-python",
     "name": "Set up Python",
     "run": (
@@ -86,26 +86,89 @@ _SETUP_PYTHON_STEP: dict = {
         f"uv tool install ${{{{ {_P}.uvr_install }}}}"
     ),
 }
-_EXPORT_PLAN_STEP: dict = {
-    "id": "export-plan",
-    "name": "Export plan context",
-    "env": {"UVR_PLAN": "${{ inputs.plan }}"},
-    "run": (
-        'echo "UVR_CHANGED=$(echo "$UVR_PLAN" '
-        '| jq -r \'.changed | keys | join(" ")\' )" '
-        '>> "$GITHUB_ENV"\n'
-        'echo "UVR_PLAN=$UVR_PLAN" >> "$GITHUB_ENV"'
-    ),
-}
 
+
+def _needs_validator(*required: str):
+    """Create a model_validator that ensures needs contains the required jobs."""
+
+    @model_validator(mode="after")
+    def _check(self: Job) -> Job:
+        for dep in required:
+            if dep not in self.needs:
+                self.needs.insert(0, dep)
+        return self
+
+    return _check
+
+
+def _warn_if_changed(default: Any, msg: str) -> AfterValidator:
+    """AfterValidator that warns when a value differs from *default*."""
+    import warnings
+
+    def _check(v: Any) -> Any:
+        if v != default:
+            warnings.warn(msg, UserWarning, stacklevel=2)
+        return v
+
+    return AfterValidator(_check)
+
+
+def WarnIfChanged(tp: Any, expected: Any, *, msg: str = "", **field_kwargs: Any) -> Any:  # noqa: N802
+    """Return an ``Annotated`` type that warns when a field is modified.
+
+    Bundles the type, ``Field(...)`` and an ``AfterValidator`` into one
+    annotation so that frozen job fields collapse to a single declaration.
+
+    *expected* is the value checked by the validator. Pass ``default`` or
+    ``default_factory`` in **field_kwargs** to control how pydantic
+    initialises the field — just like ``Field()``.
+    """
+    validator = _warn_if_changed(
+        expected, msg or "frozen field was modified from its default"
+    )
+    return Annotated[tp, Field(**field_kwargs), validator]
+
+
+_VALIDATE_PLAN_STEPS: list[dict] = [
+    _SETUP_UV,
+    _SETUP_PY,
+    {
+        "id": "validate-plan",
+        "name": "Validate release plan",
+        "env": {"UVR_PLAN": "${{ inputs.plan }}"},
+        "run": "uvr validate-plan",
+    },
+]
+
+
+class ValidatePlanJob(Job):
+    """The validate-plan job. Frozen -- runs first to validate plan JSON."""
+
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        _VALIDATE_PLAN_STEPS,
+        default_factory=lambda: list(_VALIDATE_PLAN_STEPS),
+        msg="validate-plan.steps was modified",
+    )
+
+
+_BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
+_BUILD_RUNS_ON = "${{ matrix.runner }}"
+_BUILD_STRATEGY: dict = {
+    "fail-fast": True,
+    "matrix": {"runner": f"${{{{ {_P}.build_matrix }}}}"},
+}
 _BUILD_STEPS: list[dict] = [
-    _CHECKOUT_STEP,
-    _SETUP_UV_STEP,
-    _SETUP_PYTHON_STEP,
+    _CHECKOUT,
+    _SETUP_UV,
+    _SETUP_PY,
     {
         "id": "build",
         "name": "Build packages",
-        "env": {"GH_TOKEN": "${{ github.token }}", "UVR_PLAN": "${{ inputs.plan }}"},
+        "env": {
+            "GH_TOKEN": "${{ github.token }}",
+            "UVR_PLAN": "${{ inputs.plan }}",
+        },
         "run": "uvr build --runner '${{ toJSON(matrix.runner) }}'",
     },
     {
@@ -119,6 +182,44 @@ _BUILD_STEPS: list[dict] = [
     },
 ]
 
+
+class BuildJob(Job):
+    """The build job. Frozen -- immutable fields enforced per-field."""
+
+    if_condition: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str | None,
+        _BUILD_IF,
+        default=_BUILD_IF,
+        msg="build.if was modified",
+        alias="if",
+    )
+    strategy: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        dict,
+        _BUILD_STRATEGY,
+        default_factory=lambda: dict(_BUILD_STRATEGY),
+        msg="build.strategy was modified",
+    )
+    runs_on: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str,
+        _BUILD_RUNS_ON,
+        default=_BUILD_RUNS_ON,
+        msg="build.runs-on was modified",
+        alias="runs-on",
+    )
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        _BUILD_STEPS,
+        default_factory=lambda: list(_BUILD_STEPS),
+        msg="build.steps was modified",
+    )
+    _ensure_needs = _needs_validator("validate_plan")
+
+
+_RELEASE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'release') }}}}"
+_RELEASE_STRATEGY: dict = {
+    "fail-fast": False,
+    "matrix": {"include": f"${{{{ {_P}.release_matrix }}}}"},
+}
 _RELEASE_STEPS: list[dict] = [
     {
         "id": "download",
@@ -143,10 +244,37 @@ _RELEASE_STEPS: list[dict] = [
     },
 ]
 
+
+class ReleaseJob(Job):
+    """The release job. Frozen -- immutable fields enforced per-field."""
+
+    if_condition: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str | None,
+        _RELEASE_IF,
+        default=_RELEASE_IF,
+        msg="release.if was modified",
+        alias="if",
+    )
+    strategy: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        dict,
+        _RELEASE_STRATEGY,
+        default_factory=lambda: dict(_RELEASE_STRATEGY),
+        msg="release.strategy was modified",
+    )
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        _RELEASE_STEPS,
+        default_factory=lambda: list(_RELEASE_STEPS),
+        msg="release.steps was modified",
+    )
+    _ensure_needs = _needs_validator("build")
+
+
+_FINALIZE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'finalize') }}}}"
 _FINALIZE_STEPS: list[dict] = [
-    _CHECKOUT_STEP,
-    _SETUP_UV_STEP,
-    _SETUP_PYTHON_STEP,
+    _CHECKOUT,
+    _SETUP_UV,
+    _SETUP_PY,
     {
         "id": "finalize",
         "name": "Finalize release",
@@ -156,119 +284,22 @@ _FINALIZE_STEPS: list[dict] = [
 ]
 
 
-def _needs_validator(*required: str):
-    """Create a model_validator that ensures needs contains the required jobs."""
-
-    @model_validator(mode="after")
-    def _check(self: Job) -> Job:
-        for dep in required:
-            if dep not in self.needs:
-                self.needs.insert(0, dep)
-        return self
-
-    return _check
-
-
-def _frozen(default: Any, *, job: str = "", field: str = "") -> AfterValidator:
-    """AfterValidator that warns when a value differs from the expected default."""
-    import warnings
-
-    label = f"{job}.{field}" if job and field else "core job field"
-
-    def _check(v: Any) -> Any:
-        if v != default:
-            warnings.warn(
-                f"{label} was modified from its default",
-                UserWarning,
-                stacklevel=2,
-            )
-        return v
-
-    return AfterValidator(_check)
-
-
-_VALIDATE_PLAN_STEPS: list[dict] = [
-    _SETUP_UV_STEP,
-    _SETUP_PYTHON_STEP,
-    {
-        "id": "validate-plan",
-        "name": "Validate release plan",
-        "env": {"UVR_PLAN": "${{ inputs.plan }}"},
-        "run": "uvr validate-plan",
-    },
-]
-
-
-class ValidatePlanJob(Job):
-    """The validate-plan job. Frozen -- runs first to validate plan JSON."""
-
-    steps: Annotated[
-        list[dict],
-        _frozen(_VALIDATE_PLAN_STEPS, job="validate-plan", field="steps"),
-    ] = Field(default_factory=lambda: list(_VALIDATE_PLAN_STEPS))
-
-
-_BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
-_BUILD_RUNS_ON = "${{ matrix.runner }}"
-_BUILD_STRATEGY = {
-    # Avoid messy partial --reuse-build merges: all runners succeed or all runners fail
-    "fail-fast": True,
-    "matrix": {"runner": f"${{{{ {_P}.build_matrix }}}}"},
-}
-
-
-class BuildJob(Job):
-    """The build job. Frozen -- immutable fields enforced per-field."""
-
-    if_condition: Annotated[str | None, _frozen(_BUILD_IF, job="build", field="if")] = (
-        Field(default=_BUILD_IF, alias="if")
-    )
-    strategy: Annotated[
-        dict, _frozen(_BUILD_STRATEGY, job="build", field="strategy")
-    ] = Field(default_factory=lambda: dict(_BUILD_STRATEGY))
-    runs_on: Annotated[str, _frozen(_BUILD_RUNS_ON, job="build", field="runs-on")] = (
-        Field(default=_BUILD_RUNS_ON, alias="runs-on")
-    )
-    steps: Annotated[list[dict], _frozen(_BUILD_STEPS, job="build", field="steps")] = (
-        Field(default_factory=lambda: list(_BUILD_STEPS))
-    )
-    _ensure_needs = _needs_validator("validate_plan")
-
-
-_RELEASE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'release') }}}}"
-_RELEASE_STRATEGY = {
-    "fail-fast": False,
-    "matrix": {"include": f"${{{{ {_P}.release_matrix }}}}"},
-}
-
-
-class ReleaseJob(Job):
-    """The release job. Frozen -- immutable fields enforced per-field."""
-
-    if_condition: Annotated[
-        str | None, _frozen(_RELEASE_IF, job="release", field="if")
-    ] = Field(default=_RELEASE_IF, alias="if")
-    strategy: Annotated[
-        dict, _frozen(_RELEASE_STRATEGY, job="release", field="strategy")
-    ] = Field(default_factory=lambda: dict(_RELEASE_STRATEGY))
-    steps: Annotated[
-        list[dict], _frozen(_RELEASE_STEPS, job="release", field="steps")
-    ] = Field(default_factory=lambda: list(_RELEASE_STEPS))
-    _ensure_needs = _needs_validator("build")
-
-
-_FINALIZE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'finalize') }}}}"
-
-
 class FinalizeJob(Job):
     """The finalize job. Frozen -- immutable fields enforced per-field."""
 
-    if_condition: Annotated[
-        str | None, _frozen(_FINALIZE_IF, job="finalize", field="if")
-    ] = Field(default=_FINALIZE_IF, alias="if")
-    steps: Annotated[
-        list[dict], _frozen(_FINALIZE_STEPS, job="finalize", field="steps")
-    ] = Field(default_factory=lambda: list(_FINALIZE_STEPS))
+    if_condition: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str | None,
+        _FINALIZE_IF,
+        default=_FINALIZE_IF,
+        msg="finalize.if was modified",
+        alias="if",
+    )
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        _FINALIZE_STEPS,
+        default_factory=lambda: list(_FINALIZE_STEPS),
+        msg="finalize.steps was modified",
+    )
     _ensure_needs = _needs_validator("release")
 
 
