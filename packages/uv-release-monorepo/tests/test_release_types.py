@@ -310,6 +310,225 @@ class TestVersionOrdering:
 
 
 # ---------------------------------------------------------------------------
+# Comprehensive version matrix
+# ---------------------------------------------------------------------------
+
+
+class TestVersionMatrix:
+    """Every combination of current version x release type."""
+
+    # -- final --
+
+    def test_final_from_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1.dev0")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    def test_final_from_higher_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1.dev3")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    def test_final_from_alpha_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1a2.dev0")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    def test_final_from_beta_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1b1.dev0")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    def test_final_from_rc_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1rc0.dev0")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    def test_final_from_post_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1.post1.dev0")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    # -- dev --
+
+    def test_dev_from_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1.dev0")
+        assert release == "1.0.1.dev0"
+        assert nxt == "1.0.1.dev1"
+
+    def test_dev_from_higher_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1.dev3")
+        assert release == "1.0.1.dev3"
+        assert nxt == "1.0.1.dev4"
+
+    def test_dev_from_alpha_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1a2.dev0")
+        assert release == "1.0.1a2.dev0"
+        assert nxt == "1.0.1a2.dev1"
+
+    def test_dev_from_post_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1.post1.dev0")
+        assert release == "1.0.1.post1.dev0"
+        assert nxt == "1.0.1.post1.dev1"
+
+    def test_dev_rejects_clean_version(self) -> None:
+        with pytest.raises(SystemExit):
+            _release_and_bump(_planner("dev"), "1.0.1")
+
+    # -- pre alpha --
+
+    def test_alpha_from_dev(self) -> None:
+        """Standard: 1.0.1.dev0 + --pre a → 1.0.1a0"""
+        release, nxt = _release_and_bump(_planner("pre", "a"), "1.0.1a0.dev0")
+        assert release == "1.0.1a0"
+        assert nxt == "1.0.1a1.dev0"
+
+    def test_alpha_from_alpha_dev(self) -> None:
+        """Continue alpha: 1.0.1a2.dev0 + --pre a → 1.0.1a2"""
+        release, nxt = _release_and_bump(_planner("pre", "a"), "1.0.1a2.dev0")
+        assert release == "1.0.1a2"
+        assert nxt == "1.0.1a3.dev0"
+
+    def test_alpha_from_beta_dev(self) -> None:
+        """Downgrade kind: 1.0.1b1.dev0 + --pre a → 1.0.1a0"""
+        release, nxt = _release_and_bump(_planner("pre", "a"), "1.0.1b1.dev0")
+        assert release == "1.0.1a0"
+        assert nxt == "1.0.1a1.dev0"
+
+    def test_alpha_from_plain_dev(self) -> None:
+        """No pre suffix: 1.0.1.dev0 + --pre a → 1.0.1a0"""
+        release, nxt = _release_and_bump(_planner("pre", "a"), "1.0.1.dev0")
+        assert release == "1.0.1a0"
+        assert nxt == "1.0.1a1.dev0"
+
+    # -- pre beta --
+
+    def test_beta_from_alpha_dev(self) -> None:
+        """Upgrade kind: 1.0.1a6.dev0 + --pre b → 1.0.1b0"""
+        release, nxt = _release_and_bump(_planner("pre", "b"), "1.0.1a6.dev0")
+        assert release == "1.0.1b0"
+        assert nxt == "1.0.1b1.dev0"
+
+    def test_beta_from_beta_dev(self) -> None:
+        """Continue beta: 1.0.1b1.dev0 + --pre b → 1.0.1b1"""
+        release, nxt = _release_and_bump(_planner("pre", "b"), "1.0.1b1.dev0")
+        assert release == "1.0.1b1"
+        assert nxt == "1.0.1b2.dev0"
+
+    def test_beta_from_plain_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "b"), "1.0.1.dev0")
+        assert release == "1.0.1b0"
+        assert nxt == "1.0.1b1.dev0"
+
+    # -- pre rc --
+
+    def test_rc_from_alpha_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "rc"), "1.0.1a6.dev0")
+        assert release == "1.0.1rc0"
+        assert nxt == "1.0.1rc1.dev0"
+
+    def test_rc_from_beta_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "rc"), "1.0.1b3.dev0")
+        assert release == "1.0.1rc0"
+        assert nxt == "1.0.1rc1.dev0"
+
+    def test_rc_from_rc_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "rc"), "1.0.1rc2.dev0")
+        assert release == "1.0.1rc2"
+        assert nxt == "1.0.1rc3.dev0"
+
+    def test_rc_from_plain_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "rc"), "1.0.1.dev0")
+        assert release == "1.0.1rc0"
+        assert nxt == "1.0.1rc1.dev0"
+
+    # -- post --
+
+    def test_post_from_post_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("post"), "1.0.1.post0.dev0")
+        assert release == "1.0.1.post0"
+        assert nxt == "1.0.1.post1.dev0"
+
+    def test_post_from_higher_post_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("post"), "1.0.1.post3.dev0")
+        assert release == "1.0.1.post3"
+        assert nxt == "1.0.1.post4.dev0"
+
+    def test_post_from_plain_dev(self) -> None:
+        """1.0.1.dev0 + --post → 1.0.1 (strips dev, no .postN)"""
+        release, nxt = _release_and_bump(_planner("post"), "1.0.1.dev0")
+        assert release == "1.0.1"
+
+    # -- N=0 vs N>0 edge cases --
+
+    def test_alpha_n0_from_alpha_dev(self) -> None:
+        """First alpha: 1.0.1a0.dev0 + --pre a → 1.0.1a0"""
+        release, nxt = _release_and_bump(_planner("pre", "a"), "1.0.1a0.dev0")
+        assert release == "1.0.1a0"
+        assert nxt == "1.0.1a1.dev0"
+
+    def test_beta_n0_from_beta_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "b"), "1.0.1b0.dev0")
+        assert release == "1.0.1b0"
+        assert nxt == "1.0.1b1.dev0"
+
+    def test_rc_n0_from_rc_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "rc"), "1.0.1rc0.dev0")
+        assert release == "1.0.1rc0"
+        assert nxt == "1.0.1rc1.dev0"
+
+    def test_post_n0_from_post_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("post"), "1.0.1.post0.dev0")
+        assert release == "1.0.1.post0"
+        assert nxt == "1.0.1.post1.dev0"
+
+    def test_dev_n0(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1.dev0")
+        assert release == "1.0.1.dev0"
+        assert nxt == "1.0.1.dev1"
+
+    # -- Cross-type: pre from post, post from pre, etc. --
+
+    def test_alpha_from_post_dev(self) -> None:
+        """1.0.1.post1.dev0 + --pre a → 1.0.1a0"""
+        release, nxt = _release_and_bump(_planner("pre", "a"), "1.0.1.post1.dev0")
+        assert release == "1.0.1a0"
+        assert nxt == "1.0.1a1.dev0"
+
+    def test_beta_from_rc_dev(self) -> None:
+        """Downgrade: 1.0.1rc2.dev0 + --pre b → 1.0.1b0"""
+        release, nxt = _release_and_bump(_planner("pre", "b"), "1.0.1rc2.dev0")
+        assert release == "1.0.1b0"
+        assert nxt == "1.0.1b1.dev0"
+
+    def test_rc_from_post_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("pre", "rc"), "1.0.1.post1.dev0")
+        assert release == "1.0.1rc0"
+        assert nxt == "1.0.1rc1.dev0"
+
+    def test_post_from_alpha_dev(self) -> None:
+        """1.0.1a2.dev0 + --post → 1.0.1a2 (strips dev)"""
+        release, nxt = _release_and_bump(_planner("post"), "1.0.1a2.dev0")
+        assert release == "1.0.1a2"
+
+    def test_final_from_dev3(self) -> None:
+        """Higher dev N: 1.0.1.dev3 + final → 1.0.1"""
+        release, nxt = _release_and_bump(_planner("final"), "1.0.1.dev3")
+        assert release == "1.0.1"
+        assert nxt == "1.0.2.dev0"
+
+    def test_dev_from_rc_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1rc2.dev0")
+        assert release == "1.0.1rc2.dev0"
+        assert nxt == "1.0.1rc2.dev1"
+
+    def test_dev_from_beta_dev(self) -> None:
+        release, nxt = _release_and_bump(_planner("dev"), "1.0.1b3.dev0")
+        assert release == "1.0.1b3.dev0"
+        assert nxt == "1.0.1b3.dev1"
+
+
+# ---------------------------------------------------------------------------
 # Tag conflict detection
 # ---------------------------------------------------------------------------
 
