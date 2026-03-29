@@ -1,11 +1,11 @@
 [project]
 name = "pkg-beta"
-version = "0.1.8a4.dev0"
+version = "0.1.8a4"
 description = "Dummy package beta - depends on alpha"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
-    "pkg-alpha>=0.1.8a3",
+    "pkg-alpha>=0.1.8a4",
 ]
 
 [build-system]

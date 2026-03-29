@@ -1,6 +1,6 @@
 [project]
 name = "pkg-alpha"
-version = "0.1.8a4.dev0"
+version = "0.1.8a4"
 description = "Dummy package alpha - no dependencies"
 requires-python = ">=3.12"
 license = "MIT"
