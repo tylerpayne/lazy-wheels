@@ -1,10 +1,12 @@
-"""GitHub API client using httpx with connection reuse."""
+"""GitHub API client using httpx with connection reuse and ETag caching."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
+from pathlib import Path
 
 import httpx
 
@@ -56,9 +58,34 @@ def _get_repo() -> str | None:
     return None
 
 
+def _cache_dir() -> Path:
+    """Return the cache directory, creating it if needed."""
+    d = Path.cwd() / ".uvr" / "cache"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _load_cache() -> dict:
+    """Load the releases cache file."""
+    path = _cache_dir() / "releases.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_cache(data: dict) -> None:
+    """Save the releases cache file."""
+    path = _cache_dir() / "releases.json"
+    path.write_text(json.dumps(data))
+
+
 def list_release_tag_names() -> set[str]:
     """Fetch all GitHub release tag names for the current repo.
 
+    Uses ETag-based conditional requests — returns cached data on 304.
     Paginates automatically. Returns an empty set on auth or network failure.
     """
     client = _get_client()
@@ -66,18 +93,45 @@ def list_release_tag_names() -> set[str]:
     if not client or not repo:
         return set()
 
-    tag_names: set[str] = set()
-    url = f"/repos/{repo}/releases?per_page=100"
+    cache = _load_cache()
+    etag = cache.get("etag", "")
+    cached_tags = cache.get("tags", [])
 
-    while url:
+    # First page with conditional request
+    headers: dict[str, str] = {}
+    if etag:
+        headers["If-None-Match"] = etag
+
+    url = f"/repos/{repo}/releases?per_page=100"
+    try:
+        resp = client.get(url, headers=headers)
+        if resp.status_code == 304:
+            # Nothing changed — use cached data
+            return set(cached_tags)
+        resp.raise_for_status()
+    except (httpx.HTTPError, KeyError):
+        # Network error — fall back to cache if available
+        return set(cached_tags) if cached_tags else set()
+
+    # Full fetch (200) — collect all pages
+    tag_names: set[str] = set()
+    for release in resp.json():
+        tag_names.add(release["tag_name"])
+
+    next_url = _next_page(resp.headers.get("link"))
+    while next_url:
         try:
-            resp = client.get(url)
+            resp = client.get(next_url)
             resp.raise_for_status()
             for release in resp.json():
                 tag_names.add(release["tag_name"])
-            url = _next_page(resp.headers.get("link"))
+            next_url = _next_page(resp.headers.get("link"))
         except (httpx.HTTPError, KeyError):
             break
+
+    # Save cache with ETag from the first response
+    new_etag = resp.headers.get("etag", "")
+    _save_cache({"etag": new_etag, "tags": sorted(tag_names)})
 
     return tag_names
 

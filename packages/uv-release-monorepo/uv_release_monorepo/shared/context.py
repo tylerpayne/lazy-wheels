@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import pygit2
@@ -27,7 +28,13 @@ class RepositoryContext:
 
 
 def build_context(*, progress: Progress | None = None) -> RepositoryContext:
-    """Fetch all repository state in one pass."""
+    """Fetch all repository state in one pass.
+
+    Optimizations:
+    - Discovers packages first — skips GitHub API if no packages found
+    - Fetches GitHub releases in parallel with baseline scanning
+    - GitHub releases use ETag caching (304 on unchanged)
+    """
     if progress:
         progress.update("Opening repository")
     repo = open_repo()
@@ -36,31 +43,47 @@ def build_context(*, progress: Progress | None = None) -> RepositoryContext:
     if progress:
         progress.complete(f"Scanned {len(git_tags)} git tags")
 
-    if progress:
-        progress.update("Fetching GitHub releases")
-    github_releases = list_release_tag_names()
-    if progress:
-        progress.complete(f"Fetched {len(github_releases)} GitHub releases")
-
+    # Discover packages first — skip GitHub API if none found
     if progress:
         progress.update("Discovering packages")
     packages = find_packages()
     if progress:
         progress.complete(f"Discovered {len(packages)} packages")
 
+    if not packages:
+        return RepositoryContext(
+            repo=repo,
+            git_tags=git_tags,
+            github_releases=set(),
+            packages=packages,
+            release_tags={},
+            baselines={},
+        )
+
+    # Fetch GitHub releases and find baselines in parallel
+    # (network I/O overlaps with local git operations)
+    if progress:
+        progress.update("Fetching releases and baselines")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        releases_future = pool.submit(list_release_tag_names)
+        baselines_future = pool.submit(find_baseline_tags, packages, all_tags=git_tags)
+        github_releases = releases_future.result()
+        baselines = baselines_future.result()
+
+    baselined = sum(1 for b in baselines.values() if b)
+    if progress:
+        progress.complete(
+            f"Fetched {len(github_releases)} releases, found {baselined} baselines"
+        )
+
+    # Find release tags (needs GitHub releases, so must be sequential)
     if progress:
         progress.update("Finding release tags")
     release_tags = find_release_tags(packages, gh_releases=github_releases)
     tagged = sum(1 for t in release_tags.values() if t)
     if progress:
         progress.complete(f"Found {tagged} release tags")
-
-    if progress:
-        progress.update("Finding baselines")
-    baselines = find_baseline_tags(packages, all_tags=git_tags)
-    baselined = sum(1 for b in baselines.values() if b)
-    if progress:
-        progress.complete(f"Found {baselined} baselines")
 
     return RepositoryContext(
         repo=repo,
