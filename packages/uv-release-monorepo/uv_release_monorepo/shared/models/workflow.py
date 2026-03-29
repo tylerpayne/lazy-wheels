@@ -69,91 +69,25 @@ class Job(BaseModel):
         return d
 
 
-# Shorthand for plan access in GitHub Actions expressions
-_P = "fromJSON(inputs.plan)"
+# Shorthand for GitHub Actions expressions referencing the release plan.
+_PLAN = "fromJSON(inputs.plan)"
 
-_CHECKOUT_STEP: dict = {
+
+def _gha(expr: str) -> str:
+    """Wrap *expr* in GitHub Actions ``${{ }}`` interpolation."""
+    return "${{ " + expr + " }}"
+
+
+_CHECKOUT = {
     "id": "checkout",
     "uses": "actions/checkout@v4",
     "with": {"fetch-depth": 0},
 }
-_SETUP_UV_STEP: dict = {"id": "setup-uv", "uses": "astral-sh/setup-uv@v5"}
-_SETUP_PYTHON_STEP: dict = {
-    "id": "setup-python",
-    "name": "Set up Python",
-    "run": (
-        f"uv python install ${{{{ {_P}.python_version }}}}\n"
-        f"uv tool install ${{{{ {_P}.uvr_install }}}}"
-    ),
+_SETUP_UV = {
+    "id": "setup-uv",
+    "uses": "astral-sh/setup-uv@v5",
+    "with": {"python-version": _gha(f"{_PLAN}.python_version")},
 }
-_EXPORT_PLAN_STEP: dict = {
-    "id": "export-plan",
-    "name": "Export plan context",
-    "env": {"UVR_PLAN": "${{ inputs.plan }}"},
-    "run": (
-        'echo "UVR_CHANGED=$(echo "$UVR_PLAN" '
-        '| jq -r \'.changed | keys | join(" ")\' )" '
-        '>> "$GITHUB_ENV"\n'
-        'echo "UVR_PLAN=$UVR_PLAN" >> "$GITHUB_ENV"'
-    ),
-}
-
-_BUILD_STEPS: list[dict] = [
-    _CHECKOUT_STEP,
-    _SETUP_UV_STEP,
-    _SETUP_PYTHON_STEP,
-    {
-        "id": "build",
-        "name": "Build packages",
-        "env": {"GH_TOKEN": "${{ github.token }}", "UVR_PLAN": "${{ inputs.plan }}"},
-        "run": "uvr build --runner '${{ toJSON(matrix.runner) }}'",
-    },
-    {
-        "id": "upload",
-        "uses": "actions/upload-artifact@v4",
-        "with": {
-            "name": "wheels-${{ join(matrix.runner, '-') }}",
-            "path": "dist/*.whl",
-            "if-no-files-found": "error",
-        },
-    },
-]
-
-_RELEASE_STEPS: list[dict] = [
-    {
-        "id": "download",
-        "uses": "actions/download-artifact@v4",
-        "with": {
-            "pattern": "wheels-*",
-            "merge-multiple": True,
-            "path": "dist",
-            "run-id": f"${{{{ {_P}.reuse_run_id != '' && {_P}.reuse_run_id || github.run_id }}}}",
-        },
-    },
-    {
-        "id": "publish",
-        "uses": "softprops/action-gh-release@v2",
-        "with": {
-            "tag_name": "${{ matrix.tag }}",
-            "name": "${{ matrix.title }}",
-            "body": "${{ matrix.body }}",
-            "files": "dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl",
-            "make_latest": "${{ matrix.make_latest }}",
-        },
-    },
-]
-
-_FINALIZE_STEPS: list[dict] = [
-    _CHECKOUT_STEP,
-    _SETUP_UV_STEP,
-    _SETUP_PYTHON_STEP,
-    {
-        "id": "finalize",
-        "name": "Finalize release",
-        "env": {"UVR_PLAN": "${{ inputs.plan }}"},
-        "run": "uvr finalize",
-    },
-]
 
 
 def _needs_validator(*required: str):
@@ -169,106 +103,189 @@ def _needs_validator(*required: str):
     return _check
 
 
-def _frozen(default: Any, *, job: str = "", field: str = "") -> AfterValidator:
-    """AfterValidator that warns when a value differs from the expected default."""
+_UNSET: Any = object()
+
+
+def WarnIfChanged(  # noqa: N802
+    tp: Any,
+    *,
+    default: Any = _UNSET,
+    default_factory: Any = _UNSET,
+    msg: str = "",
+    **field_kwargs: Any,
+) -> Any:
+    """Return an ``Annotated`` type that warns when a field is modified.
+
+    Bundles the type, ``Field(default=…)`` or ``Field(default_factory=…)``
+    and an ``AfterValidator`` into one annotation.
+    """
     import warnings
 
-    label = f"{job}.{field}" if job and field else "core job field"
+    assert not (default is _UNSET and default_factory is _UNSET), (
+        "WarnIfChanged requires default or default_factory"
+    )
+
+    if default is not _UNSET:
+        expected = default
+        field_kwargs["default"] = default
+    else:
+        expected = default_factory()
+        field_kwargs["default_factory"] = default_factory
 
     def _check(v: Any) -> Any:
-        if v != default:
+        if v != expected:
             warnings.warn(
-                f"{label} was modified from its default",
+                msg or "frozen field was modified from its default",
                 UserWarning,
                 stacklevel=2,
             )
         return v
 
-    return AfterValidator(_check)
-
-
-_VALIDATE_PLAN_STEPS: list[dict] = [
-    _SETUP_UV_STEP,
-    _SETUP_PYTHON_STEP,
-    {
-        "id": "validate-plan",
-        "name": "Validate release plan",
-        "env": {"UVR_PLAN": "${{ inputs.plan }}"},
-        "run": "uvr validate-plan",
-    },
-]
+    return Annotated[tp, Field(**field_kwargs), AfterValidator(_check)]
 
 
 class ValidatePlanJob(Job):
     """The validate-plan job. Frozen -- runs first to validate plan JSON."""
 
-    steps: Annotated[
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
         list[dict],
-        _frozen(_VALIDATE_PLAN_STEPS, job="validate-plan", field="steps"),
-    ] = Field(default_factory=lambda: list(_VALIDATE_PLAN_STEPS))
-
-
-_BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
-_BUILD_RUNS_ON = "${{ matrix.runner }}"
-_BUILD_STRATEGY = {
-    # Avoid messy partial --reuse-build merges: all runners succeed or all runners fail
-    "fail-fast": True,
-    "matrix": {"runner": f"${{{{ {_P}.build_matrix }}}}"},
-}
+        default_factory=lambda: [
+            _SETUP_UV,
+            {
+                "id": "validate-plan",
+                "name": "Validate release plan",
+                "env": {"UVR_PLAN": "${{ inputs.plan }}"},
+                "run": "uv run uvr validate-plan",
+            },
+        ],
+        msg="validate-plan.steps was modified",
+    )
 
 
 class BuildJob(Job):
     """The build job. Frozen -- immutable fields enforced per-field."""
 
-    if_condition: Annotated[str | None, _frozen(_BUILD_IF, job="build", field="if")] = (
-        Field(default=_BUILD_IF, alias="if")
+    if_condition: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str | None,
+        default=_gha(f"!contains({_PLAN}.skip, 'build')"),
+        msg="build.if was modified",
+        alias="if",
     )
-    strategy: Annotated[
-        dict, _frozen(_BUILD_STRATEGY, job="build", field="strategy")
-    ] = Field(default_factory=lambda: dict(_BUILD_STRATEGY))
-    runs_on: Annotated[str, _frozen(_BUILD_RUNS_ON, job="build", field="runs-on")] = (
-        Field(default=_BUILD_RUNS_ON, alias="runs-on")
+    strategy: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        dict,
+        default_factory=lambda: {
+            "fail-fast": True,
+            "matrix": {"runner": _gha(f"{_PLAN}.build_matrix")},
+        },
+        msg="build.strategy was modified",
     )
-    steps: Annotated[list[dict], _frozen(_BUILD_STEPS, job="build", field="steps")] = (
-        Field(default_factory=lambda: list(_BUILD_STEPS))
+    runs_on: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str,
+        default=_gha("matrix.runner"),
+        msg="build.runs-on was modified",
+        alias="runs-on",
+    )
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        default_factory=lambda: [
+            _CHECKOUT,
+            _SETUP_UV,
+            {
+                "id": "build",
+                "name": "Build packages",
+                "env": {
+                    "GH_TOKEN": "${{ github.token }}",
+                    "UVR_PLAN": "${{ inputs.plan }}",
+                },
+                "run": "uv run uvr build --runner '${{ toJSON(matrix.runner) }}'",
+            },
+            {
+                "id": "upload",
+                "uses": "actions/upload-artifact@v4",
+                "with": {
+                    "name": "wheels-${{ join(matrix.runner, '-') }}",
+                    "path": "dist/*.whl",
+                    "if-no-files-found": "error",
+                },
+            },
+        ],
+        msg="build.steps was modified",
     )
     _ensure_needs = _needs_validator("validate_plan")
-
-
-_RELEASE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'release') }}}}"
-_RELEASE_STRATEGY = {
-    "fail-fast": False,
-    "matrix": {"include": f"${{{{ {_P}.release_matrix }}}}"},
-}
 
 
 class ReleaseJob(Job):
     """The release job. Frozen -- immutable fields enforced per-field."""
 
-    if_condition: Annotated[
-        str | None, _frozen(_RELEASE_IF, job="release", field="if")
-    ] = Field(default=_RELEASE_IF, alias="if")
-    strategy: Annotated[
-        dict, _frozen(_RELEASE_STRATEGY, job="release", field="strategy")
-    ] = Field(default_factory=lambda: dict(_RELEASE_STRATEGY))
-    steps: Annotated[
-        list[dict], _frozen(_RELEASE_STEPS, job="release", field="steps")
-    ] = Field(default_factory=lambda: list(_RELEASE_STEPS))
+    if_condition: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str | None,
+        default=_gha(f"always() && !failure() && !contains({_PLAN}.skip, 'release')"),
+        msg="release.if was modified",
+        alias="if",
+    )
+    strategy: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        dict,
+        default_factory=lambda: {
+            "fail-fast": False,
+            "matrix": {"include": _gha(f"{_PLAN}.release_matrix")},
+        },
+        msg="release.strategy was modified",
+    )
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        default_factory=lambda: [
+            {
+                "id": "download",
+                "uses": "actions/download-artifact@v4",
+                "with": {
+                    "pattern": "wheels-*",
+                    "merge-multiple": True,
+                    "path": "dist",
+                    "run-id": _gha(
+                        f"{_PLAN}.reuse_run_id != '' && {_PLAN}.reuse_run_id || github.run_id"
+                    ),
+                },
+            },
+            {
+                "id": "publish",
+                "uses": "softprops/action-gh-release@v2",
+                "with": {
+                    "tag_name": "${{ matrix.tag }}",
+                    "name": "${{ matrix.title }}",
+                    "body": "${{ matrix.body }}",
+                    "files": "dist/${{ matrix.dist_name }}-${{ matrix.version }}*.whl",
+                    "make_latest": "${{ matrix.make_latest }}",
+                },
+            },
+        ],
+        msg="release.steps was modified",
+    )
     _ensure_needs = _needs_validator("build")
-
-
-_FINALIZE_IF = f"${{{{ always() && !failure() && !contains({_P}.skip, 'finalize') }}}}"
 
 
 class FinalizeJob(Job):
     """The finalize job. Frozen -- immutable fields enforced per-field."""
 
-    if_condition: Annotated[
-        str | None, _frozen(_FINALIZE_IF, job="finalize", field="if")
-    ] = Field(default=_FINALIZE_IF, alias="if")
-    steps: Annotated[
-        list[dict], _frozen(_FINALIZE_STEPS, job="finalize", field="steps")
-    ] = Field(default_factory=lambda: list(_FINALIZE_STEPS))
+    if_condition: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        str | None,
+        default=_gha(f"always() && !failure() && !contains({_PLAN}.skip, 'finalize')"),
+        msg="finalize.if was modified",
+        alias="if",
+    )
+    steps: WarnIfChanged(  # ty: ignore[invalid-type-form]
+        list[dict],
+        default_factory=lambda: [
+            _CHECKOUT,
+            _SETUP_UV,
+            {
+                "id": "finalize",
+                "name": "Finalize release",
+                "env": {"UVR_PLAN": "${{ inputs.plan }}"},
+                "run": "uv run uvr finalize",
+            },
+        ],
+        msg="finalize.steps was modified",
+    )
     _ensure_needs = _needs_validator("release")
 
 
