@@ -335,10 +335,8 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Three-way merge bundled skills into existing files.",
     )
     skill_init_parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Apply upgrade without interactive review.",
+        "--editor",
+        help="Editor to use for conflict resolution (e.g. 'code', 'vim').",
     )
 
     def _cmd_skill_dispatch(a: argparse.Namespace) -> None:

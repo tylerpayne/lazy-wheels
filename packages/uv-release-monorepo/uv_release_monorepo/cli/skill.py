@@ -9,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from ._common import _fatal
-from .init import _get_base_text, _git_commit_and_record
+from .init import _editor_cmd, _get_base_text, _git_commit_and_record, _resolve_editor
 
 
 _SKILL_FILES: dict[str, list[str]] = {
@@ -194,12 +194,12 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 base_path.unlink(missing_ok=True)
                 fresh_path.unlink(missing_ok=True)
 
-            if result.returncode > 1:
+            if result.returncode < 0:
                 print(f"  ERROR {rel_dest}: git merge-file failed")
                 continue
 
             merged_text = result.stdout
-            has_conflicts = result.returncode == 1
+            has_conflicts = result.returncode > 0
 
             if merged_text.rstrip() == existing_text.rstrip():
                 up_to_date += 1
@@ -227,29 +227,49 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
     print(f"OK: {', '.join(parts)}")
 
     if has_any_conflicts:
-        print("  Resolve conflict markers before committing.")
-        return
-
-    if not getattr(args, "yes", False) and written_files:
-        try:
-            subprocess.run(["git", "checkout", "-p", "--"] + written_files)
-        except KeyboardInterrupt:
-            subprocess.run(
-                ["git", "checkout", "--"] + written_files, capture_output=True
+        # Offer editor for conflict resolution
+        conflict_files = [f for f in written_files if "<<<<<<" in Path(f).read_text()]
+        editor = _resolve_editor(args, root)
+        for f in conflict_files:
+            rel = str(Path(f).relative_to(root))
+            print(f"\n  Conflicts in {rel}")
+            prompt = (
+                f"  Open in {editor} to resolve? [Y/n/editor] "
+                if editor
+                else "  Editor to resolve? [n/editor] "
             )
-            print("\nAborted. No changes applied.")
-            return
+            try:
+                answer = input(prompt).strip()
+            except (EOFError, KeyboardInterrupt):
+                answer = "n"
+            if answer.lower() not in ("n", "no", ""):
+                chosen = editor if answer.lower() in ("y", "yes") else answer
+                if chosen:
+                    subprocess.run([*_editor_cmd(chosen), f])
+            elif editor and answer == "":
+                subprocess.run([*_editor_cmd(editor), f])
 
-        try:
-            answer = input("\nKeep these changes? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if answer != "y":
-            subprocess.run(
-                ["git", "checkout", "--"] + written_files, capture_output=True
-            )
-            print("Reverted. No changes applied.")
-            return
+        # Check if all conflicts resolved
+        still_conflicted = [
+            f for f in conflict_files if "<<<<<<" in Path(f).read_text()
+        ]
+        if still_conflicted:
+            print("\nUnresolved conflicts remain.")
+            try:
+                answer = input("Revert all changes? [Y/n] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            if answer not in ("n", "no"):
+                subprocess.run(
+                    ["git", "checkout", "--"] + written_files, capture_output=True
+                )
+                print("Reverted. No changes applied.")
+                return
+            else:
+                for f in still_conflicted:
+                    rel = str(Path(f).relative_to(root))
+                    print(f"  Resolve markers in {rel}")
+                return
 
     _git_commit_and_record(
         root,
