@@ -215,10 +215,17 @@ class ReleasePlanner:
             for name, info in changed.items():
                 result[name] = info.version
         elif rt == "pre":
+            kind = self.config.pre_kind
             for name, info in changed.items():
-                # Strip .devN → release the pre-release version as-is
-                # e.g. 1.0.1a1.dev0 → 1.0.1a1
-                result[name] = strip_dev(info.version)
+                without_dev = strip_dev(info.version)
+                # If already the right kind (e.g. version is 1.0.1b2.dev0
+                # and --pre b), strip dev → 1.0.1b2
+                if re.search(rf"{re.escape(kind)}\d+$", without_dev):
+                    result[name] = without_dev
+                else:
+                    # Different kind or no pre suffix — start at kind0
+                    # e.g. 1.0.1a6.dev0 + --pre b → 1.0.1b0
+                    result[name] = f"{get_base_version(info.version)}{kind}0"
         elif rt == "post":
             for name, info in changed.items():
                 # Strip .devN → release the post-release version as-is
