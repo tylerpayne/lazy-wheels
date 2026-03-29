@@ -85,20 +85,9 @@ class ReleasePlanner:
 
             if self.progress:
                 self.progress.update("Finding release tags")
-            # Use local git tags — no GitHub API needed for this
-            local_release_tags = set(
+            local_release_tags = {
                 t for t in self.ctx.git_tags if not t.endswith("-base")
-            )
-            # If we don't have git tags (final/dev skipped scan), do a quick scan
-            if not local_release_tags and not self.ctx.git_tags:
-                from ..git.local import list_tags
-
-                tag_prefixes = [f"{name}/v" for name in packages]
-                local_release_tags = set(
-                    t
-                    for t in list_tags(self.ctx.repo, prefixes=tag_prefixes)
-                    if not t.endswith("-base")
-                )
+            }
             release_tags = find_release_tags(packages, gh_releases=local_release_tags)
             tagged = sum(1 for t in release_tags.values() if t)
             if self.progress:

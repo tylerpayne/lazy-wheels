@@ -83,17 +83,15 @@ def build_context(
         if progress:
             progress.complete(f"Found {baselined} baselines")
 
-    # Git tags: only needed for pre/post releases (next_pre_number/next_post_number)
-    needs_tag_scan = config.release_type in ("pre", "post")
-    if needs_tag_scan:
-        if progress:
-            progress.update("Scanning git tags")
-        tag_prefixes = [f"{name}/v" for name in packages]
-        git_tags = set(list_tags(repo, prefixes=tag_prefixes))
-        if progress:
-            progress.complete(f"Scanned {len(git_tags)} git tags")
-    else:
-        git_tags: set[str] = set()
+    # Scan git tags filtered to package prefixes — needed for:
+    # - Release tag detection (all release types)
+    # - Pre/post version numbering (pre/post only)
+    if progress:
+        progress.update("Scanning git tags")
+    tag_prefixes = [f"{name}/v" for name in packages]
+    git_tags = set(list_tags(repo, prefixes=tag_prefixes))
+    if progress:
+        progress.complete(f"Scanned {len(git_tags)} git tags")
 
     return RepositoryContext(
         repo=repo,
