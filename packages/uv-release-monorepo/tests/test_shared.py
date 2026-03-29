@@ -5,10 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pygit2
 import pytest
 
-from uv_release_monorepo.shared.context import RepositoryContext
+from uv_release_monorepo.shared.context import ReleaseContext
 from uv_release_monorepo.shared.git.local import generate_release_notes
 from uv_release_monorepo.shared.models import (
     PackageInfo,
@@ -27,14 +26,16 @@ def _make_ctx(
     baselines: dict[str, str | None] | None = None,
     git_tags: set[str] | None = None,
     github_releases: set[str] | None = None,
-) -> RepositoryContext:
-    """Build a fake RepositoryContext for tests."""
+) -> ReleaseContext:
+    """Build a fake ReleaseContext for tests."""
     if release_tags is None:
         release_tags = {n: None for n in packages}
     if baselines is None:
         baselines = {n: None for n in packages}
-    return RepositoryContext(
-        repo=MagicMock(spec=pygit2.Repository),
+    mock_repo = MagicMock()
+    mock_repo.references.get.return_value = None  # no tag conflicts by default
+    return ReleaseContext(
+        repo=mock_repo,
         git_tags=git_tags or set(),
         github_releases=github_releases or set(),
         packages=packages,

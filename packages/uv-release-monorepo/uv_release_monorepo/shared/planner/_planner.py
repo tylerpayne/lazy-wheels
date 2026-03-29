@@ -8,7 +8,8 @@ from pathlib import Path
 from packaging.utils import canonicalize_name
 
 from ..utils.config import get_config
-from ..context import RepositoryContext, build_context
+from ..context import ReleaseContext, RepositoryContext, build_context
+from ..utils.shell import Progress
 from ..models import (
     BuildStage,
     ChangedPackage,
@@ -49,16 +50,22 @@ class ReleasePlanner:
     every phase (build, publish, finalize). The executor is a dumb runner.
     """
 
-    def __init__(self, config: PlanConfig, ctx: RepositoryContext) -> None:
+    def __init__(
+        self,
+        config: PlanConfig,
+        ctx: RepositoryContext,
+        *,
+        progress: Progress | None = None,
+    ) -> None:
         self.config = config
         self.ctx = ctx
+        self.progress = progress
 
     def plan(self) -> ReleasePlan:
         """Detect changes and return a ReleasePlan."""
         all_git_tags = sorted(self.ctx.git_tags)
 
         packages = self.ctx.packages
-        release_tags = self.ctx.release_tags
         baselines = self.ctx.baselines
         changed_names = detect_changes(
             packages, baselines, self.config.rebuild_all, ctx=self.ctx
@@ -68,6 +75,34 @@ class ReleasePlanner:
         unchanged = {
             name: info for name, info in packages.items() if name not in changed_names
         }
+
+        # Find release tags from local git tags (no network needed).
+        # If ctx is already a ReleaseContext (e.g., from tests), use its data.
+        if isinstance(self.ctx, ReleaseContext):
+            release_tags = self.ctx.release_tags
+        else:
+            from ..utils.tags import find_release_tags
+
+            if self.progress:
+                self.progress.update("Finding release tags")
+            # Use local git tags — no GitHub API needed for this
+            local_release_tags = set(
+                t for t in self.ctx.git_tags if not t.endswith("-base")
+            )
+            # If we don't have git tags (final/dev skipped scan), do a quick scan
+            if not local_release_tags and not self.ctx.git_tags:
+                from ..git.local import list_tags
+
+                tag_prefixes = [f"{name}/v" for name in packages]
+                local_release_tags = set(
+                    t
+                    for t in list_tags(self.ctx.repo, prefixes=tag_prefixes)
+                    if not t.endswith("-base")
+                )
+            release_tags = find_release_tags(packages, gh_releases=local_release_tags)
+            tagged = sum(1 for t in release_tags.values() if t)
+            if self.progress:
+                self.progress.complete(f"Found {tagged} release tags")
 
         # Save current versions before transformation
         current_versions = {name: info.version for name, info in raw_changed.items()}
@@ -131,8 +166,8 @@ class ReleasePlanner:
             changed, published_versions
         )
 
-        # Validate no tag conflicts
-        self._check_tag_conflicts(changed, self.ctx.git_tags, self.ctx.github_releases)
+        # Validate no tag conflicts (uses targeted GitHub API checks)
+        self._check_tag_conflicts(changed)
 
         return ReleasePlan(
             uvr_version=self.config.uvr_version,
@@ -480,55 +515,50 @@ class ReleasePlanner:
     def _check_tag_conflicts(
         self,
         changed: dict[str, ChangedPackage],
-        all_git_tags: set[str],
-        all_gh_releases: set[str],
     ) -> None:
-        """Verify that no tags or releases the plan will create already exist."""
+        """Verify that no planned tags already exist locally or as GitHub releases.
+
+        Checks local git refs first (free), then makes targeted GitHub API
+        calls only for the specific release tags being created.
+        """
+        from ..git.remote import check_release_exists
         from ..utils.shell import exit_fatal
 
-        planned_tags: list[str] = []
+        # Check local git tags (direct ref lookup — O(1) each)
+        repo = self.ctx.repo
+        conflicts: list[str] = []
         for name, pkg in changed.items():
-            planned_tags.append(f"{name}/v{pkg.release_version}")
-            planned_tags.append(f"{name}/v{pkg.next_version}-base")
+            for tag in (
+                f"{name}/v{pkg.release_version}",
+                f"{name}/v{pkg.next_version}-base",
+            ):
+                if repo.references.get(f"refs/tags/{tag}") is not None:
+                    conflicts.append(tag)
 
-        tag_conflicts = [t for t in planned_tags if t in all_git_tags]
-        release_tags = [f"{n}/v{changed[n].release_version}" for n in changed]
-        release_conflicts = [t for t in release_tags if t in all_gh_releases]
+        # Check GitHub releases (targeted API call per release tag)
+        if self.progress:
+            self.progress.update("Checking for conflicts")
+        for name, pkg in changed.items():
+            tag = f"{name}/v{pkg.release_version}"
+            if tag not in conflicts and check_release_exists(tag):
+                conflicts.append(tag)
+        if self.progress:
+            self.progress.complete(f"Checked {len(changed)} release tags")
 
-        conflicts = sorted(set(tag_conflicts + release_conflicts))
         if not conflicts:
             return
 
-        lines = "\n".join(f"  {t}" for t in conflicts)
-
-        post_versions = []
-        for t in conflicts:
-            if t in all_gh_releases:
-                ver = parse_tag_version(t)
-                post_ver = make_post(
-                    ver, next_post_number(list(all_gh_releases), t.split("/v")[0])
-                )
-                post_versions.append(f"     {t.split('/v')[0]}: {post_ver}")
-
-        post_hint = ""
-        if post_versions:
-            post_detail = "\n".join(post_versions)
-            post_hint = f"  1. Use --post to publish a post-release:\n{post_detail}\n"
-        else:
-            post_hint = "  1. Use --post to publish a post-release\n"
-
+        lines = "\n".join(f"  {t}" for t in sorted(conflicts))
+        post_hint = "  1. Use --post to publish a post-release\n"
         bump_cmds = []
         for t in conflicts:
-            if t in all_gh_releases:
+            pkg_name = t.split("/v")[0]
+            if pkg_name in changed:
                 ver = parse_tag_version(t)
                 next_ver = make_dev(bump_patch(ver))
-                pkg_name = t.split("/v")[0]
-                pkg_path = (
-                    changed[pkg_name].path
-                    if pkg_name in changed
-                    else f"packages/{pkg_name}"
+                bump_cmds.append(
+                    f"     uv version {next_ver} --directory {changed[pkg_name].path}"
                 )
-                bump_cmds.append(f"     uv version {next_ver} --directory {pkg_path}")
 
         bump_hint = ""
         if bump_cmds:

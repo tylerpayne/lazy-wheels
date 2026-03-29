@@ -2,28 +2,40 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 
 import pygit2
 
 from .git.local import list_tags, open_repo
-from .git.remote import list_release_tag_names
 from .models import PackageInfo, PlanConfig
 from .utils.packages import find_packages
 from .utils.shell import Progress
-from .utils.tags import find_baseline_tags, find_release_tags
+from .utils.tags import find_baseline_tags
 
 
 @dataclass
 class RepositoryContext:
-    """Pre-fetched repository state."""
+    """Pre-fetched local repository state.
+
+    Contains only data from the local repo — no network calls.
+    """
 
     repo: pygit2.Repository
     git_tags: set[str]
-    github_releases: set[str]
     packages: dict[str, PackageInfo]
-    release_tags: dict[str, str | None]
     baselines: dict[str, str | None]
+
+
+@dataclass
+class ReleaseContext(RepositoryContext):
+    """Repository state enriched with GitHub release data.
+
+    Built by the planner after change detection — defers the network
+    call until we know packages actually changed.
+    """
+
+    github_releases: set[str] = dataclass_field(default_factory=set)
+    release_tags: dict[str, str | None] = dataclass_field(default_factory=dict)
 
 
 def build_context(
@@ -31,14 +43,12 @@ def build_context(
     *,
     progress: Progress | None = None,
 ) -> RepositoryContext:
-    """Fetch repository state, skipping work the planner won't need.
+    """Fetch local repository state — no network calls.
 
-    Uses *config* to decide what to scan:
+    Uses *config* to skip unnecessary work:
     - ``rebuild_all``: skip baseline lookup (all packages are dirty)
-    - ``release_type == "final" | "dev"``: skip full tag scan
-      (only pre/post need tag scanning for version numbering)
+    - ``final``/``dev``: skip full tag scan (only pre/post need it)
     - Baselines use direct pygit2 ref lookup — no tag scan needed
-    - GitHub releases fetched in parallel, ETag-cached
     """
     if progress:
         progress.update("Opening repository")
@@ -55,9 +65,7 @@ def build_context(
         return RepositoryContext(
             repo=repo,
             git_tags=set(),
-            github_releases=set(),
             packages=packages,
-            release_tags={},
             baselines={},
         )
 
@@ -76,10 +84,7 @@ def build_context(
             progress.complete(f"Found {baselined} baselines")
 
     # Git tags: only needed for pre/post releases (next_pre_number/next_post_number)
-    # and tag conflict checking. For final/dev, an empty set is fine —
-    # conflict checking also uses github_releases.
     needs_tag_scan = config.release_type in ("pre", "post")
-
     if needs_tag_scan:
         if progress:
             progress.update("Scanning git tags")
@@ -90,26 +95,9 @@ def build_context(
     else:
         git_tags: set[str] = set()
 
-    # GitHub releases: ETag-cached, fetched in parallel with tag scan if needed
-    if progress:
-        progress.update("Scanning GitHub releases")
-    github_releases = list_release_tag_names()
-    if progress:
-        progress.complete(f"Scanned {len(github_releases)} GitHub releases")
-
-    # Find release tags (needs GitHub releases)
-    if progress:
-        progress.update("Finding release tags")
-    release_tags = find_release_tags(packages, gh_releases=github_releases)
-    tagged = sum(1 for t in release_tags.values() if t)
-    if progress:
-        progress.complete(f"Found {tagged} release tags")
-
     return RepositoryContext(
         repo=repo,
         git_tags=git_tags,
-        github_releases=github_releases,
         packages=packages,
-        release_tags=release_tags,
         baselines=baselines,
     )

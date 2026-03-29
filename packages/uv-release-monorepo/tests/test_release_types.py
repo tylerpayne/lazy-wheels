@@ -28,9 +28,7 @@ def _make_ctx() -> RepositoryContext:
     return RepositoryContext(
         repo=MagicMock(spec=pygit2.Repository),
         git_tags=set(),
-        github_releases=set(),
         packages={},
-        release_tags={},
         baselines={},
     )
 
@@ -326,11 +324,34 @@ class TestVersionOrdering:
 class TestTagConflicts:
     """Planner rejects plans when tags already exist."""
 
-    def test_errors_on_existing_baseline_tag(self) -> None:
+    @pytest.fixture
+    def _mock_github(self) -> None:  # type: ignore[return]
+        from unittest.mock import patch
+
+        with patch(
+            "uv_release_monorepo.shared.git.remote.check_release_exists",
+            return_value=False,
+        ):
+            yield
+
+    def test_errors_on_existing_baseline_tag(self, _mock_github: None) -> None:
         """Planner errors when a baseline tag already exists."""
         from uv_release_monorepo.shared.models import ChangedPackage
 
         planner = _planner("final")
+        # Inject a conflicting baseline tag into the mock repo
+        existing_refs = {"refs/tags/alpha/v1.0.2.dev0-base"}
+        planner.ctx = RepositoryContext(
+            repo=MagicMock(
+                spec=pygit2.Repository,
+                references=MagicMock(
+                    get=lambda ref: True if ref in existing_refs else None
+                ),
+            ),
+            git_tags=set(),
+            packages={},
+            baselines={},
+        )
         changed = {
             "alpha": ChangedPackage(
                 path="packages/alpha",
@@ -342,13 +363,23 @@ class TestTagConflicts:
             )
         }
         with pytest.raises(SystemExit):
-            planner._check_tag_conflicts(changed, {"alpha/v1.0.2.dev0-base"}, set())
+            planner._check_tag_conflicts(changed)
 
-    def test_passes_when_no_conflicts(self) -> None:
+    def test_passes_when_no_conflicts(self, _mock_github: None) -> None:
         """Planner proceeds when no tags conflict."""
         from uv_release_monorepo.shared.models import ChangedPackage
 
         planner = _planner("final")
+        # No refs exist
+        planner.ctx = RepositoryContext(
+            repo=MagicMock(
+                spec=pygit2.Repository,
+                references=MagicMock(get=lambda ref: None),
+            ),
+            git_tags=set(),
+            packages={},
+            baselines={},
+        )
         changed = {
             "alpha": ChangedPackage(
                 path="packages/alpha",
@@ -360,6 +391,4 @@ class TestTagConflicts:
             )
         }
         # Should not raise
-        planner._check_tag_conflicts(
-            changed, {"alpha/v1.0.0", "alpha/v1.0.1.dev0-base"}, set()
-        )
+        planner._check_tag_conflicts(changed)

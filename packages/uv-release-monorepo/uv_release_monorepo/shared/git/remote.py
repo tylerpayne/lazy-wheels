@@ -137,6 +137,23 @@ def list_release_tag_names() -> set[str]:
     return tag_names
 
 
+def check_release_exists(tag: str) -> bool:
+    """Check if a GitHub release exists for the given tag.
+
+    Uses a targeted API call (O(1)) instead of listing all releases.
+    Returns False on auth/network failure.
+    """
+    client = _get_client()
+    repo = _get_repo()
+    if not client or not repo:
+        return False
+    try:
+        resp = client.get(f"/repos/{repo}/releases/tags/{tag}")
+        return resp.status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
 def _next_page(link_header: str | None) -> str | None:
     """Extract the ``next`` URL from a GitHub ``Link`` header."""
     if not link_header:
