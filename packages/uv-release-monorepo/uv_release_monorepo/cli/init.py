@@ -310,17 +310,17 @@ def cmd_validate(args: argparse.Namespace) -> None:
     print()
 
     # Version info
-    print("Info:")
+    print("Versions:")
     uvr_version = __version__
     stored_version = (root / "pyproject.toml").exists() and get_config(
         read_pyproject(root / "pyproject.toml")
     ).get("template_version", "")
-    print(f"  uvr:      {uvr_version}")
-    print(f"  bundled:  {template_version} (template shipped with this uvr)")
+    print(f"  uvr:                    {uvr_version}")
+    print(f"  uvr release template:   {template_version}")
     if stored_version:
-        print(f"  applied:  {stored_version} (template version in your workflow)")
+        print(f"  local release workflow:  {stored_version}")
     else:
-        print("  applied:  unknown — run `uvr init --upgrade` to track")
+        print("  local release workflow:  unknown — run `uvr init --upgrade` to track")
 
     # Warnings
     if all_warnings:
