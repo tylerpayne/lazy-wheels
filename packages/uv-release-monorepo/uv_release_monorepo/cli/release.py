@@ -323,18 +323,13 @@ def cmd_release(args: argparse.Namespace) -> None:
     if hook:
         config = hook.pre_plan(config)
 
-    # Steps: discover + baselines + release_tags + detect + plan
-    step_count = 5 if not config.rebuild_all else 4
+    # Steps: discover + resolve baselines + detect changes + compute versions + generate notes
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()  # suppress discovery print_step output
-    progress = Progress(total_steps=step_count)
+    progress = Progress(total_steps=5)
     try:
-        ctx = build_context(config, progress=progress)
-        progress.update("Detecting changes")
+        ctx = build_context(progress=progress)
         plan = _cli.ReleasePlanner(config, ctx, progress=progress).plan()
-        progress.complete(
-            f"Detected {len(plan.changed)} changed, {len(plan.unchanged)} unchanged"
-        )
     finally:
         sys.stdout = old_stdout
 

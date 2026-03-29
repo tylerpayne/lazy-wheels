@@ -91,6 +91,6 @@ def _make_ctx(
     return ReleaseContext(
         repo=mock_repo,
         packages=packages,
-        release_tags=release_tags,
         baselines=baselines,
+        release_tags=release_tags,
     )

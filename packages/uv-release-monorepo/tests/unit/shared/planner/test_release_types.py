@@ -29,7 +29,6 @@ def _make_ctx() -> RepositoryContext:
     return RepositoryContext(
         repo=MagicMock(spec=pygit2.Repository),
         packages={},
-        baselines={},
     )
 
 
@@ -489,7 +488,6 @@ class TestTagConflicts:
                 ),
             ),
             packages={},
-            baselines={},
         )
         changed = {
             "alpha": ChangedPackage(
@@ -516,7 +514,6 @@ class TestTagConflicts:
                 references=MagicMock(get=lambda ref: None),
             ),
             packages={},
-            baselines={},
         )
         changed = {
             "alpha": ChangedPackage(

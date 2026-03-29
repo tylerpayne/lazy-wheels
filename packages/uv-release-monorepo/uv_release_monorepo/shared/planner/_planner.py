@@ -67,33 +67,54 @@ class ReleasePlanner:
         """Detect changes and return a ReleasePlan."""
         packages = self.ctx.packages
 
-        # Resolve baselines per release type — overrides the default
-        # version-based baselines from context with release-type-aware ones
-        baselines: dict[str, str | None] = {}
-        for name, info in packages.items():
-            baselines[name] = resolve_baseline(
-                info.version,
-                self.config.release_type,
-                self.config.pre_kind,
-                name,
-                self.ctx.repo,
-            )
+        # Step 1: Resolve baselines per release type
+        if self.progress:
+            self.progress.update("Resolving baselines")
+        if isinstance(self.ctx, ReleaseContext):
+            baselines = self.ctx.baselines
+        else:
+            baselines: dict[str, str | None] = {}
+            for name, info in packages.items():
+                baselines[name] = resolve_baseline(
+                    info.version,
+                    self.config.release_type,
+                    self.config.pre_kind,
+                    name,
+                    self.ctx.repo,
+                )
+        if self.progress:
+            self.progress.complete(f"Resolved {len(packages)} baselines")
 
+        # Step 2: Detect changes
+        if self.progress:
+            self.progress.update("Detecting changes")
         changed_names = detect_changes(
             packages, baselines, self.config.rebuild_all, ctx=self.ctx
         )
-
         raw_changed = {name: packages[name] for name in changed_names}
         unchanged = {
             name: info for name, info in packages.items() if name not in changed_names
         }
+        if self.progress:
+            self.progress.complete(
+                f"Detected {len(changed_names)} changed, {len(unchanged)} unchanged"
+            )
 
-        # Find previous release per package via inverse version bump (O(1) per package)
+        # Step 3: Compute release versions
+        if self.progress:
+            self.progress.update("Computing versions")
+        current_versions = {name: info.version for name, info in raw_changed.items()}
+        release_versions = self._compute_release_versions(raw_changed)
+        versioned: dict[str, PackageInfo] = {}
+        for name, info in raw_changed.items():
+            versioned[name] = PackageInfo(
+                path=info.path, version=release_versions[name], deps=info.deps
+            )
+
+        # Find previous release tags for dep pinning
         if isinstance(self.ctx, ReleaseContext):
             release_tags = self.ctx.release_tags
         else:
-            if self.progress:
-                self.progress.update("Finding release tags")
             release_tags: dict[str, str | None] = {}
             for name, info in packages.items():
                 try:
@@ -101,38 +122,21 @@ class ReleasePlanner:
                     release_tags[name] = f"{name}/v{prev}" if prev else None
                 except ValueError:
                     release_tags[name] = None
-            tagged = sum(1 for t in release_tags.values() if t)
-            if self.progress:
-                self.progress.complete(f"Found {tagged} release tags")
 
-        # Save current versions before transformation
-        current_versions = {name: info.version for name, info in raw_changed.items()}
-
-        # Compute release versions
-        release_versions = self._compute_release_versions(raw_changed)
-
-        # Build a working dict with release versions applied (for dep pinning, commands)
-        versioned: dict[str, PackageInfo] = {}
-        for name, info in raw_changed.items():
-            versioned[name] = PackageInfo(
-                path=info.path, version=release_versions[name], deps=info.deps
-            )
-
-        # Compute published versions for internal dep pinning
         published_versions = self._published_versions(
             versioned, changed_names, packages, release_tags
         )
-
-        # Apply release versions and dep pins locally (skip for dry-run)
         if not self.config.dry_run:
             self._apply_versions_and_pins(versioned, published_versions)
-
-        # Compute next-dev versions
         next_versions = self._compute_next_versions(versioned)
+        if self.progress:
+            self.progress.complete(
+                f"Computed versions for {len(changed_names)} packages"
+            )
 
-        # Generate release notes — pre-releases compare to the last *final*
-        # release so notes are cumulative (beta includes all alpha commits).
-        # All other release types compare to their direct predecessor.
+        # Step 4: Generate release notes
+        if self.progress:
+            self.progress.update("Generating release notes")
         notes: dict[str, str] = {}
         for name in changed_names:
             info = versioned[name]
@@ -144,6 +148,8 @@ class ReleasePlanner:
             notes[name] = generate_release_notes(
                 name, info, prev_tag, repo=self.ctx.repo
             )
+        if self.progress:
+            self.progress.complete(f"Generated {len(notes)} release notes")
 
         # Determine which package gets "Latest" on GitHub
         root_doc = read_pyproject(Path.cwd() / "pyproject.toml")
@@ -616,5 +622,5 @@ class ReleasePlanner:
 
 def build_plan(config: PlanConfig) -> ReleasePlan:
     """Run discovery locally and return a ReleasePlan."""
-    ctx = build_context(config)
+    ctx = build_context()
     return ReleasePlanner(config, ctx).plan()
