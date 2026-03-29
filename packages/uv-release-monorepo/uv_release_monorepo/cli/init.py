@@ -371,6 +371,7 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
     merged_text, has_conflicts = _three_way_merge(dest, base_text, fresh_text)
 
     if merged_text.rstrip() == existing_text.rstrip():
+        _store_template_version(root, latest_version)
         print("Already up to date.")
         return
 

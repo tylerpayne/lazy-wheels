@@ -253,6 +253,7 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
     print()
     total = upgraded + new_files
     if total == 0:
+        _store_skill_version(root, latest)
         print("Already up to date.")
         return
 
