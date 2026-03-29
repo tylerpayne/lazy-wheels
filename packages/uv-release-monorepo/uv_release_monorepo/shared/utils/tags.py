@@ -8,7 +8,7 @@ from ..shell import print_step
 from .versions import parse_version
 
 
-def find_baselines(
+def find_baseline_tags(
     packages: dict[str, PackageInfo],
     all_tags: set[str],
 ) -> dict[str, str | None]:

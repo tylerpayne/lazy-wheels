@@ -18,7 +18,7 @@ from uv_release_monorepo.shared.models import (
 from uv_release_monorepo.shared.planner import build_plan
 from uv_release_monorepo.shared.utils.changes import detect_changes
 from uv_release_monorepo.shared.utils.packages import find_packages
-from uv_release_monorepo.shared.utils.tags import find_baselines, find_release_tags
+from uv_release_monorepo.shared.utils.tags import find_baseline_tags, find_release_tags
 
 
 def _make_ctx(
@@ -109,7 +109,7 @@ class TestFindReleaseTags:
 
 
 class TestGetBaselineTags:
-    """Tests for find_baselines()."""
+    """Tests for find_baseline_tags()."""
 
     @pytest.fixture
     def sample_packages(self) -> dict[str, PackageInfo]:
@@ -128,7 +128,7 @@ class TestGetBaselineTags:
         """Returns the -base tag derived from pyproject.toml version."""
         all_tags = {"pkg-a/v1.0.1-base", "pkg-b/v1.0.1-base"}
 
-        result = find_baselines(sample_packages, all_tags)
+        result = find_baseline_tags(sample_packages, all_tags)
 
         assert result == {
             "pkg-a": "pkg-a/v1.0.1-base",
@@ -144,7 +144,7 @@ class TestGetBaselineTags:
         """Returns None when no -base tag exists for a package."""
         all_tags = {"pkg-b/v1.0.1-base"}
 
-        result = find_baselines(sample_packages, all_tags)
+        result = find_baseline_tags(sample_packages, all_tags)
 
         assert result == {
             "pkg-a": None,
@@ -158,7 +158,7 @@ class TestGetBaselineTags:
         sample_packages: dict[str, PackageInfo],
     ) -> None:
         """Returns None for packages with no tags at all."""
-        result = find_baselines(sample_packages, set())
+        result = find_baseline_tags(sample_packages, set())
 
         assert result == {"pkg-a": None, "pkg-b": None}
 

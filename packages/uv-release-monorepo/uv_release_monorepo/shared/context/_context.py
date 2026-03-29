@@ -9,7 +9,7 @@ from ..git.local import list_tags, open_repo
 from ..git.remote import list_release_tag_names
 from ..models import PackageInfo
 from ..utils.packages import find_packages
-from ..utils.tags import find_baselines, find_release_tags
+from ..utils.tags import find_baseline_tags, find_release_tags
 
 
 class RepositoryContext(BaseModel):
@@ -34,7 +34,7 @@ def build_context() -> RepositoryContext:
 
     packages = find_packages()
     release_tags = find_release_tags(packages, gh_releases=github_releases)
-    baselines = find_baselines(packages, all_tags=git_tags)
+    baselines = find_baseline_tags(packages, all_tags=git_tags)
 
     return RepositoryContext(
         repo=repo,
