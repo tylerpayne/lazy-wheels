@@ -57,6 +57,14 @@ def is_dev(version_str: str) -> bool:
     return _DEV_RE.search(version_str) is not None
 
 
+_PRE_RE = re.compile(r"(a|b|rc)\d+")
+
+
+def is_pre(version_str: str) -> bool:
+    """Check if a version has an alpha, beta, or rc suffix."""
+    return _PRE_RE.search(version_str) is not None
+
+
 def strip_version(
     version_str: str,
     *,

@@ -73,9 +73,14 @@ def _load_workflow_jobs() -> list[str]:
         return []
 
 
+_NOTES_LIMIT = 10
+
+
 def _print_plan(
     plan: ReleasePlan,
     skipped: set[str],
+    *,
+    full_notes: bool = False,
 ) -> None:
     """Print a human-readable summary of the release plan."""
 
@@ -190,8 +195,26 @@ def _print_plan(
         _section("Release Notes")
         for name, pkg in sorted(notes_packages.items()):
             print(f"  {name}")
-            for line in pkg.release_notes.strip().splitlines():
-                print(f"    {line}")
+            lines = pkg.release_notes.strip().splitlines()
+            if full_notes:
+                for line in lines:
+                    print(f"    {line}")
+            else:
+                # Find where commits start so we always show the header lines
+                commit_start = 0
+                for i, line in enumerate(lines):
+                    if line.startswith("- "):
+                        commit_start = i
+                        break
+                header = lines[:commit_start]
+                commits = lines[commit_start:]
+                for line in header:
+                    print(f"    {line}")
+                for line in commits[:_NOTES_LIMIT]:
+                    print(f"    {line}")
+                overflow = len(commits) - _NOTES_LIMIT
+                if overflow > 0:
+                    print(f"    + {overflow} more commits (--full-release-notes)")
             print()
 
     print()
@@ -371,13 +394,15 @@ def cmd_release(args: argparse.Namespace) -> None:
         print(plan.model_dump_json(indent=2))
         return
 
+    full_notes = getattr(args, "full_release_notes", False)
+
     # Dry run: print summary and exit
     if getattr(args, "dry_run", False):
-        _print_plan(plan, skipped)
+        _print_plan(plan, skipped, full_notes=full_notes)
         return
 
     # Print human-readable summary
-    _print_plan(plan, skipped)
+    _print_plan(plan, skipped, full_notes=full_notes)
 
     # Commit release versions and pinned deps (planner wrote them locally)
     subprocess.run(

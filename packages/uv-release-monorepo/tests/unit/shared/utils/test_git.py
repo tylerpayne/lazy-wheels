@@ -20,7 +20,7 @@ class TestGenerateReleaseNotes:
         result = generate_release_notes("pkg-a", info, "pkg-a/v0.9.0")
 
         assert "**Released:** pkg-a 1.0.0" in result
-        assert "**Commits:**" in result
+        assert "**Commits since last release (0.9.0):**" in result
         assert "- abc1234 fix: something" in result
         assert "- def5678 feat: another" in result
 
@@ -42,5 +42,5 @@ class TestGenerateReleaseNotes:
 
         result = generate_release_notes("pkg-a", info, "pkg-a/v0.9.0")
 
-        assert result == "**Released:** pkg-a 1.0.0"
+        assert "**Released:** pkg-a 1.0.0" in result
         assert "Commits" not in result

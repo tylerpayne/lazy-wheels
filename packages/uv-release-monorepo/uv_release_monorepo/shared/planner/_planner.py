@@ -30,6 +30,7 @@ from ..utils.versions import (
     find_previous_release,
     get_base_version,
     is_dev,
+    is_pre,
     make_dev,
     make_post,
     make_pre,
@@ -116,12 +117,16 @@ class ReleasePlanner:
         # Compute next-dev versions
         next_versions = self._compute_next_versions(versioned)
 
-        # Generate release notes — find previous release relative to the
-        # version being published (uses inverse bump, respects kind chain)
+        # Generate release notes — pre-releases compare to the last *final*
+        # release so notes are cumulative (beta includes all alpha commits).
+        # All other release types compare to their direct predecessor.
         notes: dict[str, str] = {}
         for name in changed_names:
             info = versioned[name]
-            prev = find_previous_release(info.version, name, self.ctx.repo)
+            version = (
+                get_base_version(info.version) if is_pre(info.version) else info.version
+            )
+            prev = find_previous_release(version, name, self.ctx.repo)
             prev_tag = f"{name}/v{prev}" if prev else None
             notes[name] = generate_release_notes(
                 name, info, prev_tag, repo=self.ctx.repo

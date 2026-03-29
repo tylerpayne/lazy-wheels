@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.18.0b0] - 2026-03-29
+
 ### Changed
 - **BREAKING**: Bump `ReleasePlan` schema version to 9 — consolidate per-package data into `ChangedPackage` model replacing `BumpPlan`, `MatrixEntry`, `PublishEntry`, `current_versions`, `release_tags`, and `bumps` fields
 - **BREAKING**: Rename release pipeline phase from "publish" to "release" — affects `--skip` flag values, workflow job names, and plan field names (`publish_commands` → `release_commands`, `publish_matrix` → `release_matrix`, `runners` → `build_matrix`)
@@ -13,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **BREAKING**: Restructure `shared/` modules by topological dependency layer — `planner/` subpackage absorbs `versions.py`, `deps.py`, `graph.py`, `changes.py`; `context/` subpackage replaces `discovery.py` with `RepositoryContext` model; `execute.py` → `executor.py`
 - Change `ReleasePlanner` to accept a pre-built `RepositoryContext` instead of calling discovery functions internally
 - Change `uvr init --upgrade` to use editor prompt with `--wait` for GUI editors instead of `git checkout -p` for conflict resolution
+- Prefix all core workflow jobs with `uvr-` (`uvr-validate`, `uvr-build`, `uvr-release`, `uvr-finalize`) to distinguish from user-defined jobs
+- Replace GitHub API calls and tag scanning with O(1) local ref lookups via `find_previous_release` inverse version bump
 
 ### Added
 - Add `RepositoryContext` model that pre-fetches all repository state (repo handle, git tags, GitHub releases, packages, release tags, baselines) in a single `build_context()` call
@@ -20,16 +24,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Add `get_path()` helper in `toml.py` for navigating nested TOML dicts without chained `.get()` calls
 - Add `--editor` CLI flag and `[tool.uvr.config].editor` setting for configuring conflict resolution editor in `uvr init --upgrade`
 - Add `@computed_field` properties on `ReleasePlan` for `build_matrix` and `release_matrix` — derived from `changed` packages, serialized into JSON for CI workflow consumption
+- Add cumulative pre-release notes — beta notes include all commits since the last final release, not just since the last alpha
+- Add `--full-release-notes` flag to show all commits (default truncates to 10 with overflow count)
+- Add `is_pre()` helper for detecting alpha/beta/rc versions
+- Add `--allow-dirty` flag to `uvr release` for running with uncommitted changes
+- Add progress bar with per-phase timing and bar chart summary to `uvr release` planning output
+- Add `find_previous_release()` inverse version bump — derives predecessor via O(1) ref lookups with kind chain fallback (rc → b → a → final)
+- Add `uvr skill init --upgrade` with three-way merge and editor conflict resolution matching `uvr init --upgrade`
+- Add versioned skill templates replacing git commit SHA tracking
 
 ### Removed
 - Remove `BumpPlan`, `MatrixEntry`, `PublishEntry`, `PinChange`, `DepPinChange` models — data consolidated into `ChangedPackage`
 - Remove `git()`, `gh()`, `run()` subprocess wrappers from `shell.py` — replaced by pygit2 and httpx in earlier versions
 - Remove unused functions: `dev_number`, `is_final`, `is_prerelease`, `is_postrelease`, `tag_for_package`, `topo_sort`, `rewrite_pyproject`, `update_dep_pins`
+- Remove GitHub API dependency for release detection — all tag lookups are now local via pygit2
+- Remove `git/remote.py` module
 
 ### Fixed
 - Fix `git merge-file` exit code check in `uvr init --upgrade` — was treating conflict count > 1 as fatal error instead of only negative exit codes
 - Fix multiline `run:` steps in generated workflow YAML rendering as quoted strings instead of block scalars (`|`)
 - Fix `strategy` field rendering after `steps` in workflow YAML job definitions
+- Fix `--pre b` with alpha version producing another alpha instead of beta
+- Fix `--dev` rejecting clean versions — now auto-appends `.dev0` consistent with other release types
 
 ## [v0.17.0] - 2026-03-27
 

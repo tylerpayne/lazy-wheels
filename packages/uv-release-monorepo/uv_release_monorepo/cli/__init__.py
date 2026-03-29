@@ -224,6 +224,11 @@ Run 'uvr <command> --help' for details on a specific command.
         default=".github/workflows",
         help="Workflow directory (default: %(default)s).",
     )
+    _out.add_argument(
+        "--full-release-notes",
+        action="store_true",
+        help="Show all commits in release notes (default: truncated to 10).",
+    )
     release_parser.set_defaults(func=cmd_release)
 
     # status (alias for release --dry-run)

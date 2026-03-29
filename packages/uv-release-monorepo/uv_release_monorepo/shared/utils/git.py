@@ -49,7 +49,6 @@ def commit_log(
     repo: pygit2.Repository,
     tag_name: str,
     path_prefix: str,
-    limit: int = 10,
 ) -> list[str]:
     """Return oneline commit messages between *tag_name* and HEAD for *path_prefix*.
 
@@ -82,8 +81,6 @@ def commit_log(
                 msg = commit.message.split("\n")[0]
                 entries.append(f"{short} {msg}")
                 break
-        if len(entries) >= limit:
-            break
     return entries
 
 
@@ -105,13 +102,14 @@ def generate_release_notes(
     Returns:
         Markdown string with release header and commit log.
     """
+    baseline_version = baseline_tag.split("/v")[-1] if baseline_tag else None
     lines: list[str] = [f"**Released:** {name} {info.version}"]
     if baseline_tag:
         if repo is None:
             repo = open_repo()
-        entries = commit_log(repo, baseline_tag, info.path, limit=10)
+        entries = commit_log(repo, baseline_tag, info.path)
         if entries:
-            lines += ["", "**Commits:**"]
+            lines += ["", f"**Commits since last release ({baseline_version}):**"]
             for entry in entries:
                 lines.append(f"- {entry}")
     return "\n".join(lines)
