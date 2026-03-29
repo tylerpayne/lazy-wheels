@@ -10,6 +10,7 @@ from .git.local import list_tags, open_repo
 from .git.remote import list_release_tag_names
 from .models import PackageInfo
 from .utils.packages import find_packages
+from .utils.shell import Progress
 from .utils.tags import find_baseline_tags, find_release_tags
 
 
@@ -25,15 +26,28 @@ class RepositoryContext:
     baselines: dict[str, str | None]
 
 
-def build_context() -> RepositoryContext:
+def build_context(*, progress: Progress | None = None) -> RepositoryContext:
     """Fetch all repository state in one pass."""
+    if progress:
+        progress.update("Opening repository")
     repo = open_repo()
     all_git_tags = list_tags(repo)
     git_tags = set(all_git_tags)
+
+    if progress:
+        progress.update("Fetching GitHub releases")
     github_releases = list_release_tag_names()
 
+    if progress:
+        progress.update("Discovering packages")
     packages = find_packages()
+
+    if progress:
+        progress.update("Finding release tags")
     release_tags = find_release_tags(packages, gh_releases=github_releases)
+
+    if progress:
+        progress.update("Finding baselines")
     baselines = find_baseline_tags(packages, all_tags=git_tags)
 
     return RepositoryContext(

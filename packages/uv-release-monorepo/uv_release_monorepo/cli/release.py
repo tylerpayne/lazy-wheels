@@ -240,28 +240,36 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     hook = load_hook(root)
 
-    old_stdout = sys.stdout
-    sys.stdout = io.StringIO()
-    try:
-        from ..shared.context import build_context
+    from ..shared.context import build_context
+    from ..shared.utils.shell import Progress
 
-        dry_run = getattr(args, "dry_run", False) or json_only
-        config = _cli.PlanConfig(
-            rebuild_all=args.rebuild_all,
-            matrix=package_runners,
-            uvr_version=__version__,
-            python_version=getattr(args, "python_version", "3.12"),
-            ci_publish=(where == "ci"),
-            release_type=release_type,
-            pre_kind=pre_kind,
-            dry_run=dry_run,
-        )
-        if hook:
-            config = hook.pre_plan(config)
-        ctx = build_context()
+    dry_run = getattr(args, "dry_run", False) or json_only
+    config = _cli.PlanConfig(
+        rebuild_all=args.rebuild_all,
+        matrix=package_runners,
+        uvr_version=__version__,
+        python_version=getattr(args, "python_version", "3.12"),
+        ci_publish=(where == "ci"),
+        release_type=release_type,
+        pre_kind=pre_kind,
+        dry_run=dry_run,
+    )
+    if hook:
+        config = hook.pre_plan(config)
+
+    progress = Progress()
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()  # suppress discovery print_step output
+    try:
+        ctx = build_context(progress=progress)
+        progress.update("Detecting changes")
         plan = _cli.ReleasePlanner(config, ctx).plan()
     finally:
         sys.stdout = old_stdout
+    progress.finish(
+        package_count=len(ctx.packages),
+        changed_count=len(plan.changed),
+    )
 
     if not plan.changed:
         if getattr(args, "json", False):
