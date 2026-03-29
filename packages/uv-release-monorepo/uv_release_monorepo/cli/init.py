@@ -390,8 +390,13 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
                 f"No merge base found. For a cleaner upgrade, recover the base first:\n"
                 f"  uvx --from uv-release-monorepo=={stored_version} uvr init --base-only\n"
                 f"  uvr init --upgrade\n"
-                f"Continuing with two-way merge...\n"
             )
+            try:
+                answer = input("Continue with two-way merge? [y/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            if answer != "y":
+                return
     fresh_text = _load_template()
 
     merged_text, has_conflicts = _three_way_merge(dest, base_text, fresh_text)
