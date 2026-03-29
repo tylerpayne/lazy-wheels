@@ -310,6 +310,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
     print()
 
     # Version info
+    print("Info:")
     uvr_version = __version__
     stored_version = (root / "pyproject.toml").exists() and get_config(
         read_pyproject(root / "pyproject.toml")
