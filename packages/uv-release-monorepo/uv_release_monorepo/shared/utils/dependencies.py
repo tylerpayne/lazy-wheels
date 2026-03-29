@@ -35,15 +35,15 @@ def _get_dependency_sections(doc: tomlkit.TOMLDocument) -> Iterator[list]:
             yield group
 
 
-def pin(dep_str: str, version: str) -> str:
+def pin_dependency(dep_str: str, version: str) -> str:
     """Pin a PEP 508 dependency to a minimum version.
 
     Preserves any extras specified in the original dependency string,
     but replaces the version specifier with a >= pin.
 
     Examples:
-        pin("requests>=2.0", "2.31.0") -> "requests>=2.31.0"
-        pin("pkg[extra1,extra2]~=1.0", "1.5.0") -> "pkg[extra1,extra2]>=1.5.0"
+        pin_dependency("requests>=2.0", "2.31.0") -> "requests>=2.31.0"
+        pin_dependency("pkg[extra1,extra2]~=1.0", "1.5.0") -> "pkg[extra1,extra2]>=1.5.0"
     """
     req = Requirement(dep_str)
     # Sort extras alphabetically for consistent output
@@ -68,7 +68,7 @@ def _apply_pins(deps: list, versions: dict[str, str]) -> list[tuple[str, str]]:
     for i, dep_str in enumerate(deps):
         name = canonicalize_name(Requirement(str(dep_str)).name)
         if name in versions:
-            new = pin(str(dep_str), versions[name])
+            new = pin_dependency(str(dep_str), versions[name])
             if new != str(dep_str):
                 deps[i] = new
                 changes.append((str(dep_str), new))
