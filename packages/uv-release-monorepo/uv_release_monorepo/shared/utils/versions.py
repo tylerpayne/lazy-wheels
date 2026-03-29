@@ -131,36 +131,43 @@ def make_post(version_str: str, n: int = 0) -> str:
     return f"{get_base_version(version_str)}.post{n}"
 
 
+_PRE_KINDS = ("rc", "b", "a")  # ordered high to low for kind chain
+
+
 def find_previous_release(
     version_str: str,
     name: str,
     repo: object,
 ) -> str | None:
-    """Derive the previous release version from a dev version string.
+    """Derive the previous release version from any version string.
 
-    Uses O(1) ref lookups for the common cases, falling back to a narrow
-    glob only for minor/major bumps.
+    Works with both dev versions (1.0.1.dev0) and clean versions (1.0.1b0).
+    Uses O(1) ref lookups for common cases, narrow globs for minor/major bumps.
 
     Args:
-        version_str: Current version (e.g. "1.0.1.dev0").
+        version_str: Current version (with or without .devN suffix).
         name: Package name for tag prefix.
         repo: pygit2.Repository for ref lookups.
 
     Returns:
-        The previous release version string, or None if no previous release.
+        The previous release version string, or None if not found.
 
     Raises:
-        ValueError: If version is 0.0.0.dev0 (no possible previous release).
+        ValueError: If version resolves to 0.0.0 (no possible previous).
 
     Examples:
+        Dev versions:
         "1.0.1.dev3"       → "1.0.1.dev2"
         "1.0.1.dev0"       → "1.0.0"
         "1.0.1a1.dev0"     → "1.0.1a0"
         "1.0.1a0.dev0"     → "1.0.0"
-        "1.0.1.post1.dev0" → "1.0.1.post0"
-        "1.0.1.post0.dev0" → "1.0.1"
-        "1.1.0.dev0"       → glob pkg/v1.0.* → highest
-        "2.0.0.dev0"       → glob pkg/v1.* → highest
+
+        Clean versions:
+        "1.0.1b0"          → highest a* tag (kind chain)
+        "1.0.1rc0"         → highest b* tag, else highest a*
+        "1.0.1a0"          → "1.0.0" (previous final)
+        "1.0.1"            → "1.0.0"
+        "1.0.1.post0"      → "1.0.1"
     """
 
     def _tag_exists(ver: str) -> bool:
@@ -182,74 +189,77 @@ def find_previous_release(
         candidates.sort(reverse=True)
         return candidates[0][1]
 
-    # Extract dev number
+    # Step 1: Handle .devN suffix
     dev_m = _DEV_NUM_RE.search(version_str)
-    if not dev_m:
-        # Not a dev version — can't determine previous
-        return None
+    if dev_m:
+        dev_n = int(dev_m.group(1))
+        if dev_n > 0:
+            # 1a: dev N > 0 → previous dev
+            prev = strip_dev(version_str) + f".dev{dev_n - 1}"
+            if _tag_exists(prev):
+                return prev
+            return None
+        # 1b: dev 0 → strip .dev0, fall through to clean version rules
+        clean = strip_dev(version_str)
+    else:
+        clean = version_str
 
-    dev_n = int(dev_m.group(1))
-    without_dev = strip_dev(version_str)
-
-    # Case 1: dev N > 0 → previous dev
-    if dev_n > 0:
-        prev = f"{without_dev[: dev_m.start()]}.dev{dev_n - 1}"
-        if _tag_exists(prev):
-            return prev
-
-    # Case 2: pre N > 0 → decrement pre
-    pre_m = re.search(r"(a|b|rc)(\d+)$", without_dev)
+    # Step 2: Pre-release suffix (a/b/rc)
+    pre_m = re.search(r"(a|b|rc)(\d+)$", clean)
     if pre_m:
+        kind = pre_m.group(1)
         pre_n = int(pre_m.group(2))
-        if pre_n > 0:
-            prev = f"{without_dev[: pre_m.start()]}{pre_m.group(1)}{pre_n - 1}"
-            if _tag_exists(prev):
-                return prev
-        # Case 4: pre 0 → previous final (strip pre, find last final)
-        base = get_base_version(without_dev)
-        sv = parse_version(base)
-        if sv.patch > 0:
-            prev = f"{sv.major}.{sv.minor}.{sv.patch - 1}"
-            if _tag_exists(prev):
-                return prev
-        if sv.minor > 0:
-            return _glob_highest(f"{sv.major}.{sv.minor - 1}.")
-        if sv.major > 0:
-            return _glob_highest(f"{sv.major - 1}.")
-        return None
+        base_prefix = clean[: pre_m.start()]
 
-    # Case 3: post N > 0 → decrement post
-    post_m = re.search(r"\.post(\d+)$", without_dev)
+        if pre_n > 0:
+            # 2a: pre N > 0 → decrement same kind
+            prev = f"{base_prefix}{kind}{pre_n - 1}"
+            if _tag_exists(prev):
+                return prev
+
+        # 2b: pre N == 0 (or N-1 not found) → walk down kind chain
+        kind_idx = _PRE_KINDS.index(kind) if kind in _PRE_KINDS else -1
+        for lower_kind in _PRE_KINDS[kind_idx + 1 :]:
+            found = _glob_highest(f"{base_prefix}{lower_kind}")
+            if found:
+                return found
+
+        # No lower pre-release found → fall through to plain X.Y.Z
+
+    # Step 3: Post-release suffix
+    post_m = re.search(r"\.post(\d+)$", clean)
     if post_m:
         post_n = int(post_m.group(1))
         if post_n > 0:
-            prev = f"{without_dev[: post_m.start()]}.post{post_n - 1}"
+            # 3a: post N > 0 → decrement post
+            prev = f"{clean[: post_m.start()]}.post{post_n - 1}"
             if _tag_exists(prev):
                 return prev
-        # Case 5: post 0 → the final it patches
-        prev = without_dev[: post_m.start()]
+        # 3b: post 0 → the final it patches
+        prev = clean[: post_m.start()]
         if _tag_exists(prev):
             return prev
         return None
 
-    # Plain X.Y.Z.dev0 — find previous final
-    sv = parse_version(without_dev)
+    # Step 4: Plain X.Y.Z
+    base = get_base_version(clean)
+    sv = parse_version(base)
 
-    # Case 6: patch > 0 → decrement patch
+    # 4a: patch > 0 → decrement patch
     if sv.patch > 0:
         prev = f"{sv.major}.{sv.minor}.{sv.patch - 1}"
         if _tag_exists(prev):
             return prev
 
-    # Case 7: minor > 0 → glob X.(Y-1).*
+    # 4b: minor > 0 → glob X.{Y-1}.*
     if sv.minor > 0:
         return _glob_highest(f"{sv.major}.{sv.minor - 1}.")
 
-    # Case 8: major > 0 → glob (X-1).*
+    # 4c: major > 0 → glob {X-1}.*
     if sv.major > 0:
         return _glob_highest(f"{sv.major - 1}.")
 
-    # Case 9: 0.0.0 — no previous release possible
+    # 4d: 0.0.0 — no previous release possible
     msg = f"Cannot determine previous release for {version_str} — version is 0.0.0"
     raise ValueError(msg)
 

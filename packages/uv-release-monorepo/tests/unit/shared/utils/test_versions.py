@@ -316,17 +316,103 @@ class TestFindPreviousRelease:
         with pytest.raises(ValueError, match="0.0.0"):
             find_previous_release("0.0.0.dev0", "pkg", repo)
 
-    # Edge cases
-    def test_not_dev_version_returns_none(self) -> None:
+    def test_zero_clean_raises(self) -> None:
         repo = self._repo(set())
-        assert find_previous_release("1.0.0", "pkg", repo) is None
+        with pytest.raises(ValueError, match="0.0.0"):
+            find_previous_release("0.0.0", "pkg", repo)
 
+    # Edge cases
     def test_tag_not_found_falls_through(self) -> None:
-        """If expected tag doesn't exist, try next rule."""
-        # 1.0.1.dev0 expects 1.0.0 but it doesn't exist → returns None
         repo = self._repo(set())
         assert find_previous_release("1.0.1.dev0", "pkg", repo) is None
 
     def test_glob_returns_none_if_no_matches(self) -> None:
         repo = self._repo(set())
         assert find_previous_release("1.1.0.dev0", "pkg", repo) is None
+
+    # -- Clean versions (no .devN) --
+
+    def test_clean_final(self) -> None:
+        repo = self._repo({"pkg/v1.0.0"})
+        assert find_previous_release("1.0.1", "pkg", repo) == "1.0.0"
+
+    def test_clean_alpha_n_gt_0(self) -> None:
+        repo = self._repo({"pkg/v1.0.1a0"})
+        assert find_previous_release("1.0.1a1", "pkg", repo) == "1.0.1a0"
+
+    def test_clean_beta_n_gt_0(self) -> None:
+        repo = self._repo({"pkg/v1.0.1b0"})
+        assert find_previous_release("1.0.1b1", "pkg", repo) == "1.0.1b0"
+
+    def test_clean_rc_n_gt_0(self) -> None:
+        repo = self._repo({"pkg/v1.0.1rc1"})
+        assert find_previous_release("1.0.1rc2", "pkg", repo) == "1.0.1rc1"
+
+    def test_clean_post_n_gt_0(self) -> None:
+        repo = self._repo({"pkg/v1.0.1.post0"})
+        assert find_previous_release("1.0.1.post1", "pkg", repo) == "1.0.1.post0"
+
+    def test_clean_post_0(self) -> None:
+        repo = self._repo({"pkg/v1.0.1"})
+        assert find_previous_release("1.0.1.post0", "pkg", repo) == "1.0.1"
+
+    # -- Kind chain: pre N=0 walks down rc → b → a → final --
+
+    def test_beta_0_finds_highest_alpha(self) -> None:
+        repo = self._repo({"pkg/v1.0.1a0", "pkg/v1.0.1a3", "pkg/v1.0.1a1"})
+        assert find_previous_release("1.0.1b0", "pkg", repo) == "1.0.1a3"
+
+    def test_rc_0_finds_highest_beta(self) -> None:
+        repo = self._repo({"pkg/v1.0.1b0", "pkg/v1.0.1b2"})
+        assert find_previous_release("1.0.1rc0", "pkg", repo) == "1.0.1b2"
+
+    def test_rc_0_skips_beta_finds_alpha(self) -> None:
+        """No betas exist, falls to alpha."""
+        repo = self._repo({"pkg/v1.0.1a5"})
+        assert find_previous_release("1.0.1rc0", "pkg", repo) == "1.0.1a5"
+
+    def test_alpha_0_finds_previous_final(self) -> None:
+        repo = self._repo({"pkg/v1.0.0"})
+        assert find_previous_release("1.0.1a0", "pkg", repo) == "1.0.0"
+
+    def test_beta_0_no_alphas_finds_final(self) -> None:
+        """No alphas exist, falls through to previous final."""
+        repo = self._repo({"pkg/v1.0.0"})
+        assert find_previous_release("1.0.1b0", "pkg", repo) == "1.0.0"
+
+    def test_kind_chain_dev0(self) -> None:
+        """Same kind chain works with .dev0 suffix."""
+        repo = self._repo({"pkg/v1.0.1a3"})
+        assert find_previous_release("1.0.1b0.dev0", "pkg", repo) == "1.0.1a3"
+
+    # -- Idempotency: inv_bump(bump(v)) == v --
+
+    @pytest.mark.parametrize(
+        "release_ver,next_ver",
+        [
+            # final bump
+            ("1.0.1", "1.0.2.dev0"),
+            # dev bump
+            ("1.0.1.dev0", "1.0.1.dev1"),
+            ("1.0.1.dev3", "1.0.1.dev4"),
+            # alpha bump
+            ("1.0.1a0", "1.0.1a1.dev0"),
+            ("1.0.1a2", "1.0.1a3.dev0"),
+            # beta bump
+            ("1.0.1b0", "1.0.1b1.dev0"),
+            ("1.0.1b2", "1.0.1b3.dev0"),
+            # rc bump
+            ("1.0.1rc0", "1.0.1rc1.dev0"),
+            ("1.0.1rc2", "1.0.1rc3.dev0"),
+            # post bump
+            ("1.0.1.post0", "1.0.1.post1.dev0"),
+            ("1.0.1.post2", "1.0.1.post3.dev0"),
+        ],
+    )
+    def test_idempotency(self, release_ver: str, next_ver: str) -> None:
+        """inv_bump(bump(v)) == v — the next dev version's inverse is the release."""
+        repo = self._repo({f"pkg/v{release_ver}"})
+        result = find_previous_release(next_ver, "pkg", repo)
+        assert result == release_ver, (
+            f"inv_bump({next_ver!r}) should be {release_ver!r}, got {result!r}"
+        )
