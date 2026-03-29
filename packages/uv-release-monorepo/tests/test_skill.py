@@ -10,7 +10,11 @@ from unittest.mock import patch
 import pytest
 
 from uv_release_monorepo.cli import cli, cmd_skill_init
-from uv_release_monorepo.cli.skill import _SKILL_FILES, _skill_root
+from uv_release_monorepo.cli.skill import (
+    _SKILL_FILES,
+    _latest_skill_version,
+    _load_skill_file,
+)
 
 
 class TestSkillInit:
@@ -76,11 +80,11 @@ class TestSkillInit:
 
     def test_manifest_matches_package(self) -> None:
         """Every file listed in _SKILL_FILES exists in the bundled package."""
-        root = _skill_root()
-        for name, files in _SKILL_FILES.items():
-            for rel in files:
-                src = root / name / rel
-                assert src.exists(), f"Manifest lists {name}/{rel} but file is missing"
+        version = _latest_skill_version()
+        for name, file_list in _SKILL_FILES.items():
+            for rel in file_list:
+                content = _load_skill_file(version, name, rel)
+                assert content.strip(), f"Manifest lists {name}/{rel} but file is empty"
 
 
 def test_cli_skill_init_parsing() -> None:

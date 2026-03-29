@@ -8,6 +8,8 @@ import tempfile
 from importlib.resources import files
 from pathlib import Path
 
+from packaging.version import Version
+
 from ..shared.utils.config import get_config
 from ..shared.utils.toml import read_pyproject, write_pyproject
 from ._common import _fatal
@@ -34,36 +36,36 @@ _SKILL_FILES: dict[str, list[str]] = {
     ],
 }
 
-
-def _get_base_text(root: Path, rel_path: str, config_key: str) -> str:
-    """Retrieve file content at the commit stored under *config_key* in [tool.uvr.config]."""
-    pyproject = root / "pyproject.toml"
-    if not pyproject.exists():
-        return ""
-    config = get_config(read_pyproject(pyproject))
-    commit_sha = config.get(config_key, "")
-    if not commit_sha:
-        return ""
-    result = subprocess.run(
-        ["git", "show", f"{commit_sha}:{rel_path}"],
-        capture_output=True,
-        text=True,
-        cwd=root,
-    )
-    return result.stdout if result.returncode == 0 else ""
+_SKILLS_TEMPLATE_DIR = files("uv_release_monorepo").joinpath("templates/skills")
 
 
-def _store_skill_commit(root: Path, config_key: str) -> None:
-    """Store the current HEAD commit SHA under *config_key* in [tool.uvr.config]."""
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=root,
-    )
-    if result.returncode != 0:
-        return
-    sha = result.stdout.strip()
+def _skill_versions() -> list[str]:
+    """Return sorted list of available skill template versions."""
+    base = Path(str(_SKILLS_TEMPLATE_DIR))
+    versions = []
+    for d in base.iterdir():
+        if d.is_dir() and d.name.startswith("v"):
+            versions.append(d.name[1:])  # strip "v" prefix
+    return [str(v) for v in sorted(Version(v) for v in versions)]
+
+
+def _latest_skill_version() -> str:
+    """Return the highest available skill template version."""
+    versions = _skill_versions()
+    if not versions:
+        _fatal("No skill templates found in package.")
+    return versions[-1]
+
+
+def _load_skill_file(version: str, skill_name: str, rel_path: str) -> str:
+    """Load a skill file from the versioned template directory."""
+    base = Path(str(_SKILLS_TEMPLATE_DIR))
+    path = base / f"v{version}" / skill_name / rel_path
+    return path.read_text(encoding="utf-8")
+
+
+def _store_skill_version(root: Path, version: str) -> None:
+    """Store the skill template version in [tool.uvr.config]."""
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
         return
@@ -71,31 +73,10 @@ def _store_skill_commit(root: Path, config_key: str) -> None:
     tool = doc.setdefault("tool", {})
     uvr = tool.setdefault("uvr", {})
     config = uvr.setdefault("config", {})
-    config[config_key] = sha
+    config["skill_version"] = version
+    # Remove legacy key if present
+    config.pop("skill_init_commit", None)
     write_pyproject(pyproject, doc)
-
-
-def _skill_root() -> Path:
-    """Return the root of the bundled skills directory as a concrete Path."""
-    return Path(str(files("uv_release_monorepo").joinpath("skills")))
-
-
-def _copy_skill(name: str, dest_base: Path, *, force: bool) -> tuple[int, int]:
-    """Copy a single skill's files.  Returns *(written, skipped)* counts."""
-    src_root = _skill_root() / name
-    written = skipped = 0
-    for rel_path in _SKILL_FILES[name]:
-        src = src_root / rel_path
-        dest = dest_base / name / rel_path
-        if dest.exists() and not force:
-            print(f"  skip  {name}/{rel_path} (exists)")
-            skipped += 1
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-        print(f"  write {name}/{rel_path}")
-        written += 1
-    return written, skipped
 
 
 def cmd_skill_init(args: argparse.Namespace) -> None:
@@ -107,13 +88,23 @@ def cmd_skill_init(args: argparse.Namespace) -> None:
 
     dest_base = root / ".claude" / "skills"
     force = getattr(args, "force", False)
+    version = _latest_skill_version()
 
     written = 0
     skipped = 0
-    for name in _SKILL_FILES:
-        w, s = _copy_skill(name, dest_base, force=force)
-        written += w
-        skipped += s
+    for skill_name in _SKILL_FILES:
+        for rel_path in _SKILL_FILES[skill_name]:
+            dest = dest_base / skill_name / rel_path
+            if dest.exists() and not force:
+                print(f"  skip  {skill_name}/{rel_path} (exists)")
+                skipped += 1
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(
+                _load_skill_file(version, skill_name, rel_path), encoding="utf-8"
+            )
+            print(f"  write {skill_name}/{rel_path}")
+            written += 1
 
     print()
     if written:
@@ -124,7 +115,7 @@ def cmd_skill_init(args: argparse.Namespace) -> None:
         print("Nothing to do.")
         return
 
-    # Commit and record
+    # Commit and store version
     all_files = [
         str(dest_base / name / rel_path)
         for name in _SKILL_FILES
@@ -132,7 +123,7 @@ def cmd_skill_init(args: argparse.Namespace) -> None:
         if (dest_base / name / rel_path).exists()
     ]
     _git_commit_and_record(root, all_files, "chore: uvr skill init")
-    _store_skill_commit(root, "skill_init_commit")
+    _store_skill_version(root, version)
 
     print()
     print("Next steps:")
@@ -141,14 +132,22 @@ def cmd_skill_init(args: argparse.Namespace) -> None:
 
 
 def cmd_skill_upgrade(args: argparse.Namespace) -> None:
-    """Upgrade skill files using three-way merge."""
+    """Upgrade skill files using three-way merge from versioned templates."""
     root = Path.cwd()
 
     if not (root / ".git").exists():
         _fatal("Not a git repository. Run from the repo root.")
 
     dest_base = root / ".claude" / "skills"
-    src_root = _skill_root()
+    latest = _latest_skill_version()
+
+    # Read previously installed version from config
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        config = get_config(read_pyproject(pyproject))
+        base_version = config.get("skill_version", "")
+    else:
+        base_version = ""
 
     # Check for uncommitted changes in skill files
     skill_paths = [
@@ -174,12 +173,11 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
     has_any_conflicts = False
     written_files: list[str] = []
 
-    for name in _SKILL_FILES:
-        for rel_path in _SKILL_FILES[name]:
-            src = src_root / name / rel_path
-            dest = dest_base / name / rel_path
-            fresh_text = src.read_text(encoding="utf-8")
-            rel_dest = f".claude/skills/{name}/{rel_path}"
+    for skill_name in _SKILL_FILES:
+        for rel_path in _SKILL_FILES[skill_name]:
+            dest = dest_base / skill_name / rel_path
+            fresh_text = _load_skill_file(latest, skill_name, rel_path)
+            rel_dest = f".claude/skills/{skill_name}/{rel_path}"
 
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -194,9 +192,15 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 up_to_date += 1
                 continue
 
-            # Three-way merge
-            base_text = _get_base_text(root, rel_dest, "skill_init_commit")
+            # Load base from the previously installed version
+            base_text = ""
+            if base_version:
+                try:
+                    base_text = _load_skill_file(base_version, skill_name, rel_path)
+                except FileNotFoundError:
+                    pass  # file didn't exist in base version — two-way merge
 
+            # Three-way merge (falls back to two-way if base is empty)
             with (
                 tempfile.NamedTemporaryFile(
                     mode="w", suffix=".md", prefix="base-", delete=False
@@ -313,4 +317,4 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 return
 
     _git_commit_and_record(root, written_files, "chore: uvr skill init --upgrade")
-    _store_skill_commit(root, "skill_init_commit")
+    _store_skill_version(root, latest)
