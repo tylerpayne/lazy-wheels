@@ -26,9 +26,9 @@ def test_template_has_plan_input() -> None:
 def test_template_has_core_jobs() -> None:
     doc = _template_workflow()
     jobs = doc["jobs"]
-    assert "build" in jobs
-    assert "release" in jobs
-    assert "finalize" in jobs
+    assert "uvr-build" in jobs
+    assert "uvr-release" in jobs
+    assert "uvr-finalize" in jobs
 
 
 def test_template_validates_against_model() -> None:
@@ -40,9 +40,9 @@ def test_template_validates_against_model() -> None:
 def test_template_job_needs_chain() -> None:
     doc = _template_workflow()
     jobs = doc["jobs"]
-    assert "validate_plan" in jobs["build"]["needs"]
-    assert "build" in jobs["release"]["needs"]
-    assert "release" in jobs["finalize"]["needs"]
+    assert "uvr-validate" in jobs["uvr-build"]["needs"]
+    assert "uvr-build" in jobs["uvr-release"]["needs"]
+    assert "uvr-release" in jobs["uvr-finalize"]["needs"]
 
 
 def test_template_default_permissions() -> None:
@@ -52,14 +52,14 @@ def test_template_default_permissions() -> None:
 
 def test_template_core_jobs_have_executor_steps() -> None:
     doc = _template_workflow()
-    build_steps = doc["jobs"]["build"]["steps"]
+    build_steps = doc["jobs"]["uvr-build"]["steps"]
     assert any("uvr build" in str(s.get("run", "")) for s in build_steps)
 
-    release_steps = doc["jobs"]["release"]["steps"]
+    release_steps = doc["jobs"]["uvr-release"]["steps"]
     assert any(
         s.get("uses", "").startswith("softprops/action-gh-release")
         for s in release_steps
     )
 
-    finalize_steps = doc["jobs"]["finalize"]["steps"]
+    finalize_steps = doc["jobs"]["uvr-finalize"]["steps"]
     assert any("uvr finalize" in str(s.get("run", "")) for s in finalize_steps)

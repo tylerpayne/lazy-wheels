@@ -10,8 +10,8 @@ from ..shared.models import ReleasePlan
 from ._common import __version__, _fatal, _read_matrix, _resolve_plan_json
 
 # Executor pipeline phases — the order ReleaseExecutor.run() executes them.
-# These are skip-condition names (what appears in plan.skip), not YAML job keys.
-_PIPELINE = ("build", "release", "finalize")
+# These are skip-condition names (what appears in plan.skip) and YAML job keys.
+_PIPELINE = ("uvr-build", "uvr-release", "uvr-finalize")
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
@@ -34,7 +34,7 @@ def _validate_skip_reuse(
     reuse_release: bool,
 ) -> None:
     """Validate skip/reuse flag combinations."""
-    build_skipped = "build" in skipped
+    build_skipped = "uvr-build" in skipped
     has_reuse = reuse_run is not None or reuse_release
 
     if build_skipped and not has_reuse:
@@ -45,7 +45,7 @@ def _validate_skip_reuse(
     if has_reuse and not build_skipped:
         _fatal(
             "--reuse-run / --reuse-release requires build to be skipped.\n"
-            "  Add --skip build or --skip-to <job-after-build>."
+            "  Add --skip uvr-build or --skip-to <job-after-build>."
         )
     if reuse_run and reuse_release:
         _fatal("--reuse-run and --reuse-release are mutually exclusive.")
@@ -119,7 +119,7 @@ def _print_plan(
     workflow_jobs = _load_workflow_jobs()
     # Ensure core jobs appear even if workflow can't be loaded
     if not workflow_jobs:
-        workflow_jobs = ["validate_plan", "build", "release", "finalize"]
+        workflow_jobs = ["uvr-validate", "uvr-build", "uvr-release", "uvr-finalize"]
 
     for job in workflow_jobs:
         if job in skipped:
@@ -131,7 +131,7 @@ def _print_plan(
             continue
 
         # Build details
-        if job == "build":
+        if job == "uvr-build":
             if plan.reuse_run_id:
                 print(f"{_D}artifacts from run {plan.reuse_run_id}")
             elif plan.build_commands:
@@ -170,12 +170,12 @@ def _print_plan(
                                 print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
 
         # Release details
-        elif job == "release" and plan.release_matrix:
+        elif job == "uvr-release" and plan.release_matrix:
             for entry in plan.release_matrix:
                 print(f"{_D}{entry['tag']}")
 
         # Finalize details
-        elif job == "finalize":
+        elif job == "uvr-finalize":
             changed_with_bumps = {
                 n: p for n, p in plan.changed.items() if p.next_version
             }

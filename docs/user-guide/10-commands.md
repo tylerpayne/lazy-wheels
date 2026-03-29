@@ -87,8 +87,8 @@ uvr release [--where {ci,local}] [--dry-run] [--plan JSON]
 | Flag | Description |
 |------|-------------|
 | `-y`, `--yes` | Skip confirmation prompt and dispatch immediately |
-| `--skip JOB` | Skip a CI job (repeatable; choices: `build`, `release`, `finalize`) |
-| `--skip-to JOB` | Skip all CI jobs before JOB (choices: `release`, `finalize`) |
+| `--skip JOB` | Skip a CI job (repeatable; choices: `uvr-build`, `uvr-release`, `uvr-finalize`) |
+| `--skip-to JOB` | Skip all CI jobs before JOB (choices: `uvr-release`, `uvr-finalize`) |
 | `--reuse-run RUN_ID` | Reuse artifacts from a prior workflow run |
 | `--reuse-release` | Assume GitHub releases already exist |
 

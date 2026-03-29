@@ -26,7 +26,7 @@ See [How it works](../user-guide/09-architecture.md) and [Skip jobs and reuse ar
 | `changed` | `dict[str, ChangedPackage]` | Packages that need rebuilding. `ChangedPackage` extends `PackageInfo` with version lifecycle info and runners. |
 | `unchanged` | `dict[str, PackageInfo]` | Packages reused from previous releases. |
 | `ci_publish` | `bool` | `True` when dispatched to CI (release job creates GitHub releases). `False` for local execution. |
-| `skip` | `list[str]` | Job names to skip (e.g., `["build"]`). |
+| `skip` | `list[str]` | Job names to skip (e.g., `["uvr-build"]`). |
 | `reuse_run_id` | `str` | If non-empty, download artifacts from this workflow run instead of building. |
 | `build_commands` | `dict[RunnerKey, list[BuildStage]]` | Pre-computed build command stages keyed by runner (JSON-serialized runner list). See below. |
 | `release_commands` | `list[PlanCommand]` | Pre-computed release commands (local execution only; empty for CI). |
@@ -111,7 +111,7 @@ Internal configuration passed to `ReleasePlanner`. Uses `dataclass` (not
 The `skip` list drives the `if` condition on each workflow job:
 
 ```yaml
-if: ${{ !contains(fromJSON(inputs.plan).skip, 'build') }}
+if: ${{ !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
 ```
 
 When a job name is in `skip`, its `if` evaluates to `false` and GitHub Actions
@@ -137,7 +137,7 @@ run-id: ${{ fromJSON(inputs.plan).reuse_run_id != '' && fromJSON(inputs.plan).re
 ```
 
 This lets users skip the build job and pull wheels from a previous successful
-run. Requires `build` to be in `skip`.
+run. Requires `uvr-build` to be in `skip`.
 
 ## `uvr_install` computation
 

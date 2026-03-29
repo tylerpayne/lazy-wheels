@@ -29,9 +29,9 @@ class TestInit:
         workflow = tmp_path / ".github" / "workflows" / "release.yml"
         assert workflow.exists()
         text = workflow.read_text()
-        assert "build:" in text
-        assert "release:" in text
-        assert "finalize:" in text
+        assert "uvr-build:" in text
+        assert "uvr-release:" in text
+        assert "uvr-finalize:" in text
 
     def test_init_workflow_has_plan_input(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -67,9 +67,9 @@ There are three core job classes. All inherit directly from `Job`:
 
 | Class | Default `if` | `_needs_validator` |
 |-------|-------------|-------------------|
-| `BuildJob` | `!contains(plan.skip, 'build')` | (none) |
-| `ReleaseJob` | `always() && !failure() && !contains(plan.skip, 'release')` | `build` |
-| `FinalizeJob` | `always() && !failure() && !contains(plan.skip, 'finalize')` | `release` |
+| `BuildJob` | `!contains(plan.skip, 'uvr-build')` | (none) |
+| `ReleaseJob` | `always() && !failure() && !contains(plan.skip, 'uvr-release')` | `uvr-build` |
+| `FinalizeJob` | `always() && !failure() && !contains(plan.skip, 'uvr-finalize')` | `uvr-release` |
 
 The `always() && !failure()` pattern means downstream jobs run even when
 earlier jobs are skipped (via the `skip` list in the plan), but stop if a
@@ -95,10 +95,10 @@ Usage on each job class:
 
 ```python
 class ReleaseJob(Job):
-    _ensure_needs = _needs_validator("build")
+    _ensure_needs = _needs_validator("uvr-build")
 
 class FinalizeJob(Job):
-    _ensure_needs = _needs_validator("release")
+    _ensure_needs = _needs_validator("uvr-release")
 ```
 
 If the user removes a `needs` entry from the YAML, validation silently adds it
@@ -125,10 +125,10 @@ warning behavior.
 
 ```python
 JOB_ORDER: list[str] = [
-    "validate_plan",
-    "build",
-    "release",
-    "finalize",
+    "uvr-validate",
+    "uvr-build",
+    "uvr-release",
+    "uvr-finalize",
 ]
 ```
 
@@ -143,10 +143,10 @@ Maps job names to their models. The four core jobs are declared as typed fields:
 class WorkflowJobs(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    validate_plan: ValidatePlanJob = Field(default_factory=ValidatePlanJob)
-    build: BuildJob = Field(default_factory=BuildJob)
-    release: ReleaseJob = Field(default_factory=ReleaseJob)
-    finalize: FinalizeJob = Field(default_factory=FinalizeJob)
+    uvr_validate: ValidatePlanJob = Field(default_factory=ValidatePlanJob, alias="uvr-validate")
+    uvr_build: BuildJob = Field(default_factory=BuildJob, alias="uvr-build")
+    uvr_release: ReleaseJob = Field(default_factory=ReleaseJob, alias="uvr-release")
+    uvr_finalize: FinalizeJob = Field(default_factory=FinalizeJob, alias="uvr-finalize")
 ```
 
 `extra="allow"` means the workflow **can** contain additional job names. Hook
@@ -178,8 +178,8 @@ This is interpolated into `if` conditions, strategy matrices, and step
 configurations. For example:
 
 ```python
-_BUILD_IF = f"${{{{ !contains({_P}.skip, 'build') }}}}"
-# expands to: ${{ !contains(fromJSON(inputs.plan).skip, 'build') }}
+_BUILD_IF = f"${{{{ !contains({_P}.skip, 'uvr-build') }}}}"
+# expands to: ${{ !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
 ```
 
 Step constant blocks (`_BUILD_STEPS`, `_RELEASE_STEPS`, `_FINALIZE_STEPS`) are

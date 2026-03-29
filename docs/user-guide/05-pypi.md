@@ -21,7 +21,7 @@ Replace the no-op step with download + publish steps:
     runs-on: ubuntu-latest
     if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
     needs:
-    - finalize
+    - uvr-finalize
     environment: pypi
     steps:
     - name: Download wheel for PyPI

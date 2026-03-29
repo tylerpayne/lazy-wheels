@@ -38,7 +38,7 @@ Unconfigured hooks have a no-op default step and are auto-skipped in the release
     runs-on: ubuntu-latest
     if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
     needs:
-    - finalize
+    - uvr-finalize
     steps:
     - name: Notify Slack
       env:

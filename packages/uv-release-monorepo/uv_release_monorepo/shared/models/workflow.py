@@ -42,7 +42,7 @@ def frozen_paths(model: type[BaseModel], prefix: str = "") -> list[str]:
 
     Recurses into nested ``BaseModel`` fields so that
     ``frozen_paths(ReleaseWorkflow)`` returns paths like
-    ``"jobs.build.steps"`` ready for comparison with ``_yaml_get()``.
+    ``"jobs.uvr-build.steps"`` ready for comparison with ``_yaml_get()``.
     """
     paths: list[str] = []
     for name, info in model.model_fields.items():
@@ -148,7 +148,7 @@ class BuildJob(Job):
     strategy: Annotated[dict, Frozen] = Field(default_factory=dict)
     steps: Annotated[list[dict], Frozen]
 
-    _validate_needs = _needs_validator("validate_plan")
+    _validate_needs = _needs_validator("uvr-validate")
 
 
 class ReleaseJob(Job):
@@ -157,7 +157,7 @@ class ReleaseJob(Job):
     if_condition: Annotated[str | None, Frozen] = Field(alias="if")
     strategy: Annotated[dict, Frozen] = Field(default_factory=dict)
     steps: Annotated[list[dict], Frozen]
-    _validate_needs = _needs_validator("build")
+    _validate_needs = _needs_validator("uvr-build")
 
 
 class FinalizeJob(Job):
@@ -165,7 +165,7 @@ class FinalizeJob(Job):
 
     if_condition: Annotated[str | None, Frozen] = Field(alias="if")
     steps: Annotated[list[dict], Frozen]
-    _validate_needs = _needs_validator("release")
+    _validate_needs = _needs_validator("uvr-release")
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +178,12 @@ class WorkflowJobs(BaseModel):
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    validate_plan: ValidatePlanJob = Field(default_factory=ValidatePlanJob)
-    build: BuildJob = Field(default_factory=BuildJob)
-    release: ReleaseJob = Field(default_factory=ReleaseJob)
-    finalize: FinalizeJob = Field(default_factory=FinalizeJob)
+    uvr_validate: ValidatePlanJob = Field(
+        default_factory=ValidatePlanJob, alias="uvr-validate"
+    )
+    uvr_build: BuildJob = Field(default_factory=BuildJob, alias="uvr-build")
+    uvr_release: ReleaseJob = Field(default_factory=ReleaseJob, alias="uvr-release")
+    uvr_finalize: FinalizeJob = Field(default_factory=FinalizeJob, alias="uvr-finalize")
 
 
 class ReleaseWorkflow(BaseModel):

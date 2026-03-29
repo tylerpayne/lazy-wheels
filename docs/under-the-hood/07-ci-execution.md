@@ -59,7 +59,7 @@ ${{ fromJSON(inputs.plan).field_name }}
 ```
 
 This is used for:
-- **Job `if` conditions**: `!contains(fromJSON(inputs.plan).skip, 'build')`
+- **Job `if` conditions**: `!contains(fromJSON(inputs.plan).skip, 'uvr-build')`
 - **Build matrix**: `strategy.matrix.runner: ${{ fromJSON(inputs.plan).build_matrix }}`
 - **Release matrix**: `strategy.matrix.include: ${{ fromJSON(inputs.plan).release_matrix }}`
 - **Python version**: `uv python install ${{ fromJSON(inputs.plan).python_version }}`
