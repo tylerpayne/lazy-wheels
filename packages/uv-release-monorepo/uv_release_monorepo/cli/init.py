@@ -195,7 +195,7 @@ def _git_commit_and_record(
         repo.index.add("pyproject.toml")
         repo.index.write()
         tree = repo.index.write_tree()
-        repo.create_commit("HEAD", sig, sig, message, tree, [parent])
+        repo.create_commit("HEAD", sig, sig, message, tree, [repo.head.peel().id])
 
     print(f"OK: Committed {len(rel_files)} file(s)")
 
