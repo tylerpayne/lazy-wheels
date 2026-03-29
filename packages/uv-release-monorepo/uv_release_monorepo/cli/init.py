@@ -274,10 +274,22 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
     from pydantic import ValidationError
 
-    from ._common import __version__
-
     existing = _load_yaml(dest)
     rel = dest.relative_to(root)
+
+    # Resolve versions
+    template_version = _latest_template_version()
+    stored_version = (root / "pyproject.toml").exists() and get_config(
+        read_pyproject(root / "pyproject.toml")
+    ).get("template_version", "")
+    local_label = f"v{stored_version}" if stored_version else "unknown"
+
+    # Header
+    print(
+        f"Validating worktree release workflow {rel} ({local_label}) "
+        f"against uvr release template (v{template_version})."
+    )
+    print()
 
     # Phase 1: Structural validation via pydantic
     with warnings.catch_warnings(record=True) as caught:
@@ -285,59 +297,39 @@ def cmd_validate(args: argparse.Namespace) -> None:
         try:
             ReleaseWorkflow.model_validate(existing)
         except ValidationError as e:
-            print(f"Validating: {rel}")
             print(f"FAIL: {e}")
             raise SystemExit(1) from None
 
     # Phase 2: Frozen-path diffing against bundled template
-    template_version = _latest_template_version()
     template = _load_template_yaml(template_version)
     frozen_warnings = _check_frozen_paths(existing, template)
-
     all_warnings = [str(w.message) for w in caught] + frozen_warnings
 
-    # Check if template content differs from current file
+    # Check if template content differs
     fresh_text = _load_template(template_version)
     existing_text = dest.read_text()
     has_diff = fresh_text.rstrip() != existing_text.rstrip()
+    version_diff = stored_version and stored_version != template_version
 
-    # Status line first
-    print(f"Validating: {rel}")
+    # Result
     if all_warnings:
         print(f"SUCCESS: 0 errors, {len(all_warnings)} warnings")
-    else:
-        print("SUCCESS: 0 errors, 0 warnings")
-    print()
-
-    # Version info
-    print("Versions:")
-    uvr_version = __version__
-    stored_version = (root / "pyproject.toml").exists() and get_config(
-        read_pyproject(root / "pyproject.toml")
-    ).get("template_version", "")
-    print(f"  uvr:                    {uvr_version}")
-    print(f"  uvr release template:   {template_version}")
-    if stored_version:
-        print(f"  local release workflow:  {stored_version}")
-    else:
-        print("  local release workflow:  unknown — run `uvr init --upgrade` to track")
-
-    # Warnings
-    if all_warnings:
         print()
         print("Warnings:")
         for w in all_warnings:
             print(f"  {w}")
+    else:
+        print("SUCCESS: 0 errors, 0 warnings")
 
+    # Hints
     if has_diff:
         print()
-        if stored_version and stored_version != template_version:
-            print(
-                f"  Template updated: {stored_version} → {template_version}. "
-                "Run `uvr init --upgrade` to apply."
-            )
-        else:
-            print("  Run `uvr validate --diff` to view differences from the template.")
+        print("  Run `uvr validate --diff` to view differences from the template.")
+    if version_diff:
+        print(
+            f"  Run `uvr init --upgrade` to update from "
+            f"v{stored_version} to v{template_version}."
+        )
 
     # --diff: show unified diff
     if getattr(args, "diff", False) and has_diff:
