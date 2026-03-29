@@ -4,23 +4,99 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import tempfile
+from importlib.resources import files
 from pathlib import Path
 
-import shutil
-
-from ..shared.config import get_config
-from ..shared.models.workflow import ReleaseWorkflow
-from ..shared.toml import read_pyproject, write_pyproject
+from ..shared.models.workflow import ReleaseWorkflow, frozen_paths
+from ..shared.utils.config import get_config
+from ..shared.utils.toml import read_pyproject, write_pyproject
 from ._common import _fatal
-from ._yaml import _dump_yaml, _load_yaml, _write_yaml
+from ._yaml import _MISSING, _load_yaml, _yaml_get
 
 
 _FALLBACK_EDITORS = ("code", "vim", "vi", "nano")
 
 # Editors that launch a GUI and return immediately — need --wait to block
 _WAIT_EDITORS = {"code", "codium", "subl", "atom", "zed"}
+
+
+# ---------------------------------------------------------------------------
+# Template helpers
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_DIR = files("uv_release_monorepo").joinpath("templates/release")
+
+
+def _template_versions() -> list[str]:
+    """Return sorted list of available template versions (e.g. ['0.18.0'])."""
+    from packaging.version import Version
+
+    versions: list[str] = []
+    for item in _TEMPLATE_DIR.iterdir():
+        name = item.name if hasattr(item, "name") else str(item).rsplit("/", 1)[-1]
+        if name.startswith("v") and name.endswith(".yml"):
+            versions.append(name[1:-4])  # strip v prefix and .yml suffix
+    return sorted(versions, key=Version)
+
+
+def _latest_template_version() -> str:
+    """Return the latest bundled template version string."""
+    versions = _template_versions()
+    if not versions:
+        _fatal("No bundled release templates found.")
+    return versions[-1]
+
+
+def _load_template(version: str) -> str:
+    """Load a bundled template by version string (e.g. '0.18.0')."""
+    resource = _TEMPLATE_DIR.joinpath(f"v{version}.yml")
+    return resource.read_text(encoding="utf-8")
+
+
+def _load_template_yaml(version: str) -> dict:
+    """Load and parse a bundled template as a dict."""
+    import tempfile as _tmp
+
+    text = _load_template(version)
+    with _tmp.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write(text)
+        tmp = Path(f.name)
+    try:
+        return _load_yaml(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Frozen-path validation
+# ---------------------------------------------------------------------------
+
+
+def _check_frozen_paths(existing: dict, template: dict) -> list[str]:
+    """Compare frozen fields between user YAML and bundled template.
+
+    Returns a list of warning messages for each frozen path that differs.
+    """
+    warnings: list[str] = []
+    for path in frozen_paths(ReleaseWorkflow):
+        keys = path.split(".")
+        user_val = _yaml_get(existing, keys)
+        tmpl_val = _yaml_get(template, keys)
+        if user_val is _MISSING:
+            continue  # field absent in user file — skip
+        if tmpl_val is _MISSING:
+            continue  # field absent in template — skip
+        if user_val != tmpl_val:
+            warnings.append(f"{path} was modified from template default")
+    return warnings
+
+
+# ---------------------------------------------------------------------------
+# Editor helpers
+# ---------------------------------------------------------------------------
 
 
 def _editor_cmd(editor: str) -> list[str]:
@@ -59,60 +135,24 @@ def _resolve_editor(args: argparse.Namespace, root: Path) -> str | None:
     return None
 
 
-def _git_commit_and_record(
-    root: Path,
-    files: list[str],
-    message: str,
-    config_key: str,
-) -> None:
-    """Stage *files*, commit, and store the commit hash in [tool.uvr.config].
-
-    Prompts the user for confirmation before committing.
-    """
-    from ..shared.git.local import open_repo
-
-    rel_files = [str(Path(f).relative_to(root)) for f in files]
-    print()
-    print("The following will be committed:")
-    for f in rel_files:
-        print(f"  git add {f}")
-    print(f'  git commit -m "{message}"')
-    print()
-    try:
-        answer = input("Commit? [Y/n] ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print("\nSkipped commit.")
-        return
-    if answer and answer != "y":
-        print("Skipped commit.")
-        return
-
-    repo = open_repo(str(root))
-    for f in rel_files:
-        repo.index.add(f)
-    repo.index.write()
-
-    sig = repo.default_signature
-    tree = repo.index.write_tree()
-    parent = repo.head.peel().id
-    commit_oid = repo.create_commit("HEAD", sig, sig, message, tree, [parent])
-
-    # Store the commit hash in [tool.uvr.config]
+def _store_template_version(root: Path, version: str) -> None:
+    """Store the workflow template version in [tool.uvr.config]."""
     pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        return
     doc = read_pyproject(pyproject)
     tool = doc.setdefault("tool", {})
     uvr = tool.setdefault("uvr", {})
     config = uvr.setdefault("config", {})
-    config[config_key] = str(commit_oid)
+    config["template_version"] = version
+    # Remove legacy init_commit if present
+    config.pop("init_commit", None)
     write_pyproject(pyproject, doc)
 
-    # Amend the commit to include the pyproject.toml change
-    repo.index.add("pyproject.toml")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    repo.create_commit("HEAD", sig, sig, message, tree, [parent])
 
-    print(f"OK: Committed {len(rel_files)} file(s)")
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -137,7 +177,7 @@ def cmd_init(args: argparse.Namespace) -> None:
             '  members = ["packages/*"]'
         )
 
-    # Write workflow
+    # Write workflow from bundled template
     dest_dir = root / args.workflow_dir
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "release.yml"
@@ -149,23 +189,17 @@ def cmd_init(args: argparse.Namespace) -> None:
             "  Use --force to overwrite, or `uvr validate` to check the existing file."
         )
 
-    _write_yaml(dest, ReleaseWorkflow().model_dump(by_alias=True, exclude_none=True))
+    version = _latest_template_version()
+    dest.write_text(_load_template(version))
 
-    print(f"OK: Wrote workflow to {dest.relative_to(root)}")
+    _store_template_version(root, version)
 
-    _git_commit_and_record(
-        root,
-        [str(dest)],
-        "chore: uvr init",
-        "init_commit",
-    )
-
+    print(f"OK: Wrote workflow to {dest.relative_to(root)} (template v{version})")
     print()
     print("Next steps:")
-    print("  1. Edit the workflow to add your hook steps")
+    print("  1. Review and commit the workflow file")
     print("  2. Run `uvr validate` to check your changes")
-    print("  3. Commit and push the workflow file")
-    print("  4. Trigger a release:")
+    print("  3. Trigger a release:")
     print("       uvr release")
 
 
@@ -178,56 +212,81 @@ def cmd_validate(args: argparse.Namespace) -> None:
     if not dest.exists():
         _fatal(f"No workflow found at {dest.relative_to(root)}. Run `uvr init` first.")
 
+    import difflib
     import warnings
 
     from pydantic import ValidationError
 
     existing = _load_yaml(dest)
+    rel = dest.relative_to(root)
+
+    # Resolve versions
+    template_version = _latest_template_version()
+    stored_version = (root / "pyproject.toml").exists() and get_config(
+        read_pyproject(root / "pyproject.toml")
+    ).get("template_version", "")
+    local_label = f"v{stored_version}" if stored_version else "unknown"
+
+    # Header
+    print(
+        f"Validating worktree workflow {rel} ({local_label}) "
+        f"against uvr template (v{template_version})."
+    )
+    print()
+
+    # Phase 1: Structural validation via pydantic
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         try:
             ReleaseWorkflow.model_validate(existing)
         except ValidationError as e:
-            print(f"Invalid: {dest.relative_to(root)}\n{e}")
+            print(f"FAIL: {e}")
             raise SystemExit(1) from None
 
-    rel = dest.relative_to(root)
-    if caught:
-        print(f"Valid: {rel} (0 errors, {len(caught)} warnings)\n")
+    # Phase 2: Frozen-path diffing against bundled template
+    template = _load_template_yaml(template_version)
+    frozen_warnings = _check_frozen_paths(existing, template)
+    all_warnings = [str(w.message) for w in caught] + frozen_warnings
+
+    # Check if template content differs
+    fresh_text = _load_template(template_version)
+    existing_text = dest.read_text()
+    has_diff = fresh_text.rstrip() != existing_text.rstrip()
+    version_diff = stored_version and stored_version != template_version
+
+    # Result
+    if all_warnings:
+        print(f"SUCCESS: 0 errors, {len(all_warnings)} warnings")
+        print()
         print("Warnings:")
-        for w in caught:
-            print(f"  {w.message}")
+        for w in all_warnings:
+            print(f"  {w}")
     else:
-        print(f"Valid: {rel} (0 errors, 0 warnings)")
+        print("SUCCESS: 0 errors, 0 warnings")
 
+    # Hints
+    if has_diff:
+        print()
+        print("  Run `uvr validate --diff` to view differences from the template.")
+    if version_diff:
+        print(
+            f"  Run `uvr init --upgrade` to update from "
+            f"v{stored_version} to v{template_version}."
+        )
+    elif not stored_version:
+        print("  Run `uvr init --upgrade` to track your workflow version.")
 
-def _get_base_text(root: Path, rel_path: str, config_key: str) -> str:
-    """Retrieve the base file content from the init commit, or empty string."""
-    import pygit2
-
-    from ..shared.git.local import open_repo
-
-    pyproject = root / "pyproject.toml"
-    if not pyproject.exists():
-        return ""
-    doc = read_pyproject(pyproject)
-    commit_hex = doc.get("tool", {}).get("uvr", {}).get("config", {}).get(config_key)
-    if not commit_hex:
-        return ""
-
-    try:
-        repo = open_repo(str(root))
-        commit = repo.get(commit_hex)
-        if commit is None:
-            return ""
-        tree = commit.peel(pygit2.Tree) if hasattr(commit, "peel") else commit.tree
-        entry = tree[rel_path]
-        blob = repo.get(entry.id)
-        if blob is None:
-            return ""
-        return blob.data.decode("utf-8")  # type: ignore[union-attr]
-    except (KeyError, ValueError, AttributeError):
-        return ""
+    # --diff: show unified diff
+    if getattr(args, "diff", False) and has_diff:
+        print()
+        diff = difflib.unified_diff(
+            existing_text.splitlines(keepends=True),
+            fresh_text.splitlines(keepends=True),
+            fromfile=str(rel),
+            tofile=f"template (v{template_version})",
+        )
+        for line in diff:
+            print(line, end="")
 
 
 def _three_way_merge(dest: Path, base_text: str, fresh_text: str) -> tuple[str, bool]:
@@ -277,7 +336,7 @@ def _three_way_merge(dest: Path, base_text: str, fresh_text: str) -> tuple[str, 
 
 
 def cmd_upgrade(args: argparse.Namespace) -> None:
-    """Upgrade an existing release.yml via three-way merge (falling back to two-way)."""
+    """Upgrade an existing release.yml via three-way merge."""
     root = Path.cwd()
     workflow_dir = getattr(args, "workflow_dir", ".github/workflows")
     dest = root / workflow_dir / "release.yml"
@@ -296,26 +355,32 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
             "  Commit or stash them before upgrading."
         )
 
-    existing_text = dest.read_text()
-    rel_dest = str(dest.relative_to(root))
-
-    fresh_text = _dump_yaml(
-        ReleaseWorkflow().model_dump(by_alias=True, exclude_none=True)
+    # Resolve base template version from config (empty string → two-way merge)
+    pyproject = root / "pyproject.toml"
+    doc = read_pyproject(pyproject) if pyproject.exists() else {}
+    stored_version = (
+        doc.get("tool", {}).get("uvr", {}).get("config", {}).get("template_version", "")
     )
-    base_text = _get_base_text(root, rel_dest, "init_commit")
+
+    latest_version = _latest_template_version()
+    existing_text = dest.read_text()
+
+    base_text = _load_template(stored_version) if stored_version else ""
+    fresh_text = _load_template(latest_version)
+
     merged_text, has_conflicts = _three_way_merge(dest, base_text, fresh_text)
 
     if merged_text.rstrip() == existing_text.rstrip():
+        _store_template_version(root, latest_version)
         print("Already up to date.")
         return
 
+    rel_dest = str(dest.relative_to(root))
     dest.write_text(merged_text)
 
     if not (has_conflicts or "<<<<<<" in merged_text):
-        print(f"OK: Upgraded {rel_dest}")
-        _git_commit_and_record(
-            root, [str(dest)], "chore: uvr init --upgrade", "init_commit"
-        )
+        _store_template_version(root, latest_version)
+        print(f"OK: Upgraded {rel_dest} to v{latest_version}")
         return
 
     # Conflicts — offer editor
@@ -347,5 +412,10 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
         if answer not in ("n", "no"):
             dest.write_text(existing_text)
             print("Reverted. No changes applied.")
-        else:
-            print(f"  Resolve markers in {rel_dest}, then commit.")
+            return
+        _store_template_version(root, latest_version)
+        print(f"  Resolve markers in {rel_dest}, then commit.")
+        return
+
+    _store_template_version(root, latest_version)
+    print(f"OK: Upgraded {rel_dest} to v{latest_version}")

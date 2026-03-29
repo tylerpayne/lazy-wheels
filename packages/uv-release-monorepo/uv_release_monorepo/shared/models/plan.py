@@ -192,9 +192,9 @@ class ReleasePlan(BaseModel):
     finalize_commands: list[PlanCommand] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _forbid_skip_validate_plan(self) -> ReleasePlan:
-        if "validate-plan" in self.skip or "validate_plan" in self.skip:
-            msg = "validate-plan cannot be skipped"
+    def _forbid_skip_validate(self) -> ReleasePlan:
+        if "uvr-validate" in self.skip:
+            msg = "uvr-validate cannot be skipped"
             raise ValueError(msg)
         return self
 

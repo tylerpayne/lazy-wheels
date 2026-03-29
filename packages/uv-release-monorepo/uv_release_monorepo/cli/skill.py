@@ -8,8 +8,12 @@ import tempfile
 from importlib.resources import files
 from pathlib import Path
 
+from packaging.version import Version
+
+from ..shared.utils.config import get_config
+from ..shared.utils.toml import read_pyproject, write_pyproject
 from ._common import _fatal
-from .init import _get_base_text, _git_commit_and_record
+from .init import _editor_cmd, _resolve_editor
 
 
 _SKILL_FILES: dict[str, list[str]] = {
@@ -32,28 +36,47 @@ _SKILL_FILES: dict[str, list[str]] = {
     ],
 }
 
-
-def _skill_root() -> Path:
-    """Return the root of the bundled skills directory as a concrete Path."""
-    return Path(str(files("uv_release_monorepo").joinpath("skills")))
+_SKILLS_TEMPLATE_DIR = files("uv_release_monorepo").joinpath("templates/skills")
 
 
-def _copy_skill(name: str, dest_base: Path, *, force: bool) -> tuple[int, int]:
-    """Copy a single skill's files.  Returns *(written, skipped)* counts."""
-    src_root = _skill_root() / name
-    written = skipped = 0
-    for rel_path in _SKILL_FILES[name]:
-        src = src_root / rel_path
-        dest = dest_base / name / rel_path
-        if dest.exists() and not force:
-            print(f"  skip  {name}/{rel_path} (exists)")
-            skipped += 1
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-        print(f"  write {name}/{rel_path}")
-        written += 1
-    return written, skipped
+def _skill_versions() -> list[str]:
+    """Return sorted list of available skill template versions."""
+    base = Path(str(_SKILLS_TEMPLATE_DIR))
+    versions = []
+    for d in base.iterdir():
+        if d.is_dir() and d.name.startswith("v"):
+            versions.append(d.name[1:])  # strip "v" prefix
+    return [str(v) for v in sorted(Version(v) for v in versions)]
+
+
+def _latest_skill_version() -> str:
+    """Return the highest available skill template version."""
+    versions = _skill_versions()
+    if not versions:
+        _fatal("No skill templates found in package.")
+    return versions[-1]
+
+
+def _load_skill_file(version: str, skill_name: str, rel_path: str) -> str:
+    """Load a skill file from the versioned template directory."""
+    base = Path(str(_SKILLS_TEMPLATE_DIR))
+    path = base / f"v{version}" / skill_name / rel_path
+    return path.read_text(encoding="utf-8")
+
+
+def _store_skill_version(root: Path, version: str) -> None:
+    """Store the skill template version in [tool.uvr.config]."""
+    pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        return
+    doc = read_pyproject(pyproject)
+    tool = doc.setdefault("tool", {})
+    uvr = tool.setdefault("uvr", {})
+    config = uvr.setdefault("config", {})
+    config["skill_version"] = version
+    # Remove legacy key if present
+    config.pop("skill_init_commit", None)
+    write_pyproject(pyproject, doc)
 
 
 def cmd_skill_init(args: argparse.Namespace) -> None:
@@ -65,49 +88,58 @@ def cmd_skill_init(args: argparse.Namespace) -> None:
 
     dest_base = root / ".claude" / "skills"
     force = getattr(args, "force", False)
+    version = _latest_skill_version()
 
     written = 0
     skipped = 0
-    for name in _SKILL_FILES:
-        w, s = _copy_skill(name, dest_base, force=force)
-        written += w
-        skipped += s
+    for skill_name in _SKILL_FILES:
+        for rel_path in _SKILL_FILES[skill_name]:
+            dest = dest_base / skill_name / rel_path
+            if dest.exists() and not force:
+                print(f"  skip  {skill_name}/{rel_path} (exists)")
+                skipped += 1
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(
+                _load_skill_file(version, skill_name, rel_path), encoding="utf-8"
+            )
+            print(f"  write {skill_name}/{rel_path}")
+            written += 1
 
     print()
     if written:
-        print(f"OK: Wrote {written} file(s) to .claude/skills/")
+        _store_skill_version(root, version)
+        print(f"OK: Wrote {written} file(s) to .claude/skills/ (template v{version})")
     if skipped:
         print(f"  Skipped {skipped} existing file(s). Use --force to overwrite.")
     if not written and not skipped:
         print("Nothing to do.")
         return
 
-    # Commit and record
-    all_files = [
-        str(dest_base / name / rel_path)
-        for name in _SKILL_FILES
-        for rel_path in _SKILL_FILES[name]
-        if (dest_base / name / rel_path).exists()
-    ]
-    _git_commit_and_record(
-        root, all_files, "chore: uvr skill init", "skill_init_commit"
-    )
-
     print()
     print("Next steps:")
     print("  1. Review .claude/skills/release/SKILL.md and tailor to your project")
-    print("  2. Use /release in Claude Code to start a release")
+    print("  2. Commit the skill files")
+    print("  3. Use /release in Claude Code to start a release")
 
 
 def cmd_skill_upgrade(args: argparse.Namespace) -> None:
-    """Upgrade skill files using three-way merge."""
+    """Upgrade skill files using three-way merge from versioned templates."""
     root = Path.cwd()
 
     if not (root / ".git").exists():
         _fatal("Not a git repository. Run from the repo root.")
 
     dest_base = root / ".claude" / "skills"
-    src_root = _skill_root()
+    latest = _latest_skill_version()
+
+    # Read previously installed version from config
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        config = get_config(read_pyproject(pyproject))
+        base_version = config.get("skill_version", "")
+    else:
+        base_version = ""
 
     # Check for uncommitted changes in skill files
     skill_paths = [
@@ -133,12 +165,11 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
     has_any_conflicts = False
     written_files: list[str] = []
 
-    for name in _SKILL_FILES:
-        for rel_path in _SKILL_FILES[name]:
-            src = src_root / name / rel_path
-            dest = dest_base / name / rel_path
-            fresh_text = src.read_text(encoding="utf-8")
-            rel_dest = f".claude/skills/{name}/{rel_path}"
+    for skill_name in _SKILL_FILES:
+        for rel_path in _SKILL_FILES[skill_name]:
+            dest = dest_base / skill_name / rel_path
+            fresh_text = _load_skill_file(latest, skill_name, rel_path)
+            rel_dest = f".claude/skills/{skill_name}/{rel_path}"
 
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -153,9 +184,15 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 up_to_date += 1
                 continue
 
-            # Three-way merge
-            base_text = _get_base_text(root, rel_dest, "skill_init_commit")
+            # Load base from the previously installed version
+            base_text = ""
+            if base_version:
+                try:
+                    base_text = _load_skill_file(base_version, skill_name, rel_path)
+                except FileNotFoundError:
+                    pass  # file didn't exist in base version — two-way merge
 
+            # Three-way merge (falls back to two-way if base is empty)
             with (
                 tempfile.NamedTemporaryFile(
                     mode="w", suffix=".md", prefix="base-", delete=False
@@ -194,12 +231,12 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 base_path.unlink(missing_ok=True)
                 fresh_path.unlink(missing_ok=True)
 
-            if result.returncode > 1:
+            if result.returncode < 0:
                 print(f"  ERROR {rel_dest}: git merge-file failed")
                 continue
 
             merged_text = result.stdout
-            has_conflicts = result.returncode == 1
+            has_conflicts = result.returncode > 0
 
             if merged_text.rstrip() == existing_text.rstrip():
                 up_to_date += 1
@@ -216,6 +253,7 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
     print()
     total = upgraded + new_files
     if total == 0:
+        _store_skill_version(root, latest)
         print("Already up to date.")
         return
 
@@ -227,33 +265,49 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
     print(f"OK: {', '.join(parts)}")
 
     if has_any_conflicts:
-        print("  Resolve conflict markers before committing.")
-        return
-
-    if not getattr(args, "yes", False) and written_files:
-        try:
-            subprocess.run(["git", "checkout", "-p", "--"] + written_files)
-        except KeyboardInterrupt:
-            subprocess.run(
-                ["git", "checkout", "--"] + written_files, capture_output=True
+        # Offer editor for conflict resolution
+        conflict_files = [f for f in written_files if "<<<<<<" in Path(f).read_text()]
+        editor = _resolve_editor(args, root)
+        for f in conflict_files:
+            rel = str(Path(f).relative_to(root))
+            print(f"\n  Conflicts in {rel}")
+            prompt = (
+                f"  Open in {editor} to resolve? [Y/n/editor] "
+                if editor
+                else "  Editor to resolve? [n/editor] "
             )
-            print("\nAborted. No changes applied.")
-            return
+            try:
+                answer = input(prompt).strip()
+            except (EOFError, KeyboardInterrupt):
+                answer = "n"
+            if answer.lower() not in ("n", "no", ""):
+                chosen = editor if answer.lower() in ("y", "yes") else answer
+                if chosen:
+                    subprocess.run([*_editor_cmd(chosen), f])
+            elif editor and answer == "":
+                subprocess.run([*_editor_cmd(editor), f])
 
-        try:
-            answer = input("\nKeep these changes? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if answer != "y":
-            subprocess.run(
-                ["git", "checkout", "--"] + written_files, capture_output=True
-            )
-            print("Reverted. No changes applied.")
-            return
+        # Check if all conflicts resolved
+        still_conflicted = [
+            f for f in conflict_files if "<<<<<<" in Path(f).read_text()
+        ]
+        if still_conflicted:
+            print("\nUnresolved conflicts remain.")
+            try:
+                answer = input("Revert all changes? [Y/n] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            if answer not in ("n", "no"):
+                subprocess.run(
+                    ["git", "checkout", "--"] + written_files, capture_output=True
+                )
+                print("Reverted. No changes applied.")
+                return
+            else:
+                for f in still_conflicted:
+                    rel = str(Path(f).relative_to(root))
+                    print(f"  Resolve markers in {rel}")
+                return
 
-    _git_commit_and_record(
-        root,
-        written_files,
-        "chore: uvr skill init --upgrade",
-        "skill_init_commit",
-    )
+    _store_skill_version(root, latest)
+    print(f"\nUpgraded to skill template v{latest}. Review and commit the changes.")

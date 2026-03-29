@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from uv_release_monorepo.cli import __version__, cmd_init
+from uv_release_monorepo.shared.context import ReleaseContext
 from uv_release_monorepo.shared.models import ChangedPackage, PackageInfo, ReleasePlan
 
 
@@ -72,3 +74,23 @@ def _runners_args(**kwargs: object) -> argparse.Namespace:
     )
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
+
+
+def _make_ctx(
+    packages: dict[str, PackageInfo],
+    release_tags: dict[str, str | None] | None = None,
+    baselines: dict[str, str | None] | None = None,
+) -> ReleaseContext:
+    """Build a fake ReleaseContext for tests."""
+    if release_tags is None:
+        release_tags = {n: None for n in packages}
+    if baselines is None:
+        baselines = {n: None for n in packages}
+    mock_repo = MagicMock()
+    mock_repo.references.get.return_value = None  # no tag conflicts by default
+    return ReleaseContext(
+        repo=mock_repo,
+        packages=packages,
+        baselines=baselines,
+        release_tags=release_tags,
+    )

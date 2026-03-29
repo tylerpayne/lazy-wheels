@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..shared.config import get_matrix, set_matrix
-from ..shared.toml import read_pyproject, write_pyproject
+from ..shared.utils.config import get_matrix, set_matrix
+from ..shared.utils.toml import read_pyproject, write_pyproject
 from ._common import _discover_package_names, _fatal, _print_matrix_status
 
 _DEFAULT_RUNNERS: list[list[str]] = [["ubuntu-latest"]]

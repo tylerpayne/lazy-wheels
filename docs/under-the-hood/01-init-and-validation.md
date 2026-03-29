@@ -77,9 +77,9 @@ Fields protected by `_frozen`:
 | `BuildJob` | `strategy` | `_BUILD_STRATEGY` |
 | `BuildJob` | `runs_on` | `_BUILD_RUNS_ON` (`${{ matrix.runner }}`) |
 | `BuildJob` | `steps` | `_BUILD_STEPS` |
-| `PublishJob` | `if_condition` | `_PUBLISH_IF` |
-| `PublishJob` | `strategy` | `_PUBLISH_STRATEGY` |
-| `PublishJob` | `steps` | `_PUBLISH_STEPS` |
+| `ReleaseJob` | `if_condition` | `_RELEASE_IF` |
+| `ReleaseJob` | `strategy` | `_RELEASE_STRATEGY` |
+| `ReleaseJob` | `steps` | `_RELEASE_STEPS` |
 | `FinalizeJob` | `if_condition` | `_FINALIZE_IF` |
 | `FinalizeJob` | `steps` | `_FINALIZE_STEPS` |
 

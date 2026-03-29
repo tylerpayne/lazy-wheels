@@ -9,43 +9,43 @@ uvr release --skip pre-build
 uvr release --skip pre-build --skip post-build
 ```
 
-Repeatable. Valid job names: `pre-build`, `build`, `post-build`, `pre-release`, `publish`, `finalize`, `post-release`.
+Repeatable. Valid job names: `pre-build`, `uvr-build`, `post-build`, `pre-release`, `uvr-release`, `uvr-finalize`, `post-release`.
 
 ## Skip to a specific job
 
 ```bash
-uvr release --skip-to publish
+uvr release --skip-to uvr-release
 ```
 
-Skips everything before `publish` (pre-build, build, post-build, pre-release).
+Skips everything before `uvr-release` (pre-build, uvr-build, post-build, pre-release).
 
 ## Combine both
 
 ```bash
-uvr release --skip-to publish --skip finalize
+uvr release --skip-to uvr-release --skip uvr-finalize
 ```
 
-Runs only publish and post-release.
+Runs only release and post-release.
 
 ## Reuse build artifacts from a previous run
 
-If build succeeded but publish failed:
+If build succeeded but release failed:
 
 ```bash
-uvr release --skip-to publish --reuse-run 12345678
+uvr release --skip-to uvr-release --reuse-run 12345678
 ```
 
-The publish job downloads wheels from run `12345678` instead of building them. Get the run ID from the GitHub Actions URL or `gh run list`.
+The release job downloads wheels from run `12345678` instead of building them. Get the run ID from the GitHub Actions URL or `gh run list`.
 
 ## Reuse existing GitHub releases
 
-If publish already created the releases but finalize or post-release failed:
+If the release job already created the GitHub releases but finalize or post-release failed:
 
 ```bash
-uvr release --skip-to finalize --reuse-release
+uvr release --skip-to uvr-finalize --reuse-release
 ```
 
-`--reuse-release` tells the pipeline that GitHub releases already exist. Requires both build and publish to be skipped.
+`--reuse-release` tells the pipeline that GitHub releases already exist. Requires both build and release to be skipped.
 
 ## Re-run only post-release
 

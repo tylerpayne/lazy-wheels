@@ -10,8 +10,8 @@ from ..shared.models import ReleasePlan
 from ._common import __version__, _fatal, _read_matrix, _resolve_plan_json
 
 # Executor pipeline phases — the order ReleaseExecutor.run() executes them.
-# These are skip-condition names (what appears in plan.skip), not YAML job keys.
-_PIPELINE = ("build", "release", "finalize")
+# These are skip-condition names (what appears in plan.skip) and YAML job keys.
+_PIPELINE = ("uvr-build", "uvr-release", "uvr-finalize")
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
@@ -34,7 +34,7 @@ def _validate_skip_reuse(
     reuse_release: bool,
 ) -> None:
     """Validate skip/reuse flag combinations."""
-    build_skipped = "build" in skipped
+    build_skipped = "uvr-build" in skipped
     has_reuse = reuse_run is not None or reuse_release
 
     if build_skipped and not has_reuse:
@@ -45,7 +45,7 @@ def _validate_skip_reuse(
     if has_reuse and not build_skipped:
         _fatal(
             "--reuse-run / --reuse-release requires build to be skipped.\n"
-            "  Add --skip build or --skip-to <job-after-build>."
+            "  Add --skip uvr-build or --skip-to <job-after-build>."
         )
     if reuse_run and reuse_release:
         _fatal("--reuse-run and --reuse-release are mutually exclusive.")
@@ -55,6 +55,22 @@ def _section(title: str) -> None:
     print()
     print(title)
     print("-" * len(title))
+
+
+def _load_workflow_jobs() -> list[str]:
+    """Load job names from the worktree release.yml, preserving order."""
+    from pathlib import Path
+
+    workflow = Path.cwd() / ".github" / "workflows" / "release.yml"
+    if not workflow.exists():
+        return []
+    try:
+        from ..cli._yaml import _load_yaml
+
+        doc = _load_yaml(workflow)
+        return list(doc.get("jobs", {}).keys())
+    except Exception:
+        return []
 
 
 def _print_plan(
@@ -94,71 +110,89 @@ def _print_plan(
                 f"{cur_strs[name].ljust(cw)}  {rel_strs[name]}"
             )
 
-    # -- Pipeline (phase-by-phase with details inline) --
+    # -- Pipeline (all jobs from release.yml) --
     _section("Pipeline")
     _sw = 6  # width of "STATUS"
     _D = " " * 14  # detail indent under phase
     print(f"  {'STATUS'.ljust(_sw)}  JOB")
 
-    def _phase(name: str) -> None:
-        if name in skipped:
-            print(f"  {'skip'.ljust(_sw)}  {name}  (--skip)")
+    workflow_jobs = _load_workflow_jobs()
+    # Ensure core jobs appear even if workflow can't be loaded
+    if not workflow_jobs:
+        workflow_jobs = ["uvr-validate", "uvr-build", "uvr-release", "uvr-finalize"]
+
+    for job in workflow_jobs:
+        if job in skipped:
+            print(f"  {'skip'.ljust(_sw)}  {job}  (--skip)")
         else:
-            print(f"  {'run'.ljust(_sw)}  {name}")
+            print(f"  {'run'.ljust(_sw)}  {job}")
 
-    # build
-    _phase("build")
-    if "build" not in skipped:
-        if plan.reuse_run_id:
-            print(f"{_D}artifacts from run {plan.reuse_run_id}")
-        elif plan.build_commands:
-            # Collect assigned packages per runner for marking transitive deps
-            assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
-            for name, pkg in plan.changed.items():
-                for runner in pkg.runners:
-                    assigned_by_runner.setdefault(tuple(runner), set()).add(name)
+        if job in skipped:
+            continue
 
-            all_build_pkgs: list[str] = []
-            for stages in plan.build_commands.values():
-                for stage in stages:
-                    all_build_pkgs.extend(stage.packages)
-            bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
+        # Build details
+        if job == "uvr-build":
+            if plan.reuse_run_id:
+                print(f"{_D}artifacts from run {plan.reuse_run_id}")
+            elif plan.build_commands:
+                assigned_by_runner: dict[tuple[str, ...], set[str]] = {}
+                for name, pkg in plan.changed.items():
+                    for runner in pkg.runners:
+                        assigned_by_runner.setdefault(tuple(runner), set()).add(name)
 
-            for runner_key in sorted(plan.build_commands):
-                assigned = assigned_by_runner.get(runner_key, set())
-                print(f"{_D}[{', '.join(runner_key)}]")
-                local_layer = 0
-                for stage in plan.build_commands[runner_key]:
-                    pkgs = sorted(stage.packages)
-                    if not pkgs:
-                        continue
-                    print(f"{_D}  layer {local_layer}")
-                    local_layer += 1
-                    for pkg in pkgs:
-                        cpkg = plan.changed.get(pkg)
-                        cur = cpkg.current_version if cpkg else ""
-                        ver = cpkg.release_version if cpkg else ""
-                        dep_marker = "" if pkg in assigned else " (dep)"
-                        if cur and ver and cur != ver:
-                            print(
-                                f"{_D}    {pkg.ljust(bw)}  {cur} -> {ver}{dep_marker}"
-                            )
-                        else:
-                            print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
+                all_build_pkgs: list[str] = []
+                for stages in plan.build_commands.values():
+                    for stage in stages:
+                        all_build_pkgs.extend(stage.packages)
+                bw = max(len(p) for p in all_build_pkgs) if all_build_pkgs else 0
 
-    # publish
-    _phase("release")
-    if "release" not in skipped and plan.release_matrix:
-        for entry in plan.release_matrix:
-            print(f"{_D}{entry['tag']}")
+                for runner_key in sorted(plan.build_commands):
+                    assigned = assigned_by_runner.get(runner_key, set())
+                    print(f"{_D}[{', '.join(runner_key)}]")
+                    local_layer = 0
+                    for stage in plan.build_commands[runner_key]:
+                        pkgs = sorted(stage.packages)
+                        if not pkgs:
+                            continue
+                        print(f"{_D}  layer {local_layer}")
+                        local_layer += 1
+                        for pkg in pkgs:
+                            cpkg = plan.changed.get(pkg)
+                            cur = cpkg.current_version if cpkg else ""
+                            ver = cpkg.release_version if cpkg else ""
+                            dep_marker = "" if pkg in assigned else " (dep)"
+                            if cur and ver and cur != ver:
+                                print(
+                                    f"{_D}    {pkg.ljust(bw)}  "
+                                    f"{cur} -> {ver}{dep_marker}"
+                                )
+                            else:
+                                print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
 
-    # finalize
-    _phase("finalize")
-    changed_with_bumps = {n: p for n, p in plan.changed.items() if p.next_version}
-    if "finalize" not in skipped and changed_with_bumps:
-        fw = max(len(n) for n in changed_with_bumps)
-        for name, pkg in sorted(changed_with_bumps.items()):
-            print(f"{_D}{name.ljust(fw)}  -> {pkg.next_version}")
+        # Release details
+        elif job == "uvr-release" and plan.release_matrix:
+            for entry in plan.release_matrix:
+                print(f"{_D}{entry['tag']}")
+
+        # Finalize details
+        elif job == "uvr-finalize":
+            changed_with_bumps = {
+                n: p for n, p in plan.changed.items() if p.next_version
+            }
+            if changed_with_bumps:
+                fw = max(len(n) for n in changed_with_bumps)
+                for name, pkg in sorted(changed_with_bumps.items()):
+                    print(f"{_D}{name.ljust(fw)}  -> {pkg.next_version}")
+
+    # -- Release Notes --
+    notes_packages = {n: p for n, p in plan.changed.items() if p.release_notes.strip()}
+    if notes_packages:
+        _section("Release Notes")
+        for name, pkg in sorted(notes_packages.items()):
+            print(f"  {name}")
+            for line in pkg.release_notes.strip().splitlines():
+                print(f"    {line}")
+            print()
 
     print()
 
@@ -185,15 +219,24 @@ def cmd_release(args: argparse.Namespace) -> None:
     # For CI mode, ensure clean worktree and workflow exists
     root = Path.cwd()
     json_only = getattr(args, "json", False)
+    allow_dirty = getattr(args, "allow_dirty", False)
     if where == "ci" and not json_only:
         result = subprocess.run(
             ["git", "status", "--porcelain"], capture_output=True, text=True
         )
         if result.stdout.strip():
-            _fatal(
-                "Working tree is not clean. Commit or stash your changes first.\n"
-                + result.stdout
-            )
+            if allow_dirty:
+                import sys as _sys
+
+                print(
+                    f"WARNING: Working tree is not clean.\n{result.stdout}",
+                    file=_sys.stderr,
+                )
+            else:
+                _fatal(
+                    "Working tree is not clean. Commit or stash your changes first.\n"
+                    "  Use --allow-dirty to proceed anyway.\n" + result.stdout
+                )
 
         # Ensure local HEAD matches remote
         subprocess.run(["git", "fetch", "--quiet"], capture_output=True, check=False)
@@ -207,10 +250,19 @@ def cmd_release(args: argparse.Namespace) -> None:
             check=False,
         ).stdout.strip()
         if remote and local != remote:
-            _fatal(
-                "Local HEAD differs from remote. Pull or push first:\n"
-                "  git pull --rebase && git push"
-            )
+            if allow_dirty:
+                import sys as _sys
+
+                print(
+                    "WARNING: Local HEAD differs from remote.",
+                    file=_sys.stderr,
+                )
+            else:
+                _fatal(
+                    "Local HEAD differs from remote. Pull or push first:\n"
+                    "  git pull --rebase && git push\n"
+                    "  Use --allow-dirty to proceed anyway."
+                )
 
         workflow_path = root / args.workflow_dir / "release.yml"
         if not workflow_path.exists():
@@ -240,33 +292,42 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     hook = load_hook(root)
 
-    old_stdout = sys.stdout
-    sys.stdout = io.StringIO()
-    try:
-        from ..shared.context import build_context
+    from ..shared.context import build_context
+    from ..shared.utils.shell import Progress
 
-        dry_run = getattr(args, "dry_run", False) or json_only
-        config = _cli.PlanConfig(
-            rebuild_all=args.rebuild_all,
-            matrix=package_runners,
-            uvr_version=__version__,
-            python_version=getattr(args, "python_version", "3.12"),
-            ci_publish=(where == "ci"),
-            release_type=release_type,
-            pre_kind=pre_kind,
-            dry_run=dry_run,
-        )
-        if hook:
-            config = hook.pre_plan(config)
-        ctx = build_context()
-        plan = _cli.ReleasePlanner(config, ctx).plan()
+    dry_run = getattr(args, "dry_run", False) or json_only
+    config = _cli.PlanConfig(
+        rebuild_all=args.rebuild_all,
+        matrix=package_runners,
+        uvr_version=__version__,
+        python_version=getattr(args, "python_version", "3.12"),
+        ci_publish=(where == "ci"),
+        release_type=release_type,
+        pre_kind=pre_kind,
+        dry_run=dry_run,
+    )
+    if hook:
+        config = hook.pre_plan(config)
+
+    # Steps: discover + resolve baselines + detect changes + compute versions + generate notes
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()  # suppress discovery print_step output
+    progress = Progress(total_steps=5)
+    try:
+        ctx = build_context(progress=progress)
+        plan = _cli.ReleasePlanner(config, ctx, progress=progress).plan()
     finally:
         sys.stdout = old_stdout
+
+    if plan.changed:
+        progress.complete("Generated release plan")
+    progress.finish(release_count=len(plan.changed))
 
     if not plan.changed:
         if getattr(args, "json", False):
             print(plan.model_dump_json(indent=2))
         else:
+            print()
             print(
                 "Nothing changed since last release. Use --rebuild-all to rebuild all."
             )
@@ -308,6 +369,21 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Run post-plan hook if configured
     if hook:
         plan = hook.post_plan(plan)
+
+    # Apply --release-notes overrides
+    for pkg_name, notes_value in getattr(args, "release_notes", None) or []:
+        if pkg_name not in plan.changed:
+            _fatal(f"--release-notes: package {pkg_name!r} is not in the release plan.")
+        if notes_value.startswith("@"):
+            from pathlib import Path as _Path
+
+            notes_path = _Path(notes_value[1:])
+            if not notes_path.exists():
+                _fatal(f"--release-notes: file not found: {notes_path}")
+            notes_text = notes_path.read_text()
+        else:
+            notes_text = notes_value
+        plan.changed[pkg_name].release_notes = notes_text
 
     # --json: print only plan JSON to stdout and exit
     if getattr(args, "json", False):

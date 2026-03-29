@@ -19,7 +19,7 @@ uv tool install uv-release-monorepo
 uvr init
 ```
 
-This creates `.github/workflows/release.yml` with all seven pipeline jobs. Four are hook slots (pre-build, post-build, pre-release, post-release) that default to a no-op and are auto-skipped. Three are the core pipeline (build, publish, finalize).
+This creates `.github/workflows/release.yml` with all seven pipeline jobs. Four are hook slots (pre-build, post-build, pre-release, post-release) that default to a no-op and are auto-skipped. Four are the core pipeline (uvr-validate, uvr-build, uvr-release, uvr-finalize).
 
 ## Customize the workflow
 

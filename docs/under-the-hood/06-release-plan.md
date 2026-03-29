@@ -9,34 +9,30 @@ See [How it works](../user-guide/09-architecture.md) and [Skip jobs and reuse ar
 
 | Module | Key symbols |
 |--------|-------------|
-| `models.py` | `ReleasePlan`, `PackageInfo`, `BumpPlan`, `MatrixEntry`, `PublishEntry`, `PlanCommand`, `BuildStage`, `PlanConfig` |
-| `plan.py` | `ReleasePlanner`, `build_plan` (thin wrapper), `write_dep_pins` |
+| `models/plan.py` | `ReleasePlan`, `PackageInfo`, `ChangedPackage`, `PlanCommand`, `BuildStage`, `PlanConfig` |
+| `planner/_planner.py` | `ReleasePlanner`, `build_plan` (thin wrapper), `write_dep_pins` |
 | `cli/release.py` | `cmd_release` (populates skip/reuse/install fields) |
 
 ## Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `int` | Currently `7`. Bumped when the plan shape changes. |
+| `schema_version` | `int` | Currently `9`. Bumped when the plan shape changes. |
 | `uvr_version` | `str` | Version of uvr that created the plan. Empty string if running a `.dev` version. |
 | `uvr_install` | `str` | The pip install spec for CI (e.g., `uv-release-monorepo==0.5.2` or just `uv-release-monorepo` for dev). |
 | `python_version` | `str` | Python version for CI (default `"3.12"`). |
 | `release_type` | `str` | One of `"final"`, `"dev"`, `"pre"`, `"post"`. Defaults to `"final"`. |
 | `rebuild_all` | `bool` | Whether `--rebuild-all` was passed. |
-| `changed` | `dict[str, PackageInfo]` | Packages that need rebuilding. Versions are clean (no `.dev`) for final releases. |
+| `changed` | `dict[str, ChangedPackage]` | Packages that need rebuilding. `ChangedPackage` extends `PackageInfo` with version lifecycle info and runners. |
 | `unchanged` | `dict[str, PackageInfo]` | Packages reused from previous releases. |
-| `current_versions` | `dict[str, str]` | Original pyproject.toml versions for changed packages before transformation (used for display). |
-| `release_tags` | `dict[str, str \| None]` | Most recent release tag per package, or `None`. |
-| `matrix` | `list[MatrixEntry]` | Expanded build matrix -- one entry per (package, runner) pair. |
-| `runners` | `list[list[str]]` | Unique runner label lists extracted from `matrix`. Each element is a list of labels (e.g., `["ubuntu-latest"]` or `["self-hosted", "linux"]`). Drives the workflow's `strategy.matrix.runner`. |
-| `bumps` | `dict[str, BumpPlan]` | Pre-computed version bumps for changed packages. |
-| `publish_matrix` | `list[PublishEntry]` | One entry per changed package with release notes, tag, title, dist name. |
-| `ci_publish` | `bool` | `True` when dispatched to CI (publish job creates GitHub releases). `False` for local execution. |
-| `skip` | `list[str]` | Job names to skip (e.g., `["build"]`). |
+| `ci_publish` | `bool` | `True` when dispatched to CI (release job creates GitHub releases). `False` for local execution. |
+| `skip` | `list[str]` | Job names to skip (e.g., `["uvr-build"]`). |
 | `reuse_run_id` | `str` | If non-empty, download artifacts from this workflow run instead of building. |
-| `build_commands` | `dict[str, list[BuildStage]]` | Pre-computed build command stages keyed by runner (JSON-serialized runner list). See below. |
-| `publish_commands` | `list[PlanCommand]` | Pre-computed publish commands (local execution only; empty for CI). |
+| `build_commands` | `dict[RunnerKey, list[BuildStage]]` | Pre-computed build command stages keyed by runner (JSON-serialized runner list). See below. |
+| `release_commands` | `list[PlanCommand]` | Pre-computed release commands (local execution only; empty for CI). |
 | `finalize_commands` | `list[PlanCommand]` | Pre-computed finalize commands (tag, bump, commit, push). |
+| `build_matrix` | `list[list[str]]` | **Computed field.** Unique runner label sets across all changed packages. Drives the workflow's `strategy.matrix.runner`. |
+| `release_matrix` | `list[dict[str, Any]]` | **Computed field.** One entry per changed package with tag, title, body, dist name, make_latest. Drives the release job's `strategy.matrix.include`. |
 
 ## Sub-models
 
@@ -49,45 +45,27 @@ class PackageInfo(BaseModel):
     deps: list[str]    # internal dependency names
 ```
 
-### `BumpPlan`
+### `ChangedPackage`
+
+Extends `PackageInfo` with version lifecycle and runner configuration:
 
 ```python
-class BumpPlan(BaseModel):
-    new_version: str   # e.g., "0.1.6.dev0" (patch bump + .dev0 suffix)
+class ChangedPackage(PackageInfo):
+    current_version: str        # version in pyproject.toml before changes
+    release_version: str        # version that will be published
+    next_version: str           # post-release dev version (e.g., "0.1.6.dev0")
+    last_release_tag: str | None  # most recent GitHub release tag, or None
+    release_notes: str          # markdown release notes
+    make_latest: bool           # True if this release should be marked "Latest"
+    runners: list[list[str]]    # runner label sets for build matrix
 ```
 
-The bump depends on `release_type`:
+The next version depends on `release_type`:
 
 - After final `1.0.1`: `1.0.2.dev0`
 - After dev `1.0.1.dev2`: `1.0.1.dev3`
 - After pre `1.0.1a0`: `1.0.1a1.dev0`
 - After post `1.0.0.post0`: `1.0.0.post1.dev0`
-
-### `MatrixEntry`
-
-```python
-class MatrixEntry(BaseModel):
-    package: str          # package name
-    runner: list[str]     # e.g., ["ubuntu-latest"] or ["self-hosted", "linux"]
-    path: str             # package path
-    version: str          # release version
-```
-
-`runner` is a list of labels, not a single string. This supports GitHub Actions
-runners that require multiple labels (e.g., `[self-hosted, linux, arm64]`).
-
-### `PublishEntry`
-
-```python
-class PublishEntry(BaseModel):
-    package: str
-    version: str       # e.g., "0.1.5"
-    tag: str           # e.g., "my-pkg/v0.1.5"
-    title: str         # e.g., "my-pkg 0.1.5"
-    body: str          # markdown release notes
-    make_latest: bool  # True if this is the "latest" package per [tool.uvr.config]
-    dist_name: str     # e.g., "my_pkg" (underscored, for wheel glob matching)
-```
 
 ### `PlanCommand`
 
@@ -133,7 +111,7 @@ Internal configuration passed to `ReleasePlanner`. Uses `dataclass` (not
 The `skip` list drives the `if` condition on each workflow job:
 
 ```yaml
-if: ${{ !contains(fromJSON(inputs.plan).skip, 'build') }}
+if: ${{ !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
 ```
 
 When a job name is in `skip`, its `if` evaluates to `false` and GitHub Actions
@@ -151,7 +129,7 @@ explicitly requested via `--skip`.
 
 ## `reuse_run_id` behavior
 
-When non-empty, the publish job's `download-artifact` step uses it as the
+When non-empty, the release job's `download-artifact` step uses it as the
 `run-id`:
 
 ```yaml
@@ -159,7 +137,7 @@ run-id: ${{ fromJSON(inputs.plan).reuse_run_id != '' && fromJSON(inputs.plan).re
 ```
 
 This lets users skip the build job and pull wheels from a previous successful
-run. Requires `build` to be in `skip`.
+run. Requires `uvr-build` to be in `skip`.
 
 ## `uvr_install` computation
 
@@ -173,7 +151,7 @@ This value is used in the CI setup step to install the correct version of uvr.
 
 ## Schema versioning
 
-`schema_version` is currently `7`. It is a simple integer that gets bumped when
+`schema_version` is currently `9`. It is a simple integer that gets bumped when
 the plan shape changes in a backward-incompatible way. There is no migration
 logic -- if CI receives a plan with an unexpected schema version, it will likely
 fail with a Pydantic validation error.

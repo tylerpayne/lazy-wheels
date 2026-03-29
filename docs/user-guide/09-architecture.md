@@ -17,7 +17,7 @@ uvr release
                                          ├─ build: per-runner, topo-ordered
                                          ├─ [hook] post-build
                                          ├─ [hook] pre-release
-                                         ├─ publish: one GitHub release
+                                         ├─ release: one GitHub release
                                          │   per changed package
                                          ├─ finalize:
                                          │   ├─ bump patch versions
@@ -30,7 +30,7 @@ The workflow is a **pure executor**. It receives the plan as a single JSON input
 
 ## The plan
 
-The `ReleasePlan` JSON encodes everything CI needs: `uvr_version`, `uvr_install`, `python_version`, `skip` (jobs to skip), `reuse_run_id`, changed/unchanged packages, build matrix, publish matrix, and version bumps. CI never runs git commands or makes decisions.
+The `ReleasePlan` JSON encodes everything CI needs: `uvr_version`, `uvr_install`, `python_version`, `skip` (jobs to skip), `reuse_run_id`, changed/unchanged packages, build matrix, release matrix, and version bumps. CI never runs git commands or makes decisions.
 
 ## Version bumping
 
@@ -58,4 +58,4 @@ commit E   ← my-pkg/v1.0.2-dev  (pyproject.toml bumped to 1.0.2.dev0; new diff
 
 ## The workflow model
 
-`release.yml` is the source of truth for the workflow. The `ReleaseWorkflow` Pydantic model defines the expected schema -- all seven jobs with their default steps, `needs` chain, and `if` conditions. `uvr init` generates the initial YAML from the model's defaults. `uvr validate` checks an existing YAML against the model. Core jobs (build, publish, finalize) have default steps that warn (but don't fail) if modified. Hook jobs accept any steps.
+`release.yml` is the source of truth for the workflow. The `ReleaseWorkflow` Pydantic model defines the expected schema -- all seven jobs with their default steps, `needs` chain, and `if` conditions. `uvr init` generates the initial YAML from the model's defaults. `uvr validate` checks an existing YAML against the model. Core jobs (uvr-build, uvr-release, uvr-finalize) have default steps that warn (but don't fail) if modified. Hook jobs accept any steps.

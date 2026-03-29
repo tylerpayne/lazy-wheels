@@ -9,13 +9,14 @@ See [Configure build runners](../user-guide/03-runners.md) for usage.
 
 | Module | Key symbols |
 |--------|-------------|
-| `plan.py` | `ReleasePlanner._generate_build_commands`, `ReleasePlanner._expand_matrix`, `ReleasePlanner._collect_deps` |
-| `graph.py` | `topo_sort`, `topo_layers` |
-| `execute.py` | `ReleaseExecutor.build`, `ReleaseExecutor._run_stage` |
-| `models.py` | `MatrixEntry`, `BuildStage`, `BuildJob`, `_BUILD_STRATEGY` |
+| `planner/_planner.py` | `ReleasePlanner._generate_build_commands`, `ReleasePlanner._expand_matrix`, `ReleasePlanner._collect_deps` |
+| `planner/_graph.py` | `topo_sort`, `topo_layers` |
+| `executor.py` | `ReleaseExecutor.build`, `ReleaseExecutor._run_stage` |
+| `models/plan.py` | `ChangedPackage`, `BuildStage`, `ReleasePlan.build_matrix` (computed field) |
+| `models/workflow.py` | `BuildJob`, `_BUILD_STRATEGY` |
 | `cli/release.py` | `_print_plan` (build order display) |
 | `cli/_common.py` | `_read_matrix` |
-| `toml.py` | `get_uvr_matrix` |
+| `config.py` | `get_matrix` |
 
 ## Matrix configuration
 
@@ -28,31 +29,27 @@ my-pkg = [["ubuntu-latest"], ["macos-latest"]]
 other-pkg = [["ubuntu-latest"]]
 ```
 
-`toml.py:get_uvr_matrix` parses this into `dict[str, list[list[str]]]`. Packages
+`config.py:get_matrix` parses this into `dict[str, list[list[str]]]`. Packages
 not listed default to `[["ubuntu-latest"]]` during matrix expansion.
 
 ## Matrix expansion in `ReleasePlanner`
 
-`ReleasePlanner._expand_matrix` expands the matrix after change detection. Only
-changed packages appear in the matrix:
+`ReleasePlanner._expand_matrix` assigns runners to each `ChangedPackage` after
+change detection. Only changed packages appear in the matrix:
 
 ```python
 for name in sorted(changed_names):
-    info = changed[name]
     runners = self.config.matrix.get(name, [["ubuntu-latest"]])
-    for runner in runners:
-        entries.append(
-            MatrixEntry(package=name, runner=runner, path=info.path, version=info.version)
-        )
+    changed[name].runners = runners
 ```
 
-Each `MatrixEntry` carries the package name, runner label list, path, and
-version. The plan also stores `runners` -- the deduplicated list of all runner
-label lists, used by the workflow's `strategy.matrix.runner` expression.
+Each `ChangedPackage` stores its `runners` list. The plan's `build_matrix`
+computed field deduplicates all runner label lists across changed packages,
+producing the list used by the workflow's `strategy.matrix.runner` expression.
 
 ## Workflow strategy
 
-The `BuildJob` in `models.py` has a frozen strategy:
+The `BuildJob` in `models/workflow.py` has a frozen strategy:
 
 ```python
 _BUILD_STRATEGY = {
@@ -64,7 +61,7 @@ _BUILD_STRATEGY = {
 This creates one job per unique runner label list. The actual package-to-runner
 mapping is resolved inside each job by `uvr build --plan ... --runner ...`.
 
-## `graph.py:topo_sort`
+## `planner/_graph.py:topo_sort`
 
 Kahn's algorithm. Produces a flat build order where dependencies come before
 dependents. Packages with equal in-degree are sorted alphabetically for
@@ -77,7 +74,7 @@ Output: [C, B, A]
 
 Raises `RuntimeError` if a cycle is detected (processed count != total count).
 
-## `graph.py:topo_layers`
+## `planner/_graph.py:topo_layers`
 
 Modified Kahn's algorithm that assigns each package a layer number instead of a
 flat position:
@@ -150,9 +147,9 @@ For each runner:
 ### Data flow
 
 ```
-_generate_build_commands(changed, unchanged, release_tags, matrix_entries)
+_generate_build_commands(changed, unchanged, release_tags)
   for each runner:
-    -> filter matrix_entries by runner -> assigned set
+    -> filter changed packages by runner -> assigned set
     -> BFS from assigned through all_packages -> needed set
     -> split needed into changed_to_build / unchanged_deps
     -> Stage 0: mkdir dist + gh release download for unchanged_deps

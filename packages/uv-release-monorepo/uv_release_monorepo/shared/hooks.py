@@ -143,12 +143,12 @@ def load_hook(
     root:
         Workspace root directory.
     hooks_config:
-        The dict returned by :func:`~.toml.get_uvr_hooks`.  When ``None``
+        The dict returned by :func:`~.config.get_hooks`.  When ``None``
         the config is read from the root ``pyproject.toml``.
     """
     if hooks_config is None:
-        from .config import get_hooks
-        from .toml import read_pyproject
+        from .utils.config import get_hooks
+        from .utils.toml import read_pyproject
 
         pyproject = root / "pyproject.toml"
         if pyproject.exists():

@@ -148,6 +148,11 @@ Run 'uvr <command> --help' for details on a specific command.
         "--rebuild-all", action="store_true", help="Rebuild all packages."
     )
     _build.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Proceed even if the working tree has uncommitted changes.",
+    )
+    _build.add_argument(
         "--python",
         default="3.12",
         metavar="VER",
@@ -219,6 +224,13 @@ Run 'uvr <command> --help' for details on a specific command.
         default=".github/workflows",
         help="Workflow directory (default: %(default)s).",
     )
+    _out.add_argument(
+        "--release-notes",
+        nargs=2,
+        action="append",
+        metavar=("PKG", "NOTES"),
+        help="Set release notes for a package. NOTES is inline text or @file.",
+    )
     release_parser.set_defaults(func=cmd_release)
 
     # status (alias for release --dry-run)
@@ -226,7 +238,8 @@ Run 'uvr <command> --help' for details on a specific command.
         a.where = "ci"
         a.dry_run = True
         a.plan = None
-        a.rebuild_all = False
+        a.rebuild_all = getattr(a, "rebuild_all", False)
+        a.allow_dirty = getattr(a, "allow_dirty", False)
         a.yes = False
         a.no_push = False
         a.python_version = "3.12"
@@ -235,6 +248,8 @@ Run 'uvr <command> --help' for details on a specific command.
         a.reuse_run = None
         a.reuse_release = False
         a.json = False
+        a.release_type = None
+        a.pre_kind = None
         cmd_release(a)
 
     status_parser = subparsers.add_parser("status", help=_H)
@@ -242,6 +257,16 @@ Run 'uvr <command> --help' for details on a specific command.
         "--workflow-dir",
         default=".github/workflows",
         help="Workflow directory (default: %(default)s).",
+    )
+    status_parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Proceed even if the working tree has uncommitted changes.",
+    )
+    status_parser.add_argument(
+        "--rebuild-all",
+        action="store_true",
+        help="Show plan as if all packages changed.",
     )
     status_parser.set_defaults(func=_cmd_status)
 
@@ -306,6 +331,11 @@ Run 'uvr <command> --help' for details on a specific command.
         default=".github/workflows",
         help="Workflow directory (default: %(default)s).",
     )
+    validate_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Show unified diff between current workflow and template.",
+    )
     validate_parser.set_defaults(func=cmd_validate)
 
     # skill (subcommand group)
@@ -335,10 +365,8 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Three-way merge bundled skills into existing files.",
     )
     skill_init_parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Apply upgrade without interactive review.",
+        "--editor",
+        help="Editor to use for conflict resolution (e.g. 'code', 'vim').",
     )
 
     def _cmd_skill_dispatch(a: argparse.Namespace) -> None:
@@ -402,7 +430,7 @@ Run 'uvr <command> --help' for details on a specific command.
 
     def _cmd_pin_deps(a: argparse.Namespace) -> None:
         from pathlib import Path
-        from ..shared.planner._dependencies import pin_dependencies
+        from ..shared.utils.dependencies import pin_dependencies
 
         versions: dict[str, str] = {}
         for spec in a.specs:

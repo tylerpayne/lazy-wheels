@@ -39,3 +39,10 @@ Chosen option: "Per-runner matrix", because it solves build-time dependencies na
 | Failure isolation | One package fails independently | One failure blocks remaining packages on that runner |
 | Build parallelism | Full — all packages build simultaneously | Sequential within each runner |
 | Complexity | High — artifact passing, dependency ordering across jobs | Low — single script, linear execution |
+
+## Subsequent Changes
+
+> **Note (ADR-0014):** The `graph.py` module referenced in this ADR was moved to
+> `planner/_graph.py` as part of the shared module restructuring in
+> [ADR-0014](0014-restructure-shared-module-architecture.md). The `topo_layers()`
+> function and algorithm remain unchanged.

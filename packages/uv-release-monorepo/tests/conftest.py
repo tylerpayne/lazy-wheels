@@ -9,18 +9,11 @@ import tomlkit
 
 from tests._helpers import (  # noqa: F401 — re-export for convenience
     _init_workflow,
+    _make_ctx,
     _make_plan,
     _runners_args,
     _write_workspace_repo,
 )
-
-
-@pytest.fixture(autouse=True)
-def _no_git_commit_and_record(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Prevent init/skill from prompting for commits during tests."""
-    noop = lambda *a, **kw: None  # noqa: E731
-    monkeypatch.setattr("uv_release_monorepo.cli.init._git_commit_and_record", noop)
-    monkeypatch.setattr("uv_release_monorepo.cli.skill._git_commit_and_record", noop)
 
 
 @pytest.fixture

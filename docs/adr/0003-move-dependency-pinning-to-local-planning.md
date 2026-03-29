@@ -32,6 +32,14 @@ If pins change local files, `uvr release` exits and tells the user to commit the
 - Bad, because `uvr release` may require two runs — one to update pins, one to dispatch — adding friction to the release flow
 - Bad, because the plan JSON grows larger with the `bumps` field
 
+## Subsequent Changes
+
+> **Note (ADR-0014):** The `BumpPlan` model referenced in this ADR was later
+> consolidated into `ChangedPackage` as part of the shared module restructuring
+> in [ADR-0014](0014-restructure-shared-module-architecture.md). The pinning
+> logic moved from `deps.py` to `planner/_dependencies.py`. The decision and
+> rationale in this ADR remain valid.
+
 ## Links
 
 - Refined by [ADR-0001](0001-use-plan-execute-architecture-for-releases.md)
