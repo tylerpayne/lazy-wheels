@@ -30,7 +30,6 @@ from ..utils.versions import (
     find_previous_release,
     get_base_version,
     is_dev,
-    is_pre,
     make_dev,
     make_post,
     make_pre,
@@ -134,20 +133,12 @@ class ReleasePlanner:
                 f"Computed versions for {len(changed_names)} packages"
             )
 
-        # Step 4: Generate release notes
+        # Step 4: Generate release note headers (hooks can customize via post_plan)
         if self.progress:
             self.progress.update("Generating release notes")
         notes: dict[str, str] = {}
         for name in changed_names:
-            info = versioned[name]
-            version = (
-                get_base_version(info.version) if is_pre(info.version) else info.version
-            )
-            prev = find_previous_release(version, name, self.ctx.repo)
-            prev_tag = f"{name}/v{prev}" if prev else None
-            notes[name] = generate_release_notes(
-                name, info, prev_tag, repo=self.ctx.repo
-            )
+            notes[name] = generate_release_notes(name, versioned[name])
         if self.progress:
             self.progress.complete(f"Generated {len(notes)} release notes")
 

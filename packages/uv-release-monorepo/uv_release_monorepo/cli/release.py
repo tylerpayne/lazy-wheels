@@ -73,14 +73,9 @@ def _load_workflow_jobs() -> list[str]:
         return []
 
 
-_NOTES_LIMIT = 10
-
-
 def _print_plan(
     plan: ReleasePlan,
     skipped: set[str],
-    *,
-    full_notes: bool = False,
 ) -> None:
     """Print a human-readable summary of the release plan."""
 
@@ -195,26 +190,8 @@ def _print_plan(
         _section("Release Notes")
         for name, pkg in sorted(notes_packages.items()):
             print(f"  {name}")
-            lines = pkg.release_notes.strip().splitlines()
-            if full_notes:
-                for line in lines:
-                    print(f"    {line}")
-            else:
-                # Find where commits start so we always show the header lines
-                commit_start = 0
-                for i, line in enumerate(lines):
-                    if line.startswith("- "):
-                        commit_start = i
-                        break
-                header = lines[:commit_start]
-                commits = lines[commit_start:]
-                for line in header:
-                    print(f"    {line}")
-                for line in commits[:_NOTES_LIMIT]:
-                    print(f"    {line}")
-                overflow = len(commits) - _NOTES_LIMIT
-                if overflow > 0:
-                    print(f"    + {overflow} more commits (--full-release-notes)")
+            for line in pkg.release_notes.strip().splitlines():
+                print(f"    {line}")
             print()
 
     print()
@@ -273,10 +250,19 @@ def cmd_release(args: argparse.Namespace) -> None:
             check=False,
         ).stdout.strip()
         if remote and local != remote:
-            _fatal(
-                "Local HEAD differs from remote. Pull or push first:\n"
-                "  git pull --rebase && git push"
-            )
+            if allow_dirty:
+                import sys as _sys
+
+                print(
+                    "WARNING: Local HEAD differs from remote.",
+                    file=_sys.stderr,
+                )
+            else:
+                _fatal(
+                    "Local HEAD differs from remote. Pull or push first:\n"
+                    "  git pull --rebase && git push\n"
+                    "  Use --allow-dirty to proceed anyway."
+                )
 
         workflow_path = root / args.workflow_dir / "release.yml"
         if not workflow_path.exists():
@@ -384,20 +370,33 @@ def cmd_release(args: argparse.Namespace) -> None:
     if hook:
         plan = hook.post_plan(plan)
 
+    # Apply --release-notes overrides
+    for pkg_name, notes_value in getattr(args, "release_notes", None) or []:
+        if pkg_name not in plan.changed:
+            _fatal(f"--release-notes: package {pkg_name!r} is not in the release plan.")
+        if notes_value.startswith("@"):
+            from pathlib import Path as _Path
+
+            notes_path = _Path(notes_value[1:])
+            if not notes_path.exists():
+                _fatal(f"--release-notes: file not found: {notes_path}")
+            notes_text = notes_path.read_text()
+        else:
+            notes_text = notes_value
+        plan.changed[pkg_name].release_notes = notes_text
+
     # --json: print only plan JSON to stdout and exit
     if getattr(args, "json", False):
         print(plan.model_dump_json(indent=2))
         return
 
-    full_notes = getattr(args, "full_release_notes", False)
-
     # Dry run: print summary and exit
     if getattr(args, "dry_run", False):
-        _print_plan(plan, skipped, full_notes=full_notes)
+        _print_plan(plan, skipped)
         return
 
     # Print human-readable summary
-    _print_plan(plan, skipped, full_notes=full_notes)
+    _print_plan(plan, skipped)
 
     # Commit release versions and pinned deps (planner wrote them locally)
     subprocess.run(

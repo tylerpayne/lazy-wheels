@@ -225,9 +225,11 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Workflow directory (default: %(default)s).",
     )
     _out.add_argument(
-        "--full-release-notes",
-        action="store_true",
-        help="Show all commits in release notes (default: truncated to 10).",
+        "--release-notes",
+        nargs=2,
+        action="append",
+        metavar=("PKG", "NOTES"),
+        help="Set release notes for a package. NOTES is inline text or @file.",
     )
     release_parser.set_defaults(func=cmd_release)
 

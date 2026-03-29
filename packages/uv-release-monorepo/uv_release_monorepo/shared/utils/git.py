@@ -126,29 +126,10 @@ def commit_log(
 def generate_release_notes(
     name: str,
     info: PackageInfo,
-    baseline_tag: str | None,
-    *,
-    repo: pygit2.Repository | None = None,
 ) -> str:
-    """Generate markdown release notes for a single package.
+    """Generate a release header for a single package.
 
-    Args:
-        name: Package name.
-        info: Package metadata (version, path).
-        baseline_tag: Git tag to diff from (e.g. "pkg/v1.0.0"), or None.
-        repo: Pre-opened pygit2 Repository. Opened automatically if None.
-
-    Returns:
-        Markdown string with release header and commit log.
+    Returns a minimal header. Use a ``post_plan`` hook to customize
+    release notes per package (e.g. pull from CHANGELOG, write prose).
     """
-    baseline_version = baseline_tag.split("/v")[-1] if baseline_tag else None
-    lines: list[str] = [f"**Released:** {name} {info.version}"]
-    if baseline_tag:
-        if repo is None:
-            repo = open_repo()
-        entries = commit_log(repo, baseline_tag, info.path)
-        if entries:
-            lines += ["", f"**Commits since last release ({baseline_version}):**"]
-            for entry in entries:
-                lines.append(f"- {entry}")
-    return "\n".join(lines)
+    return f"**Released:** {name} {info.version}"
