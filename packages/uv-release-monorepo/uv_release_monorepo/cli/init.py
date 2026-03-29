@@ -330,6 +330,8 @@ def cmd_validate(args: argparse.Namespace) -> None:
             f"  Run `uvr init --upgrade` to update from "
             f"v{stored_version} to v{template_version}."
         )
+    elif not stored_version:
+        print("  Run `uvr init --upgrade` to track your workflow version.")
 
     # --diff: show unified diff
     if getattr(args, "diff", False) and has_diff:
