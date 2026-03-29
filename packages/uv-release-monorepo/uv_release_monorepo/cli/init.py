@@ -338,7 +338,6 @@ def cmd_validate(args: argparse.Namespace) -> None:
             )
         else:
             print("  Run `uvr validate --diff` to view differences from the template.")
-            print("  Run `uvr init --upgrade` to update from the template.")
 
     # --diff: show unified diff
     if getattr(args, "diff", False) and has_diff:
