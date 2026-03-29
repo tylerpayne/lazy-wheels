@@ -264,12 +264,26 @@ def cmd_release(args: argparse.Namespace) -> None:
         ctx = build_context(progress=progress)
         progress.update("Detecting changes")
         plan = _cli.ReleasePlanner(config, ctx).plan()
+        progress.complete(
+            f"Detected {len(plan.changed)} changed, {len(plan.unchanged)} unchanged"
+        )
     finally:
         sys.stdout = old_stdout
-    progress.finish(
-        package_count=len(ctx.packages),
-        changed_count=len(plan.changed),
+
+    # Count generated artifacts
+    stage_count = sum(len(stages) for stages in plan.build_commands.values())
+    cmd_count = (
+        len(plan.release_commands)
+        + len(plan.finalize_commands)
+        + sum(
+            len(s.setup) + sum(len(c) for c in s.packages.values()) + len(s.cleanup)
+            for stages in plan.build_commands.values()
+            for s in stages
+        )
     )
+    if plan.changed:
+        progress.complete(f"Generated {stage_count} build stages, {cmd_count} commands")
+    progress.finish()
 
     if not plan.changed:
         if getattr(args, "json", False):

@@ -24,26 +24,38 @@ def exit_fatal(msg: str) -> None:
 
 
 class Progress:
-    """Simple ASCII progress reporter that overwrites the current line."""
+    """Simple ASCII progress reporter that overwrites the current line.
+
+    While running, shows the current step on stderr (overwriting in-place).
+    On finish, prints a detailed summary with per-phase timing.
+    """
 
     def __init__(self) -> None:
         self._start = time.monotonic()
         self._step_start = self._start
-        self._steps: list[str] = []
+        self._completed: list[tuple[str, int]] = []  # (msg, ms)
 
     def update(self, msg: str) -> None:
         """Print a progress step, overwriting the previous line."""
-        self._steps.append(msg)
+        now = time.monotonic()
+        # Record timing for previous step
+        if self._completed or self._step_start != self._start:
+            pass  # timing recorded in complete()
         sys.stderr.write(f"\r  {msg}...".ljust(60))
         sys.stderr.flush()
+        self._step_start = now
+
+    def complete(self, summary: str) -> None:
+        """Record a completed step with its summary text and elapsed time."""
+        elapsed_ms = int((time.monotonic() - self._step_start) * 1000)
+        self._completed.append((summary, elapsed_ms))
         self._step_start = time.monotonic()
 
-    def finish(self, *, package_count: int, changed_count: int) -> None:
-        """Clear the progress line and print the summary."""
-        elapsed_ms = int((time.monotonic() - self._start) * 1000)
+    def finish(self) -> None:
+        """Clear the progress line and print the detailed summary."""
+        total_ms = int((time.monotonic() - self._start) * 1000)
         sys.stderr.write("\r" + " " * 60 + "\r")
         sys.stderr.flush()
-        print(
-            f"Computed changes across {package_count} packages "
-            f"({changed_count} changed) in {elapsed_ms}ms"
-        )
+        for summary, ms in self._completed:
+            print(f"  {summary} ({ms}ms)")
+        print(f"  Resolved in {total_ms}ms")
