@@ -269,11 +269,29 @@ def cmd_validate(args: argparse.Namespace) -> None:
     if not dest.exists():
         _fatal(f"No workflow found at {dest.relative_to(root)}. Run `uvr init` first.")
 
+    import difflib
     import warnings
 
     from pydantic import ValidationError
 
+    from ._common import __version__
+
     existing = _load_yaml(dest)
+    rel = dest.relative_to(root)
+
+    # Report versions
+    uvr_version = __version__
+    template_version = _latest_template_version()
+    stored_version = (root / "pyproject.toml").exists() and get_config(
+        read_pyproject(root / "pyproject.toml")
+    ).get("template_version", "")
+    print(f"  uvr version:      {uvr_version}")
+    print(f"  template version: {template_version}")
+    if stored_version:
+        print(f"  installed version: {stored_version}")
+    else:
+        print("  installed version: (unknown — run `uvr init` to set)")
+    print()
 
     # Phase 1: Structural validation via pydantic
     with warnings.catch_warnings(record=True) as caught:
@@ -281,16 +299,20 @@ def cmd_validate(args: argparse.Namespace) -> None:
         try:
             ReleaseWorkflow.model_validate(existing)
         except ValidationError as e:
-            print(f"Invalid: {dest.relative_to(root)}\n{e}")
+            print(f"Invalid: {rel}\n{e}")
             raise SystemExit(1) from None
 
     # Phase 2: Frozen-path diffing against bundled template
-    version = _latest_template_version()
-    template = _load_template_yaml(version)
+    template = _load_template_yaml(template_version)
     frozen_warnings = _check_frozen_paths(existing, template)
 
-    rel = dest.relative_to(root)
     all_warnings = [str(w.message) for w in caught] + frozen_warnings
+
+    # Check if template content differs from current file
+    fresh_text = _load_template(template_version)
+    existing_text = dest.read_text()
+    has_diff = fresh_text.rstrip() != existing_text.rstrip()
+
     if all_warnings:
         print(f"Valid: {rel} (0 errors, {len(all_warnings)} warnings)\n")
         print("Warnings:")
@@ -298,6 +320,28 @@ def cmd_validate(args: argparse.Namespace) -> None:
             print(f"  {w}")
     else:
         print(f"Valid: {rel} (0 errors, 0 warnings)")
+
+    if has_diff:
+        print()
+        if stored_version and stored_version != template_version:
+            print(
+                f"  Template updated: {stored_version} → {template_version}. "
+                "Run `uvr init --upgrade` to apply."
+            )
+        elif all_warnings:
+            print("  Run `uvr validate --diff` to view differences from the template.")
+
+    # --diff: show unified diff
+    if getattr(args, "diff", False) and has_diff:
+        print()
+        diff = difflib.unified_diff(
+            existing_text.splitlines(keepends=True),
+            fresh_text.splitlines(keepends=True),
+            fromfile=str(rel),
+            tofile=f"template (v{template_version})",
+        )
+        for line in diff:
+            print(line, end="")
 
 
 def _three_way_merge(dest: Path, base_text: str, fresh_text: str) -> tuple[str, bool]:

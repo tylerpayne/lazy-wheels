@@ -306,6 +306,11 @@ Run 'uvr <command> --help' for details on a specific command.
         default=".github/workflows",
         help="Workflow directory (default: %(default)s).",
     )
+    validate_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Show unified diff between current workflow and template.",
+    )
     validate_parser.set_defaults(func=cmd_validate)
 
     # skill (subcommand group)
