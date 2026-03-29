@@ -286,8 +286,8 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
     # Header
     print(
-        f"Validating worktree release workflow {rel} ({local_label}) "
-        f"against uvr release template (v{template_version})."
+        f"Validating worktree workflow {rel} ({local_label}) "
+        f"against uvr template (v{template_version})."
     )
     print()
 
