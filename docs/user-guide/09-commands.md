@@ -1,11 +1,11 @@
 # Command Reference
 
-## `uvr init`
+## `uvr workflow init`
 
 Scaffold the GitHub Actions release workflow.
 
 ```
-uvr init [--force | --upgrade | --base-only] [--editor EDITOR] [--workflow-dir DIR]
+uvr workflow init [--force | --upgrade | --base-only] [--editor EDITOR] [--workflow-dir DIR]
 ```
 
 | Flag | Default | Description |
@@ -33,12 +33,12 @@ uvr skill init [--force | --upgrade | --base-only] [--editor EDITOR]
 | `--base-only` | -- | Write merge bases to `.uvr/bases/` without touching actual files |
 | `--editor` | `$VISUAL` / `$EDITOR` | Editor for conflict resolution during upgrade |
 
-## `uvr validate`
+## `uvr workflow validate`
 
 Validate an existing `release.yml` against the `ReleaseWorkflow` model.
 
 ```
-uvr validate [--workflow-dir DIR]
+uvr workflow validate [--workflow-dir DIR]
 ```
 
 | Flag | Default | Description |
@@ -47,12 +47,12 @@ uvr validate [--workflow-dir DIR]
 
 Reports errors for invalid structure, warnings for modified core job fields.
 
-## `uvr runners`
+## `uvr workflow runners`
 
 Manage per-package build runners.
 
 ```
-uvr runners [PKG] [--add RUNNER | --remove RUNNER | --clear]
+uvr workflow runners [PKG] [--add RUNNER | --remove RUNNER | --clear]
 ```
 
 | Argument/Flag | Description |
@@ -131,8 +131,8 @@ uvr release [--where {ci,local}] [--dry-run] [--dev] [--plan JSON]
 | Flag | Description |
 |------|-------------|
 | `-y`, `--yes` | Skip confirmation prompt and dispatch immediately |
-| `--skip JOB` | Skip a CI job (repeatable; choices: `uvr-build`, `uvr-release`, `uvr-finalize`) |
-| `--skip-to JOB` | Skip all CI jobs before JOB (choices: `uvr-release`, `uvr-finalize`) |
+| `--skip JOB` | Skip a CI job (repeatable; choices: `uvr-build`, `uvr-release`, `uvr-bump`) |
+| `--skip-to JOB` | Skip all CI jobs before JOB (choices: `uvr-release`, `uvr-bump`) |
 | `--reuse-run RUN_ID` | Reuse artifacts from a prior workflow run |
 | `--reuse-release` | Assume GitHub releases already exist |
 
@@ -149,14 +149,6 @@ uvr release [--where {ci,local}] [--dry-run] [--dev] [--plan JSON]
 | `--json` | -- | Print the raw plan JSON |
 | `--workflow-dir` | `.github/workflows` | Directory containing the workflow file |
 
-## `uvr status`
-
-Preview the release plan. This is an alias for `uvr release --dry-run`.
-
-```
-uvr status [--workflow-dir DIR]
-```
-
 ## `uvr install`
 
 Install a workspace package and its internal dependencies from GitHub releases.
@@ -168,13 +160,13 @@ uvr install ORG/REPO/PKG[@VERSION]
 The install spec requires the three-part `org/repo/package` form. Append
 `@VERSION` to pin a specific release; otherwise the latest release is used.
 
-## `uvr wheels`
+## `uvr download`
 
 Download platform-compatible wheels from GitHub releases or CI run artifacts
 without installing them.
 
 ```
-uvr wheels ORG/REPO/PKG[@VERSION] [-o DIR] [--release-tag TAG] [--run-id ID]
+uvr download ORG/REPO/PKG[@VERSION] [-o DIR] [--release-tag TAG] [--run-id ID]
 ```
 
 | Flag | Description |

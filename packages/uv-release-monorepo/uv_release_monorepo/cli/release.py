@@ -11,7 +11,7 @@ from ._common import __version__, _fatal, _read_matrix, _resolve_plan_json
 
 # Executor pipeline phases — the order ReleaseExecutor.run() executes them.
 # These are skip-condition names (what appears in plan.skip) and YAML job keys.
-_PIPELINE = ("uvr-build", "uvr-release", "uvr-finalize")
+_PIPELINE = ("uvr-build", "uvr-release", "uvr-bump")
 
 
 def _compute_skipped(args: argparse.Namespace) -> set[str]:
@@ -121,7 +121,7 @@ def _print_plan(
     workflow_jobs = _load_workflow_jobs()
     # Ensure core jobs appear even if workflow can't be loaded
     if not workflow_jobs:
-        workflow_jobs = ["uvr-validate", "uvr-build", "uvr-release", "uvr-finalize"]
+        workflow_jobs = ["uvr-validate", "uvr-build", "uvr-release", "uvr-bump"]
 
     for job in workflow_jobs:
         if job in skipped:
@@ -172,12 +172,12 @@ def _print_plan(
                                 print(f"{_D}    {pkg.ljust(bw)}  {ver}{dep_marker}")
 
         # Release details
-        elif job == "uvr-release" and plan.release_matrix:
-            for entry in plan.release_matrix:
-                print(f"{_D}{entry['tag']}")
+        elif job == "uvr-release" and plan.changed:
+            for name, pkg in sorted(plan.changed.items()):
+                print(f"{_D}{name}/v{pkg.release_version}")
 
         # Finalize details
-        elif job == "uvr-finalize":
+        elif job == "uvr-bump":
             changed_with_bumps = {
                 n: p for n, p in plan.changed.items() if p.next_version
             }
@@ -268,7 +268,7 @@ def cmd_release(args: argparse.Namespace) -> None:
 
         workflow_path = root / args.workflow_dir / "release.yml"
         if not workflow_path.exists():
-            _fatal("No release workflow found. Run `uvr init` first.")
+            _fatal("No release workflow found. Run `uvr workflow init` first.")
 
     # Compute and validate skip/reuse
     skipped = _compute_skipped(args)

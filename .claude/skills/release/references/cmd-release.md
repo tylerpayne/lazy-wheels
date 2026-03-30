@@ -8,7 +8,7 @@ The release plan is a self-contained JSON document passed as the `plan` input to
 
 ```bash
 uvr release              # plan + dispatch to CI
-uvr release --dry-run    # preview only (same as `uvr status`)
+uvr release --dry-run    # preview only
 ```
 
 ## How versions work
@@ -56,8 +56,8 @@ uvr bump --all --post        # advance post-release number
 | Flag | Description |
 |------|-------------|
 | `-y, --yes` | Skip the confirmation prompt |
-| `--skip JOB` | Skip a CI job (repeatable). Core jobs: `build`, `release`, `finalize`. Custom jobs can also be skipped if they check the plan's skip list in their `if` condition. |
-| `--skip-to JOB` | Skip all core jobs before JOB. Choices: `release`, `finalize`. `--skip-to release` skips build; `--skip-to finalize` skips build + release. |
+| `--skip JOB` | Skip a CI job (repeatable). Core jobs: `build`, `release`, `bump`. Custom jobs can also be skipped if they check the plan's skip list in their `if` condition. |
+| `--skip-to JOB` | Skip all core jobs before JOB. Choices: `release`, `bump`. `--skip-to release` skips build; `--skip-to bump` skips build + release. |
 | `--reuse-run RUN_ID` | Reuse build artifacts from a prior workflow run. Requires `build` to be skipped. |
 | `--reuse-release` | Assume GitHub releases already exist. Requires both `build` and `release` to be skipped. |
 
@@ -88,8 +88,8 @@ uvr release -y
 # Resume after a failed build — reuse artifacts from run 12345678
 uvr release --skip-to release --reuse-run 12345678
 
-# Resume after release succeeded but finalize failed
-uvr release --skip-to finalize --reuse-release
+# Resume after release succeeded but bump failed
+uvr release --skip-to bump --reuse-release
 
 # Skip a custom job (e.g., tests you already ran locally)
 uvr release --skip checks

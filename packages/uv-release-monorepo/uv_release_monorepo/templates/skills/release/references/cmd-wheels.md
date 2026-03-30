@@ -1,11 +1,11 @@
-# `uvr wheels`
+# `uvr download`
 
 Download platform-compatible wheels from GitHub releases or CI run artifacts without installing them.
 
 ```bash
-uvr wheels ORG/REPO/PKG              # latest release
-uvr wheels ORG/REPO/PKG@1.2.3       # specific version
-uvr wheels ORG/REPO/PKG --run-id ID  # from CI artifacts
+uvr download ORG/REPO/PKG              # latest release
+uvr download ORG/REPO/PKG@1.2.3       # specific version
+uvr download ORG/REPO/PKG --run-id ID  # from CI artifacts
 ```
 
 ## Flags

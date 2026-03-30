@@ -1,4 +1,4 @@
-"""The ``uvr wheels`` command."""
+"""The ``uvr download`` command."""
 
 from __future__ import annotations
 

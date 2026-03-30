@@ -1,7 +1,7 @@
 # Build Matrix
 
 How the build matrix is expanded, how packages are grouped by runner and
-topological layer, and how `uvr build` executes builds in CI.
+topological layer, and how `uvr jobs build` executes builds in CI.
 
 See [Configure build runners](../user-guide/03-runners.md) for usage.
 
@@ -59,7 +59,7 @@ _BUILD_STRATEGY = {
 ```
 
 This creates one job per unique runner label list. The actual package-to-runner
-mapping is resolved inside each job by `uvr build --plan ... --runner ...`.
+mapping is resolved inside each job by `uvr jobs build --plan ... --runner ...`.
 
 ## `planner/_graph.py:topo_sort`
 
@@ -165,7 +165,7 @@ _generate_build_commands(changed, unchanged, release_tags)
 Invoked by the workflow as:
 
 ```
-uvr build --plan "$UVR_PLAN" --runner '${{ toJSON(matrix.runner) }}'
+uvr jobs build --plan "$UVR_PLAN" --runner '${{ toJSON(matrix.runner) }}'
 ```
 
 `ReleaseExecutor.build(runner=...)` looks up the `BuildStage` list for the

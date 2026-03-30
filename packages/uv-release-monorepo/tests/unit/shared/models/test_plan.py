@@ -89,15 +89,6 @@ class TestReleasePlan:
         data = plan.model_dump()
         assert data["build_matrix"] == [["ubuntu-latest"]]
 
-    def test_release_matrix_shape(self) -> None:
-        """release_matrix serializes as list of dicts for GHA fromJSON."""
-        plan = self._make_plan()
-        data = plan.model_dump()
-        assert len(data["release_matrix"]) == 1
-        entry = data["release_matrix"][0]
-        assert entry["package"] == "pkg-alpha"
-        assert entry["tag"] == "pkg-alpha/v0.1.5"
-
 
 class TestShellCommand:
     """Tests for ShellCommand.execute()."""

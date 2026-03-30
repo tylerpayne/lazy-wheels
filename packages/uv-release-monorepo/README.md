@@ -6,7 +6,7 @@ The missing CI release orchestrator for [uv](https://github.com/astral-sh/uv) wo
 
 ```bash
 uv tool install uv-release-monorepo
-uvr init        # generate .github/workflows/release.yml
+uvr workflow init        # generate .github/workflows/release.yml
 uvr release     # detect changes, show plan, dispatch to CI
 ```
 
@@ -14,7 +14,7 @@ uvr release     # detect changes, show plan, dispatch to CI
 
 ```bash
 # Preview what would be released
-uvr status
+uvr release --dry-run
 
 # Release to CI (default)
 uvr release
@@ -51,9 +51,9 @@ uvr release --skip build --reuse-run 12345    # reuse artifacts from run 12345
 ## Managing runners
 
 ```bash
-uvr runners                        # show all package runners
-uvr runners my-pkg --add macos-14  # add a build runner
-uvr runners my-pkg --clear         # reset to default (ubuntu-latest)
+uvr workflow runners                        # show all package runners
+uvr workflow runners my-pkg --add macos-14  # add a build runner
+uvr workflow runners my-pkg --clear         # reset to default (ubuntu-latest)
 ```
 
 ## Installing from releases
@@ -66,9 +66,9 @@ uvr install myorg/myrepo/my-pkg@1.2.3     # specific version
 ## Downloading wheels
 
 ```bash
-uvr wheels myorg/myrepo/my-pkg                  # latest release
-uvr wheels myorg/myrepo/my-pkg -o wheels/       # save to custom dir
-uvr wheels myorg/myrepo/my-pkg --run-id 12345   # from CI artifacts
+uvr download myorg/myrepo/my-pkg                  # latest release
+uvr download myorg/myrepo/my-pkg -o wheels/       # save to custom dir
+uvr download myorg/myrepo/my-pkg --run-id 12345   # from CI artifacts
 ```
 
 ## Hooks
@@ -95,17 +95,17 @@ file = "uvr_hooks.py"          # default class: Hook
 
 Or just drop a `uvr_hooks.py` with a `Hook` class at the workspace root — it's discovered automatically.
 
-**Hook points:** `pre_plan` / `post_plan` (local), `pre_build` / `post_build`, `pre_build_stage` / `post_build_stage`, `pre_build_package` / `post_build_package`, `pre_release` / `post_release`, `pre_finalize` / `post_finalize` (CI).
+**Hook points:** `pre_plan` / `post_plan` (local), `pre_build` / `post_build`, `pre_build_stage` / `post_build_stage`, `pre_build_package` / `post_build_package`, `pre_release` / `post_release`, `pre_bump` / `post_bump` (CI).
 
 ## How it works
 
 `uvr release` scans your workspace, diffs each package against its last baseline tag, walks the dependency graph, and builds a plan containing every shell command needed for the release. It dispatches this plan to GitHub Actions, which runs eight jobs:
 
 ```
-validate-plan → build → release → finalize
+validate → build → release → bump
 ```
 
-Hook jobs (pre-build, post-build, pre-release, post-release) are no-ops by default — edit `release.yml` directly to add tests, linting, PyPI publish, or notifications.
+Hook jobs (pre-build, post-build, pre-release, post-release) are no-ops by default — edit `release.yml` directly to add tests, linting, PyPI publish, or notifications. Release assets are uploaded via `gh release create`.
 
 ## Documentation
 

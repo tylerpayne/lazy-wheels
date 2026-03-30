@@ -3,7 +3,7 @@
 The `ReleasePlan` model is the single artifact passed from the local CLI to CI.
 It encodes everything the executor needs with zero git access.
 
-See [How it works](../user-guide/09-architecture.md) and [Skip jobs and reuse artifacts](../user-guide/06-skip-reuse.md) for usage.
+See [How it works](08-architecture.md) and [Skip jobs and reuse artifacts](../user-guide/08-troubleshooting.md) for usage.
 
 ## Source files
 
@@ -30,9 +30,8 @@ See [How it works](../user-guide/09-architecture.md) and [Skip jobs and reuse ar
 | `reuse_run_id` | `str` | If non-empty, download artifacts from this workflow run instead of building. |
 | `build_commands` | `dict[RunnerKey, list[BuildStage]]` | Pre-computed build command stages keyed by runner (JSON-serialized runner list). See below. |
 | `release_commands` | `list[PlanCommand]` | Pre-computed release commands (local execution only; empty for CI). |
-| `finalize_commands` | `list[PlanCommand]` | Pre-computed finalize commands (tag, bump, commit, push). |
+| `bump_commands` | `list[PlanCommand]` | Pre-computed bump commands (tag, bump, commit, push). |
 | `build_matrix` | `list[list[str]]` | **Computed field.** Unique runner label sets across all changed packages. Drives the workflow's `strategy.matrix.runner`. |
-| `release_matrix` | `list[dict[str, Any]]` | **Computed field.** One entry per changed package with tag, title, body, dist name, make_latest. Drives the release job's `strategy.matrix.include`. |
 
 ## Sub-models
 

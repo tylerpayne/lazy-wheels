@@ -39,8 +39,8 @@ class TestReleaseHookBase:
         assert hook.post_build(plan) is None
         assert hook.pre_release(plan) is None
         assert hook.post_release(plan) is None
-        assert hook.pre_finalize(plan) is None
-        assert hook.post_finalize(plan) is None
+        assert hook.pre_bump(plan) is None
+        assert hook.post_bump(plan) is None
 
 
 # -- load_hook ---------------------------------------------------------------

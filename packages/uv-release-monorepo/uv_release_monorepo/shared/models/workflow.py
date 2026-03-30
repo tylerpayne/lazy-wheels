@@ -160,8 +160,8 @@ class ReleaseJob(Job):
     _validate_needs = _needs_validator("uvr-build")
 
 
-class FinalizeJob(Job):
-    """The finalize job."""
+class BumpJob(Job):
+    """The bump job (post-release version bumps + baseline tags)."""
 
     if_condition: Annotated[str | None, Frozen] = Field(alias="if")
     steps: Annotated[list[dict], Frozen]
@@ -183,7 +183,7 @@ class WorkflowJobs(BaseModel):
     )
     uvr_build: BuildJob = Field(default_factory=BuildJob, alias="uvr-build")
     uvr_release: ReleaseJob = Field(default_factory=ReleaseJob, alias="uvr-release")
-    uvr_finalize: FinalizeJob = Field(default_factory=FinalizeJob, alias="uvr-finalize")
+    uvr_bump: BumpJob = Field(default_factory=BumpJob, alias="uvr-bump")
 
 
 class ReleaseWorkflow(BaseModel):

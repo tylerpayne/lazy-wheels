@@ -22,13 +22,13 @@ build:
   # ... (rest of build job unchanged)
 ```
 
-## Running actions after finalize
+## Running actions after bump
 
 For example, publishing to PyPI:
 
 ```yaml
 pypi-publish:
-  needs: [finalize]
+  needs: [bump]
   runs-on: ubuntu-latest
   if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'pypi-publish') }}
   environment: pypi
@@ -40,5 +40,5 @@ pypi-publish:
 
 - **Use the skip mechanism.** Add `if: ${{ !contains(fromJSON(inputs.plan).skip, '<job-name>') }}` so the job can be skipped at release time with `uvr release --skip <job-name>`.
 - **Gate core jobs via `needs`.** If your custom job should block a core job, add it to that core job's `needs` list.
-- **Run `uvr validate`** after editing to check for schema errors.
+- **Run `uvr workflow validate`** after editing to check for schema errors.
 - **Use `always() && !failure() && !cancelled()`** in the `if` condition for jobs that follow skippable jobs. Without this, a skipped upstream job causes the downstream job to be skipped too.

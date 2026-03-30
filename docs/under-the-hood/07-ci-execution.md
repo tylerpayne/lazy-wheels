@@ -1,19 +1,19 @@
 # CI Execution
 
-How `uvr build` and `uvr finalize` dispatch pre-computed commands in GitHub
+How `uvr jobs build` and `uvr jobs bump` dispatch pre-computed commands in GitHub
 Actions, and what each CI job does.
 
-See [How it works](../user-guide/09-architecture.md) for the high-level flow.
+See [How it works](08-architecture.md) for the high-level flow.
 
 ## Source files
 
 | Module | Key symbols |
 |--------|-------------|
-| `executor.py` | `ReleaseExecutor` (`build`, `release`, `finalize`, `run`, `_run_stage`, `_run_commands`) |
+| `executor.py` | `ReleaseExecutor` (`build`, `release`, `bump`, `run`, `_run_stage`, `_run_commands`) |
 | `models/plan.py` | `BuildStage`, `PlanCommand` |
-| `models/workflow.py` | `_BUILD_STEPS`, `_RELEASE_STEPS`, `_FINALIZE_STEPS`, `_CHECKOUT_STEP`, `_SETUP_UV_STEP`, `_SETUP_PYTHON_STEP`, `_EXPORT_PLAN_STEP` |
-| `planner/_planner.py` | `ReleasePlanner` (`_generate_build_commands`, `_generate_release_commands`, `_generate_finalize_commands`) |
-| `cli/__init__.py` | `_cmd_build`, `_cmd_finalize` (CLI wiring) |
+| `models/workflow.py` | `_BUILD_STEPS`, `_RELEASE_STEPS`, `_BUMP_STEPS`, `_CHECKOUT_STEP`, `_SETUP_UV_STEP`, `_SETUP_PYTHON_STEP`, `_EXPORT_PLAN_STEP` |
+| `planner/_planner.py` | `ReleasePlanner` (`_generate_build_commands`, `_generate_release_commands`, `_generate_bump_commands`) |
+| `cli/__init__.py` | `_cmd_build`, `_cmd_bump` (CLI wiring) |
 
 ## The `uvr` CLI entry point
 
@@ -22,8 +22,8 @@ are used by CI:
 
 | Subcommand | Handler | Arguments |
 |------------|---------|-----------|
-| `build` | `_cmd_build` | `--plan`, `--runner` |
-| `finalize` | `_cmd_finalize` | `--plan` |
+| `jobs build` | `_cmd_build` | `--plan`, `--runner` |
+| `jobs bump` | `_cmd_bump` | `--plan` |
 
 Both handlers deserialize the plan with `ReleasePlan.model_validate_json(plan)`
 and delegate to `ReleaseExecutor`.
@@ -33,9 +33,9 @@ def _cmd_build(a):
     plan = ReleasePlan.model_validate_json(a.plan)
     ReleaseExecutor(plan).build(runner=a.runner)
 
-def _cmd_finalize(a):
+def _cmd_bump(a):
     plan = ReleasePlan.model_validate_json(a.plan)
-    ReleaseExecutor(plan).finalize()
+    ReleaseExecutor(plan).bump()
 ```
 
 ## The `fromJSON(inputs.plan)` pattern
@@ -59,9 +59,9 @@ ${{ fromJSON(inputs.plan).field_name }}
 ```
 
 This is used for:
-- **Job `if` conditions**: `!contains(fromJSON(inputs.plan).skip, 'uvr-build')`
+- **Job `if` conditions**: `!contains(fromJSON(inputs.plan).skip, 'uvr-bump')`
 - **Build matrix**: `strategy.matrix.runner: ${{ fromJSON(inputs.plan).build_matrix }}`
-- **Release matrix**: `strategy.matrix.include: ${{ fromJSON(inputs.plan).release_matrix }}`
+- **Release commands**: release is now handled by `uvr jobs release` via `PublishGithubReleaseCommand`
 - **Python version**: `uv python install ${{ fromJSON(inputs.plan).python_version }}`
 - **uvr install spec**: `uv tool install ${{ fromJSON(inputs.plan).uvr_install }}`
 
@@ -75,7 +75,7 @@ to construct these expressions in Python without repeating the full string.
 Every job that runs uvr commands uses these steps:
 
 1. **`_CHECKOUT_STEP`**: `actions/checkout@v4` with `fetch-depth: 0` (full
-   history needed for git tags and diffs during finalize).
+   history needed for git tags and diffs during bump).
 
 2. **`_SETUP_UV_STEP`**: `astral-sh/setup-uv@v5` to install the `uv` tool.
 
@@ -89,7 +89,7 @@ Every job that runs uvr commands uses these steps:
 2. Setup uv
 3. Setup Python + install uvr
 4. Build packages:
-     uvr build --plan "$UVR_PLAN" --runner '${{ toJSON(matrix.runner) }}'
+     uvr jobs build --plan "$UVR_PLAN" --runner '${{ toJSON(matrix.runner) }}'
 5. Upload artifact:
      actions/upload-artifact@v4 -> wheels-${{ join(matrix.runner, '-') }}
 ```
@@ -104,49 +104,46 @@ uploads its own artifact. The release job later downloads all of them with
 ### Release job (`_RELEASE_STEPS`)
 
 ```
-1. Download artifacts:
+1. Checkout (full history)
+2. Setup uv
+3. Setup Python + install uvr
+4. Download artifacts:
      actions/download-artifact@v4
        pattern: wheels-*
        merge-multiple: true
        run-id: <plan.reuse_run_id or github.run_id>
-2. Create GitHub release:
-     softprops/action-gh-release@v2
-       tag_name: ${{ matrix.tag }}
-       name: ${{ matrix.title }}
-       body: ${{ matrix.body }}
-       files: ${{ matrix.dist_name }}-${{ matrix.version }}*.whl
-       make_latest: ${{ matrix.make_latest }}
+5. Publish GitHub releases:
+     uvr jobs release --plan "$UVR_PLAN"
 ```
 
-The release job runs as a matrix over `plan.release_matrix`. Each entry provides
-the tag, title, body, and dist name. The `files` glob matches only the wheels
-for that specific package. No `uvr` command is invoked -- the
-`softprops/action-gh-release` action handles publishing directly.
+The release job invokes `uvr jobs release`, which runs `PublishGithubReleaseCommand`
+to create GitHub releases via `gh release create`. Each changed package gets its
+own release with the appropriate tag, title, body, and attached wheel files.
 
 The `run-id` expression handles artifact reuse:
 ```
 ${{ fromJSON(inputs.plan).reuse_run_id != '' && fromJSON(inputs.plan).reuse_run_id || github.run_id }}
 ```
 
-### Finalize job (`_FINALIZE_STEPS`)
+### Bump job (`_BUMP_STEPS`)
 
 ```
 1. Checkout (full history)
 2. Setup uv
 3. Setup Python + install uvr
-4. Finalize:
-     uvr finalize --plan "$UVR_PLAN"
+4. Bump:
+     uvr jobs bump --plan "$UVR_PLAN"
 ```
 
-## `ReleaseExecutor.finalize()` -- the finalize phase
+## `ReleaseExecutor.bump()` -- the bump phase
 
-`ReleaseExecutor.finalize()` calls `_run_commands()` on the pre-computed
-`plan.finalize_commands` list. These commands are generated by
-`ReleasePlanner._generate_finalize_commands()` at plan time. The executor
+`ReleaseExecutor.bump()` calls `_run_commands()` on the pre-computed
+`plan.bump_commands` list. These commands are generated by
+`ReleasePlanner._generate_bump_commands()` at plan time. The executor
 contains no domain logic -- it just runs `subprocess.run()` on each
 `PlanCommand`.
 
-The finalize command list performs these steps in order:
+The bump command list performs these steps in order:
 
 1. **Configure git identity** (when `ci_publish=True`):
    ```
@@ -155,14 +152,14 @@ The finalize command list performs these steps in order:
    ```
 
 2. **Tag releases** (when `ci_publish=False` only): creates `{name}/v{version}`
-   tags. In CI mode, the `softprops/action-gh-release` action already created
-   the tags during the release step.
+   tags. In CI mode, `gh release create` (via `PublishGithubReleaseCommand`)
+   already created the tags during the release step.
 
 3. **Apply version bumps**: runs `uv version {next_version} --directory {path}`
    for each changed package, writing the next `.devN` version.
 
-4. **Pin internal deps**: runs `uvr pin-deps --path {pyproject} DEP>=VER` for
-   each package with internal dependencies, pinning to just-published versions.
+4. **Pin internal deps**: runs `PinDepsCommand` for each package with internal
+   dependencies, pinning to just-published versions.
 
 5. **Sync and commit**: runs `uv sync --all-groups --all-extras`, stages
    modified `pyproject.toml` files and `uv.lock`, and commits with message
@@ -180,8 +177,8 @@ The finalize command list performs these steps in order:
 ### Data flow
 
 ```
-ReleaseExecutor.finalize()
-  -> _run_commands(plan.finalize_commands)
+ReleaseExecutor.bump()
+  -> _run_commands(plan.bump_commands)
   -> for each PlanCommand:
        subprocess.run(cmd.args)
        (abort on failure if cmd.check is True)
@@ -190,11 +187,11 @@ ReleaseExecutor.finalize()
 The commands themselves (generated at plan time):
 
 ```
-_generate_finalize_commands(changed, published_versions)
+_generate_bump_commands(changed, published_versions)
   -> (if ci_publish) git config identity
   -> (if !ci_publish) git tag {name}/v{version} for each changed package
   -> uv version {next_version} for each changed package
-  -> uvr pin-deps for each package with internal deps
+  -> PinDepsCommand for each package with internal deps
   -> uv sync --all-groups --all-extras
   -> git add {pyproject files} uv.lock
   -> git commit -m "chore: prepare next release"
@@ -223,7 +220,7 @@ See [Build matrix](04-build-matrix.md) for the full algorithm. Key points:
 def run(self) -> None:
     self.build()
     self.release()
-    self.finalize()
+    self.bump()
 ```
 
 This is the code path used by `uvr release --where local` and
@@ -253,7 +250,7 @@ stages. These appear in `release.yml` between the core jobs:
 | `pre-build` | (start) and `build` | lint + typecheck + test |
 | `post-build` | `build` and `release` | no-op |
 | `pre-release` | `post-build` and `release` | no-op |
-| `post-release` | `finalize` and (end) | PyPI publish for `uv-release-monorepo` |
+| `post-release` | `bump` and (end) | PyPI publish for `uv-release-monorepo` |
 
 Hook jobs are user-editable. They can be skipped via the plan's `skip` list
 (e.g., `--skip pre-build`).

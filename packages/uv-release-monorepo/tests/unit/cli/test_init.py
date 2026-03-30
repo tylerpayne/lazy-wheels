@@ -30,7 +30,7 @@ class TestInit:
         text = workflow.read_text()
         assert "uvr-build:" in text
         assert "uvr-release:" in text
-        assert "uvr-finalize:" in text
+        assert "uvr-bump:" in text
 
     def test_init_workflow_has_plan_input(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -122,7 +122,7 @@ def _git_commit_wf(wf: Path) -> None:
 
 
 class TestUpgrade:
-    """Tests for uvr init --upgrade."""
+    """Tests for uvr workflow init --upgrade."""
 
     def test_no_workflow_exits(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -68,23 +68,14 @@ usage: uvr [-h] [--version] <command> ...
 Lazy monorepo wheel builder — only rebuilds what changed.
 
 Commands:
-  release       Plan and execute a release (locally or via CI)
-  bump          Bump package versions in the workspace
-  status        Preview the release plan (alias for release --dry-run)
-  runners       Manage per-package build runners
-  install       Install a package from GitHub releases (org/repo/pkg)
-  wheels        Download wheels from GitHub releases or CI artifacts
-  init          Scaffold the GitHub Actions workflow
-  validate      Validate an existing release.yml
-  skill init    Copy Claude Code skills into your project
-
-CI steps (used by the release workflow):
-  validate-plan Validate and pretty-print the release plan
-  build         Build packages for a runner
-  finalize      Tag, bump versions, commit, and push
-
-Low-level:
-  pin-deps      Pin internal dependency versions in pyproject.toml
+  release          Plan and execute a release (locally or via CI)
+  bump             Bump package versions in the workspace
+  install          Install a package from GitHub releases (org/repo/pkg)
+  download         Download wheels from GitHub releases or CI artifacts
+  workflow init    Scaffold the GitHub Actions workflow
+  workflow validate  Validate an existing release.yml
+  workflow runners Manage per-package build runners
+  skill init       Copy Claude Code skills into your project
 
 Options:
   -h, --help    Show this help message and exit
@@ -257,42 +248,6 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     release_parser.set_defaults(func=cmd_release)
 
-    # status (alias for release --dry-run)
-    def _cmd_status(a: argparse.Namespace) -> None:
-        a.where = "ci"
-        a.dry_run = True
-        a.plan = None
-        a.rebuild_all = getattr(a, "rebuild_all", False)
-        a.allow_dirty = getattr(a, "allow_dirty", False)
-        a.yes = False
-        a.no_push = False
-        a.python_version = "3.12"
-        a.skip = None
-        a.skip_to = None
-        a.reuse_run = None
-        a.reuse_release = False
-        a.json = False
-        a.release_type = None
-        cmd_release(a)
-
-    status_parser = subparsers.add_parser("status", help=_H)
-    status_parser.add_argument(
-        "--workflow-dir",
-        default=".github/workflows",
-        help="Workflow directory (default: %(default)s).",
-    )
-    status_parser.add_argument(
-        "--allow-dirty",
-        action="store_true",
-        help="Proceed even if the working tree has uncommitted changes.",
-    )
-    status_parser.add_argument(
-        "--rebuild-all",
-        action="store_true",
-        help="Show plan as if all packages changed.",
-    )
-    status_parser.set_defaults(func=_cmd_status)
-
     # bump
     bump_parser = subparsers.add_parser(
         "bump",
@@ -380,21 +335,6 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     bump_parser.set_defaults(func=cmd_bump)
 
-    # runners
-    runners_parser = subparsers.add_parser("runners", help=_H)
-    runners_parser.add_argument(
-        "package",
-        nargs="?",
-        default=None,
-        metavar="PKG",
-        help="Package name (omit to show all).",
-    )
-    _rmut = runners_parser.add_mutually_exclusive_group()
-    _rmut.add_argument("--add", dest="add_value", metavar="RUNNER")
-    _rmut.add_argument("--remove", dest="remove_value", metavar="RUNNER")
-    _rmut.add_argument("--clear", action="store_true")
-    runners_parser.set_defaults(func=cmd_runners)
-
     # install
     install_parser = subparsers.add_parser("install", help=_H)
     install_parser.add_argument(
@@ -403,38 +343,54 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     install_parser.set_defaults(func=cmd_install)
 
-    # wheels
-    wheels_parser = subparsers.add_parser("wheels", help=_H)
-    wheels_parser.add_argument(
+    # download (was wheels)
+    download_parser = subparsers.add_parser("download", help=_H)
+    download_parser.add_argument(
         "package",
         help="Install spec: ORG/REPO/PKG[@VERSION]",
     )
-    wheels_parser.add_argument(
+    download_parser.add_argument(
         "--release-tag",
         default=None,
         help="Download from a GitHub release tag.",
     )
-    wheels_parser.add_argument(
+    download_parser.add_argument(
         "--run-id",
         default=None,
         help="Download from a GitHub Actions run's artifacts.",
     )
-    wheels_parser.add_argument(
+    download_parser.add_argument(
         "-o",
         "--output",
         default="dist",
         help="Directory to save wheels into (default: dist/).",
     )
-    wheels_parser.set_defaults(func=cmd_wheels)
+    download_parser.set_defaults(func=cmd_wheels)
 
-    # init
-    init_parser = subparsers.add_parser("init", help=_H)
-    init_parser.add_argument(
+    # -- workflow (init, validate, runners) ---------------------------------
+
+    workflow_parser = subparsers.add_parser(
+        "workflow",
+        help=_H,
+        description="Manage the release workflow and build runners.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    workflow_sub = workflow_parser.add_subparsers(
+        dest="workflow_command", required=True, title=argparse.SUPPRESS, metavar=""
+    )
+
+    # workflow init
+    wf_init_parser = workflow_sub.add_parser(
+        "init",
+        help="Scaffold the GitHub Actions workflow.",
+        description=("Scaffold or upgrade the release.yml workflow file."),
+    )
+    wf_init_parser.add_argument(
         "--workflow-dir",
         default=".github/workflows",
         help="Directory to write the workflow file (default: %(default)s).",
     )
-    _init_mut = init_parser.add_mutually_exclusive_group()
+    _init_mut = wf_init_parser.add_mutually_exclusive_group()
     _init_mut.add_argument(
         "--force",
         action="store_true",
@@ -450,7 +406,7 @@ Run 'uvr <command> --help' for details on a specific command.
         action="store_true",
         help="Write merge bases to .uvr/bases/ without touching actual files.",
     )
-    init_parser.add_argument(
+    wf_init_parser.add_argument(
         "--editor",
         help="Editor to use for conflict resolution (e.g. 'code', 'vim').",
     )
@@ -461,21 +417,40 @@ Run 'uvr <command> --help' for details on a specific command.
         else:
             cmd_init(a)
 
-    init_parser.set_defaults(func=_cmd_init_dispatch)
+    wf_init_parser.set_defaults(func=_cmd_init_dispatch)
 
-    # validate
-    validate_parser = subparsers.add_parser("validate", help=_H)
-    validate_parser.add_argument(
+    # workflow validate
+    wf_validate_parser = workflow_sub.add_parser(
+        "validate", help="Validate an existing release.yml."
+    )
+    wf_validate_parser.add_argument(
         "--workflow-dir",
         default=".github/workflows",
         help="Workflow directory (default: %(default)s).",
     )
-    validate_parser.add_argument(
+    wf_validate_parser.add_argument(
         "--diff",
         action="store_true",
         help="Show unified diff between current workflow and template.",
     )
-    validate_parser.set_defaults(func=cmd_validate)
+    wf_validate_parser.set_defaults(func=cmd_validate)
+
+    # workflow runners
+    wf_runners_parser = workflow_sub.add_parser(
+        "runners", help="Manage per-package build runners."
+    )
+    wf_runners_parser.add_argument(
+        "package",
+        nargs="?",
+        default=None,
+        metavar="PKG",
+        help="Package name (omit to show all).",
+    )
+    _rmut = wf_runners_parser.add_mutually_exclusive_group()
+    _rmut.add_argument("--add", dest="add_value", metavar="RUNNER")
+    _rmut.add_argument("--remove", dest="remove_value", metavar="RUNNER")
+    _rmut.add_argument("--clear", action="store_true")
+    wf_runners_parser.set_defaults(func=cmd_runners)
 
     # skill (subcommand group)
     skill_parser = subparsers.add_parser(
@@ -521,7 +496,17 @@ Run 'uvr <command> --help' for details on a specific command.
 
     skill_init_parser.set_defaults(func=_cmd_skill_dispatch)
 
-    # -- CI steps ------------------------------------------------------
+    # -- jobs (CI steps + low-level) --------------------------------------
+
+    jobs_parser = subparsers.add_parser(
+        "jobs",
+        help=_H,
+        description="CI workflow steps and low-level commands.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    jobs_sub = jobs_parser.add_subparsers(
+        dest="jobs_command", required=True, title=argparse.SUPPRESS, metavar=""
+    )
 
     def _cmd_validate_plan(a: argparse.Namespace) -> None:
         import json
@@ -529,7 +514,9 @@ Run 'uvr <command> --help' for details on a specific command.
         plan = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
         print(json.dumps(plan.model_dump(mode="json"), indent=2))
 
-    vp_parser = subparsers.add_parser("validate-plan", help=_H)
+    vp_parser = jobs_sub.add_parser(
+        "validate", help="Validate and pretty-print the release plan."
+    )
     vp_parser.add_argument(
         "--plan",
         default=None,
@@ -545,7 +532,7 @@ Run 'uvr <command> --help' for details on a specific command.
         hook = load_hook(Path.cwd())
         ReleaseExecutor(plan_obj, hook).build(runner=a.runner)
 
-    build_parser = subparsers.add_parser("build", help=_H)
+    build_parser = jobs_sub.add_parser("build", help="Build packages for a runner.")
     build_parser.add_argument(
         "--plan",
         default=None,
@@ -554,41 +541,41 @@ Run 'uvr <command> --help' for details on a specific command.
     build_parser.add_argument("--runner", required=True)
     build_parser.set_defaults(func=_cmd_build)
 
-    def _cmd_finalize(a: argparse.Namespace) -> None:
+    def _cmd_release(a: argparse.Namespace) -> None:
         from pathlib import Path
         from ..shared.hooks import load_hook
 
         plan_obj = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
         hook = load_hook(Path.cwd())
-        ReleaseExecutor(plan_obj, hook).finalize()
+        ReleaseExecutor(plan_obj, hook).publish()
 
-    finalize_parser = subparsers.add_parser("finalize", help=_H)
-    finalize_parser.add_argument(
+    release_job_parser = jobs_sub.add_parser(
+        "release", help="Tag, create GitHub releases, and push release tags."
+    )
+    release_job_parser.add_argument(
         "--plan",
         default=None,
         help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
     )
-    finalize_parser.set_defaults(func=_cmd_finalize)
+    release_job_parser.set_defaults(func=_cmd_release)
 
-    # -- Low-level -----------------------------------------------------
-
-    def _cmd_pin_deps(a: argparse.Namespace) -> None:
+    def _cmd_bump(a: argparse.Namespace) -> None:
         from pathlib import Path
-        from ..shared.utils.dependencies import pin_dependencies
+        from ..shared.hooks import load_hook
 
-        versions: dict[str, str] = {}
-        for spec in a.specs:
-            for sep in (">=", "=="):
-                if sep in spec:
-                    name, ver = spec.split(sep, 1)
-                    versions[name.strip()] = ver.strip()
-                    break
-        pin_dependencies(Path(a.path), versions)
+        plan_obj = ReleasePlan.model_validate_json(_resolve_plan_json(a.plan))
+        hook = load_hook(Path.cwd())
+        ReleaseExecutor(plan_obj, hook).bump()
 
-    pd_parser = subparsers.add_parser("pin-deps", help=_H)
-    pd_parser.add_argument("--path", required=True)
-    pd_parser.add_argument("specs", nargs="+")
-    pd_parser.set_defaults(func=_cmd_pin_deps)
+    bump_job_parser = jobs_sub.add_parser(
+        "bump", help="Bump versions, commit, baseline tags, and push."
+    )
+    bump_job_parser.add_argument(
+        "--plan",
+        default=None,
+        help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
+    )
+    bump_job_parser.set_defaults(func=_cmd_bump)
 
     args = parser.parse_args()
     args.func(args)

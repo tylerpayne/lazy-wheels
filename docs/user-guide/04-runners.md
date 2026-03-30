@@ -5,27 +5,27 @@ By default every package builds on `ubuntu-latest`. If a package needs native co
 ## Add a runner
 
 ```bash
-uvr runners my-native-pkg --add macos-14
-uvr runners my-native-pkg --add windows-latest
+uvr workflow runners my-native-pkg --add macos-14
+uvr workflow runners my-native-pkg --add windows-latest
 ```
 
 ## Remove a runner
 
 ```bash
-uvr runners my-native-pkg --remove windows-latest
+uvr workflow runners my-native-pkg --remove windows-latest
 ```
 
 ## Clear all runners for a package
 
 ```bash
-uvr runners my-native-pkg --clear
+uvr workflow runners my-native-pkg --clear
 ```
 
 ## View current configuration
 
 ```bash
-uvr runners             # all packages
-uvr runners my-pkg      # one package
+uvr workflow runners             # all packages
+uvr workflow runners my-pkg      # one package
 ```
 
 ## Where runners are stored

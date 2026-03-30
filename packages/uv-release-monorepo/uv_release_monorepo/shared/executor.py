@@ -65,17 +65,17 @@ class ReleaseExecutor:
         self._run_commands_or_exit(self.plan.release_commands)
         self.hook.post_release(self.plan)
 
-    def finalize(self) -> None:
-        """Run finalize commands."""
-        self.hook.pre_finalize(self.plan)
-        self._run_commands_or_exit(self.plan.finalize_commands)
-        self.hook.post_finalize(self.plan)
+    def bump(self) -> None:
+        """Run bump commands (version bumps, baseline tags, push)."""
+        self.hook.pre_bump(self.plan)
+        self._run_commands_or_exit(self.plan.bump_commands)
+        self.hook.post_bump(self.plan)
 
     def run(self) -> None:
-        """Execute all phases: build -> publish -> finalize."""
+        """Execute all phases: build -> publish -> bump."""
         self.build()
         self.publish()
-        self.finalize()
+        self.bump()
 
     def _run_packages(self, stage: BuildStage) -> None:
         """Run package builds, parallelising across packages."""

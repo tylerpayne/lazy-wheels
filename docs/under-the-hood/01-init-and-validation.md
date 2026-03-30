@@ -1,6 +1,6 @@
 # Init and Validation
 
-How `uvr init` scaffolds the workflow and `uvr validate` checks it.
+How `uvr workflow init` scaffolds the workflow and `uvr workflow validate` checks it.
 
 See [Set up your first release](../user-guide/01-setup.md) for usage.
 
@@ -12,7 +12,7 @@ See [Set up your first release](../user-guide/01-setup.md) for usage.
 | `models.py` | `ReleaseWorkflow`, all job classes, `_frozen`, `_NOOP_STEPS` |
 | `cli/_yaml.py` | `_load_yaml`, `_write_yaml` |
 
-## `uvr init` -- `cli/init.py:cmd_init`
+## `uvr workflow init` -- `cli/init.py:cmd_init`
 
 1. **Sanity checks.** Verifies the CWD is a git repo and contains a `pyproject.toml`
    with `[tool.uv.workspace].members` defined. Exits with a descriptive error if any
@@ -27,7 +27,7 @@ See [Set up your first release](../user-guide/01-setup.md) for usage.
    it through `_write_yaml` (ruamel.yaml, preserves ordering).
 
 4. **Respects `--force`.** If `release.yml` already exists and `--force` is not set,
-   `cmd_init` exits with an error pointing the user to `uvr validate`.
+   `cmd_init` exits with an error pointing the user to `uvr workflow validate`.
 
 ### Data flow
 
@@ -38,7 +38,7 @@ cmd_init
   -> _write_yaml(dest, dict)     # ruamel.yaml -> .github/workflows/release.yml
 ```
 
-## `uvr validate` -- `cli/init.py:cmd_validate`
+## `uvr workflow validate` -- `cli/init.py:cmd_validate`
 
 1. **Loads existing YAML.** Reads `.github/workflows/release.yml` with `_load_yaml`.
 
@@ -80,12 +80,12 @@ Fields protected by `_frozen`:
 | `ReleaseJob` | `if_condition` | `_RELEASE_IF` |
 | `ReleaseJob` | `strategy` | `_RELEASE_STRATEGY` |
 | `ReleaseJob` | `steps` | `_RELEASE_STEPS` |
-| `FinalizeJob` | `if_condition` | `_FINALIZE_IF` |
-| `FinalizeJob` | `steps` | `_FINALIZE_STEPS` |
+| `BumpJob` | `if_condition` | `_BUMP_IF` |
+| `BumpJob` | `steps` | `_BUMP_STEPS` |
 
 These fields are "frozen" because their values contain `fromJSON(inputs.plan)` expressions
 that the CI executor depends on. Changing them will silently break the pipeline. The
-warning is non-fatal because `uvr validate` is advisory -- it tells the user what they
+warning is non-fatal because `uvr workflow validate` is advisory -- it tells the user what they
 broke without blocking them.
 
 ### The `_normalize_on_key` model validator

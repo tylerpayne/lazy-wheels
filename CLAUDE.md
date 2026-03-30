@@ -22,7 +22,7 @@ uv run poe fix             # lintfix + format
 uv run poe check           # lint + typecheck
 uv run poe test            # Run tests
 uv run poe all             # fix + check + test
-uvr status                 # Show release status and changed packages
+uvr release --dry-run      # Show release status and changed packages
 uvr release                # Generate plan, prompt, dispatch to GitHub Actions
 ```
 

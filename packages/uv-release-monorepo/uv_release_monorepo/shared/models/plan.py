@@ -11,7 +11,6 @@ import subprocess
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Protocol, Union
 
-from packaging.utils import canonicalize_name
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -47,11 +46,6 @@ RunnerKey = Annotated[
 Accepts JSON strings (``'["ubuntu-latest"]'``), lists, or tuples on input.
 Serializes back to a JSON string for use as a dict key in JSON output.
 """
-
-
-def _dist_name(name: str) -> str:
-    """Convert a package name to its wheel/dist filename stem."""
-    return canonicalize_name(name).replace("-", "_")
 
 
 # ---------------------------------------------------------------------------
@@ -331,11 +325,114 @@ class FetchRunArtifactsCommand(BaseModel):
         return subprocess.CompletedProcess(args=[], returncode=0)
 
 
+class PublishGithubReleaseCommand(BaseModel):
+    """Create a GitHub release and upload matching wheel files.
+
+    At execution time, resolves ``dist_pattern`` via ``glob.glob()`` to find
+    built wheels, then creates a GitHub release with ``gh release create``.
+    Uses ``--target`` with the current HEAD SHA so the release tag points to
+    the correct commit even if it hasn't been pushed yet.
+
+    Attributes:
+        type: Discriminator for the command union.
+        tag: Release tag (e.g. ``"pkg-alpha/v1.0.0"``).
+        title: Human-readable release title.
+        notes: Markdown release notes body.
+        dist_pattern: Glob pattern for wheel files (e.g. ``"dist/pkg_alpha-1.0.0-*.whl"``).
+        make_latest: Whether to mark this release as "Latest" on GitHub.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["publish_release"] = "publish_release"
+    tag: str
+    title: str
+    notes: str
+    dist_pattern: str
+    make_latest: bool = False
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Create a GitHub release, uploading wheels matching dist_pattern."""
+        from glob import glob as glob_fn
+
+        # Resolve HEAD so --target pins the tag to the correct commit
+        sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        target = sha_result.stdout.strip() if sha_result.returncode == 0 else "HEAD"
+
+        files = sorted(glob_fn(self.dist_pattern))
+        args = [
+            "gh",
+            "release",
+            "create",
+            self.tag,
+            "--target",
+            target,
+            "--title",
+            self.title,
+            "--notes",
+            self.notes,
+        ]
+        if self.make_latest:
+            args.append("--latest")
+        args.extend(files)
+        return subprocess.run(args)
+
+
 StageCommand = Annotated[
     Union[ShellCommand, FetchGithubReleaseCommand, FetchRunArtifactsCommand],
     Field(discriminator="type"),
 ]
 """Union of command types that can appear in a build stage's setup list."""
+
+
+class PinDepsCommand(BaseModel):
+    """Pin internal dependency versions in a pyproject.toml.
+
+    Calls ``pin_dependencies()`` directly rather than shelling out to a
+    CLI subprocess.
+
+    Attributes:
+        type: Discriminator for the command union.
+        path: Path to the pyproject.toml file to update.
+        versions: Map of dependency name to pinned version.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["pin_deps"] = "pin_deps"
+    path: str
+    versions: dict[str, str]
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Pin dependencies in the target pyproject.toml."""
+        from pathlib import Path
+
+        from ..utils.dependencies import pin_dependencies
+
+        pin_dependencies(Path(self.path), self.versions)
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+
+ReleaseCommand = Annotated[
+    Union[ShellCommand, PublishGithubReleaseCommand],
+    Field(discriminator="type"),
+]
+"""Union of command types that can appear in the release commands list."""
+
+
+BumpCommand = Annotated[
+    Union[ShellCommand, PinDepsCommand],
+    Field(discriminator="type"),
+]
+"""Union of command types that can appear in the bump commands list."""
 
 
 class BuildStage(BaseModel):
@@ -400,8 +497,23 @@ class ReleasePlan(BaseModel):
 
     # Pre-computed command sequences for the executor
     build_commands: dict[RunnerKey, list[BuildStage]] = Field(default_factory=dict)
-    release_commands: list[ShellCommand] = Field(default_factory=list)
-    finalize_commands: list[ShellCommand] = Field(default_factory=list)
+    release_commands: list[ReleaseCommand] = Field(default_factory=list)
+    bump_commands: list[BumpCommand] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_command_union_types(cls, data: Any) -> Any:
+        """Add ``type='shell'`` to commands missing the discriminator.
+
+        Provides backwards compatibility with plans serialized before
+        discriminated union command types were introduced.
+        """
+        if isinstance(data, dict):
+            for key in ("release_commands", "bump_commands"):
+                for cmd in data.get(key, []):
+                    if isinstance(cmd, dict) and "type" not in cmd:
+                        cmd["type"] = "shell"
+        return data
 
     @model_validator(mode="after")
     def _forbid_skip_validate(self) -> ReleasePlan:
@@ -426,26 +538,3 @@ class ReleasePlan(BaseModel):
                     seen.add(key)
                     result.append(runner)
         return sorted(result)
-
-    @computed_field
-    @property
-    def release_matrix(self) -> list[dict[str, Any]]:
-        """Publish matrix entries for GitHub Actions ``strategy.matrix.include``.
-
-        Each entry contains all fields needed by the ``softprops/action-gh-release``
-        action: tag, title, body, file pattern, and make_latest flag.
-        """
-        entries: list[dict[str, Any]] = []
-        for name, pkg in sorted(self.changed.items()):
-            entries.append(
-                {
-                    "package": name,
-                    "version": pkg.release_version,
-                    "tag": f"{name}/v{pkg.release_version}",
-                    "title": f"{name} {pkg.release_version}",
-                    "body": pkg.release_notes,
-                    "make_latest": pkg.make_latest,
-                    "dist_name": _dist_name(name),
-                }
-            )
-        return entries

@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Prerequisites: `uvr` (`uv add --dev uv-release-monorepo`) and `gh`.
 
-For first-time setup, scaffold the workflow with `uvr init` (see `references/cmd-init.md`). To install the Claude skills into your project, see `references/cmd-skill-init.md`.
+For first-time setup, scaffold the workflow with `uvr workflow init` (see `references/cmd-init.md`). To install the Claude skills into your project, see `references/cmd-skill-init.md`.
 
 If the project has existing CI checks (tests, linting, etc.) that aren't yet wired into the release workflow, see `references/custom-jobs.md` before your first release.
 
@@ -21,10 +21,10 @@ The working tree must be clean. Run `git status`. If dirty, ask the user whether
 ## 2. Preview Changes
 
 ```bash
-uvr status
+uvr release --dry-run
 ```
 
-This shows which packages are dirty (direct changes vs transitive dependents). See `references/cmd-status.md` for details. For the full release plan with version numbers, run:
+This shows which packages are dirty (direct changes vs transitive dependents). For the full release plan with version numbers, run:
 
 ```bash
 uvr release
@@ -157,7 +157,7 @@ After merging, clean up release notes and verify:
 
 ```bash
 rm -rf .uvr/release-notes/
-uvr status                       # should show no changed packages
+uvr release --dry-run              # should show no changed packages
 ```
 
 **DO NOT** merge pre-release branches back to main. Stay on the branch through the alpha → beta → rc → stable cycle, then merge after the stable release. See `references/pre-releases.md`.
@@ -171,7 +171,7 @@ uvr status                       # should show no changed packages
 User says: "Let's release the new changes"
 
 1. Verify not on main, create a release branch
-2. Run `uvr status` — shows `my-lib` is dirty (2 commits: added export, fixed parser)
+2. Run `uvr release --dry-run` — shows `my-lib` is dirty (2 commits: added export, fixed parser)
 3. Run `uvr release`, decline the prompt to see the full plan
 4. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
 5. User says "yes, bump minor" — run `uvr bump --package my-lib --minor`
@@ -187,14 +187,13 @@ User says: "Let's release the new changes"
 **Commands:**
 - `references/cmd-init.md` — scaffold the release workflow
 - `references/cmd-validate.md` — check release.yml against schema
-- `references/cmd-status.md` — preview what would release
 - `references/cmd-release.md` — plan and dispatch a release (all flags)
 - `references/cmd-runners.md` — manage per-package build runners
 - `references/cmd-install.md` — install from GitHub releases
 - `references/cmd-skill-init.md` — copy Claude skills into project
 
 **Guides:**
-- `references/pipeline.md` — the three core jobs (build, publish, finalize)
+- `references/pipeline.md` — the three core jobs (build, publish, bump)
 - `references/release-plan.md` — what the release plan JSON contains
 - `references/custom-jobs.md` — how to add your own jobs to the workflow
 - `references/dev-releases.md` — publishing `.devN` versions for testing

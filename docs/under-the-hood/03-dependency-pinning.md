@@ -2,7 +2,7 @@
 
 How internal dependency constraints are computed and written before a release.
 
-See [How it works](../user-guide/09-architecture.md) for the user-facing explanation.
+See [How it works](08-architecture.md) for the user-facing explanation.
 
 ## Source files
 
@@ -10,7 +10,7 @@ See [How it works](../user-guide/09-architecture.md) for the user-facing explana
 |--------|---------------|
 | `planner/_dependencies.py` | `set_version`, `pin_dependencies` |
 | `planner/_versions.py` | `get_base_version`, `parse_tag_version` |
-| `planner/_planner.py` | `ReleasePlanner.plan`, `ReleasePlanner._detect_pin_changes`, `ReleasePlanner._generate_finalize_commands`, `write_dep_pins` |
+| `planner/_planner.py` | `ReleasePlanner.plan`, `ReleasePlanner._detect_pin_changes`, `ReleasePlanner._generate_bump_commands`, `write_dep_pins` |
 | `cli/release.py` | `cmd_release` (write-prompt flow) |
 
 ## Why pins exist
@@ -116,16 +116,16 @@ But writing pin changes modifies files, which would change the git state. The
 two-pass design (detect, prompt, write, re-run) keeps the plan generation pure
 and ensures the dispatched plan matches the committed code.
 
-## Post-release pinning in `_generate_finalize_commands`
+## Post-release pinning in `_generate_bump_commands`
 
-After a release, the finalize phase bumps each changed package to its next dev
+After a release, the bump phase bumps each changed package to its next dev
 version and pins its internal deps to the **just-published** versions (not the
 bumped dev versions). This ensures that during development, each package's
 `pyproject.toml` declares constraints that are satisfiable from PyPI.
 
-`_generate_finalize_commands` pre-computes `uvr pin-deps` shell commands for
+`_generate_bump_commands` pre-computes internal `PinDepsCommand` invocations for
 each package that has internal dependencies. These commands are embedded in the
-`ReleasePlan` and executed by the workflow (or locally) during finalization:
+`ReleasePlan` and executed by the workflow (or locally via `uvr jobs bump`):
 
 ```python
 # Pin internal deps to just-published versions
@@ -143,5 +143,5 @@ if dep_specs:
     )
 ```
 
-The `uvr pin-deps` low-level command parses each `name>=version` spec and calls
+The internal `PinDepsCommand` parses each `name>=version` spec and calls
 `pin_dependencies()` to rewrite the target `pyproject.toml`.

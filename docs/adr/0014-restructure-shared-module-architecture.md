@@ -53,7 +53,7 @@ Chosen option: **Option B**, because it makes dependency direction explicit in t
 * Deeper import paths: `from .planner._versions import get_base_version` vs `from .versions import base_version`
 * Test mocking is slightly more complex — mocking `build_context` returns a pre-built `RepositoryContext` rather than patching individual discovery functions
 * The `context/` and `planner/` subpackage boundaries are enforced by convention (private `_` prefix), not by Python's import system
-* Schema version bump to 9 breaks existing release plans — CI workflows must be regenerated via `uvr init --upgrade`
+* Schema version bump to 9 breaks existing release plans — CI workflows must be regenerated via `uvr workflow init --upgrade`
 
 ## Links
 

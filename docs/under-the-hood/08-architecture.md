@@ -19,7 +19,7 @@ uvr release
                                          ├─ [hook] pre-release
                                          ├─ release: one GitHub release
                                          │   per changed package
-                                         ├─ finalize:
+                                         ├─ bump:
                                          │   ├─ bump patch versions
                                          │   ├─ commit & tag dev baselines
                                          │   └─ push
@@ -58,4 +58,4 @@ commit E   ← my-pkg/v1.0.2-dev  (pyproject.toml bumped to 1.0.2.dev0; new diff
 
 ## The workflow model
 
-`release.yml` is the source of truth for the workflow. The `ReleaseWorkflow` Pydantic model defines the expected schema -- all seven jobs with their default steps, `needs` chain, and `if` conditions. `uvr init` generates the initial YAML from the model's defaults. `uvr validate` checks an existing YAML against the model. Core jobs (uvr-build, uvr-release, uvr-finalize) have default steps that warn (but don't fail) if modified. Hook jobs accept any steps.
+`release.yml` is the source of truth for the workflow. The `ReleaseWorkflow` Pydantic model defines the expected schema -- all seven jobs with their default steps, `needs` chain, and `if` conditions. `uvr workflow init` generates the initial YAML from the model's defaults. `uvr workflow validate` checks an existing YAML against the model. Core jobs (uvr-build, uvr-release, uvr-bump) have default steps that warn (but don't fail) if modified. Hook jobs accept any steps.

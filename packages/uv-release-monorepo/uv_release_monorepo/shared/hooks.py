@@ -17,11 +17,11 @@ Hook points
 - :meth:`~ReleaseHook.pre_plan` — before plan generation
 - :meth:`~ReleaseHook.post_plan` — after plan generation
 
-**CI** (run during executor phases — build / publish / finalize):
+**CI** (run during executor phases — build / release / bump):
 
 - :meth:`~ReleaseHook.pre_build` / :meth:`~ReleaseHook.post_build`
 - :meth:`~ReleaseHook.pre_release` / :meth:`~ReleaseHook.post_release`
-- :meth:`~ReleaseHook.pre_finalize` / :meth:`~ReleaseHook.post_finalize`
+- :meth:`~ReleaseHook.pre_bump` / :meth:`~ReleaseHook.post_bump`
 """
 
 from __future__ import annotations
@@ -82,11 +82,11 @@ class ReleaseHook:
     def post_release(self, plan: ReleasePlan) -> None:
         """Called after the publish/release phase."""
 
-    def pre_finalize(self, plan: ReleasePlan) -> None:
-        """Called before the finalize phase."""
+    def pre_bump(self, plan: ReleasePlan) -> None:
+        """Called before the bump phase."""
 
-    def post_finalize(self, plan: ReleasePlan) -> None:
-        """Called after the finalize phase."""
+    def post_bump(self, plan: ReleasePlan) -> None:
+        """Called after the bump phase."""
 
 
 # Default convention file name and class name

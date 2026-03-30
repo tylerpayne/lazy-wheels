@@ -16,22 +16,15 @@ uv tool install uv-release-monorepo
 ## Generate the workflow
 
 ```bash
-uvr init
+uvr workflow init
 ```
 
-This creates `.github/workflows/release.yml` with all seven pipeline jobs. Four are hook slots (pre-build, post-build, pre-release, post-release) that default to a no-op and are auto-skipped. Four are the core pipeline (uvr-validate, uvr-build, uvr-release, uvr-finalize).
-
-## Customize the workflow
-
-Edit `release.yml` directly to add your hook steps — tests, linting, PyPI publish, notifications. See:
-
-- [Add CI hooks](04-hooks.md) for tests and linting
-- [Publish to PyPI](05-pypi.md) for trusted publishing
+This creates `.github/workflows/release.yml` with four core jobs: `uvr-validate`, `uvr-build`, `uvr-release`, and `uvr-bump`. You can add custom jobs (tests, linting, PyPI publish) by editing the YAML directly — see [Custom workflow jobs](05-custom-jobs.md).
 
 After editing, validate:
 
 ```bash
-uvr validate
+uvr workflow validate
 ```
 
 ## Commit and release
@@ -46,7 +39,7 @@ uvr release
 ## Check your configuration
 
 ```bash
-uvr status
+uvr release --dry-run
 ```
 ---
 

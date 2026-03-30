@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Prerequisites: `uvr` (`uv add --dev uv-release-monorepo`) and `gh`.
 
-For first-time setup, scaffold the workflow with `uvr init` (see `references/cmd-init.md`). To install the Claude skills into your project, see `references/cmd-skill-init.md`.
+For first-time setup, scaffold the workflow with `uvr workflow init` (see `references/cmd-init.md`). To install the Claude skills into your project, see `references/cmd-skill-init.md`.
 
 If the project has existing CI checks (tests, linting, etc.) that aren't yet wired into the release workflow, see `references/custom-jobs.md` before your first release.
 
@@ -19,12 +19,6 @@ You must not be on main. If you are, create a release branch and switch to it.
 The working tree must be clean. Run `git status`. If dirty, ask the user whether to stash, commit, or abort.
 
 ## 2. Preview Changes
-
-```bash
-uvr status
-```
-
-This shows which packages are dirty (direct changes vs transitive dependents). See `references/cmd-status.md` for details. For the full release plan with version numbers, run:
 
 ```bash
 uvr release
@@ -153,11 +147,10 @@ git merge --no-ff <release-branch> -m "Merge <release-branch>"
 git push
 ```
 
-After merging, clean up release notes and verify:
+After merging, clean up release notes:
 
 ```bash
 rm -rf .uvr/release-notes/
-uvr status                       # should show no changed packages
 ```
 
 **DO NOT** merge pre-release branches back to main. Stay on the branch through the alpha → beta → rc → stable cycle, then merge after the stable release. See `references/pre-releases.md`.
@@ -171,30 +164,28 @@ uvr status                       # should show no changed packages
 User says: "Let's release the new changes"
 
 1. Verify not on main, create a release branch
-2. Run `uvr status` — shows `my-lib` is dirty (2 commits: added export, fixed parser)
-3. Run `uvr release`, decline the prompt to see the full plan
-4. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
-5. User says "yes, bump minor" — run `uvr bump --package my-lib --minor`
-6. Review docstrings and docs against current API — new `Parser` class exported but not documented. Fix docs.
-7. Draft release notes: "Added `Parser` class for structured input handling. Fixed crash on empty input." Present to user for approval.
-8. Write approved notes to `.uvr/release-notes/my-lib/0.3.0.md`
-9. Commit, push, run `uvr release --release-notes my-lib @.uvr/release-notes/my-lib/0.3.0.md` and confirm
-10. Monitor workflow, verify GitHub releases
-11. Merge release branch back to main, clean up `.uvr/release-notes/`
+2. Run `uvr release`, decline the prompt — shows `my-lib` is dirty (2 commits: added export, fixed parser)
+3. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
+4. User says "yes, bump minor" — run `uvr bump --package my-lib --minor`
+5. Review docstrings and docs against current API — new `Parser` class exported but not documented. Fix docs.
+6. Draft release notes: "Added `Parser` class for structured input handling. Fixed crash on empty input." Present to user for approval.
+7. Write approved notes to `.uvr/release-notes/my-lib/0.3.0.md`
+8. Commit, push, run `uvr release --release-notes my-lib @.uvr/release-notes/my-lib/0.3.0.md` and confirm
+9. Monitor workflow, verify GitHub releases
+10. Merge release branch back to main, clean up `.uvr/release-notes/`
 
 ## References
 
 **Commands:**
 - `references/cmd-init.md` — scaffold the release workflow
 - `references/cmd-validate.md` — check release.yml against schema
-- `references/cmd-status.md` — preview what would release
 - `references/cmd-release.md` — plan and dispatch a release (all flags)
 - `references/cmd-runners.md` — manage per-package build runners
 - `references/cmd-install.md` — install from GitHub releases
 - `references/cmd-skill-init.md` — copy Claude skills into project
 
 **Guides:**
-- `references/pipeline.md` — the three core jobs (build, publish, finalize)
+- `references/pipeline.md` — the three core jobs (build, publish, bump)
 - `references/release-plan.md` — what the release plan JSON contains
 - `references/custom-jobs.md` — how to add your own jobs to the workflow
 - `references/dev-releases.md` — publishing `.devN` versions for testing

@@ -27,7 +27,7 @@ def test_template_has_core_jobs() -> None:
     jobs = doc["jobs"]
     assert "uvr-build" in jobs
     assert "uvr-release" in jobs
-    assert "uvr-finalize" in jobs
+    assert "uvr-bump" in jobs
 
 
 def test_template_validates_against_model() -> None:
@@ -41,7 +41,7 @@ def test_template_job_needs_chain() -> None:
     jobs = doc["jobs"]
     assert "uvr-validate" in jobs["uvr-build"]["needs"]
     assert "uvr-build" in jobs["uvr-release"]["needs"]
-    assert "uvr-release" in jobs["uvr-finalize"]["needs"]
+    assert "uvr-release" in jobs["uvr-bump"]["needs"]
 
 
 def test_template_default_permissions() -> None:
@@ -52,13 +52,10 @@ def test_template_default_permissions() -> None:
 def test_template_core_jobs_have_executor_steps() -> None:
     doc = _template_workflow()
     build_steps = doc["jobs"]["uvr-build"]["steps"]
-    assert any("uvr build" in str(s.get("run", "")) for s in build_steps)
+    assert any("uvr jobs build" in str(s.get("run", "")) for s in build_steps)
 
     release_steps = doc["jobs"]["uvr-release"]["steps"]
-    assert any(
-        s.get("uses", "").startswith("softprops/action-gh-release")
-        for s in release_steps
-    )
+    assert any("uvr jobs release" in str(s.get("run", "")) for s in release_steps)
 
-    finalize_steps = doc["jobs"]["uvr-finalize"]["steps"]
-    assert any("uvr finalize" in str(s.get("run", "")) for s in finalize_steps)
+    bump_steps = doc["jobs"]["uvr-bump"]["steps"]
+    assert any("uvr jobs bump" in str(s.get("run", "")) for s in bump_steps)

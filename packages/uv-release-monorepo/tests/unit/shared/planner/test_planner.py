@@ -11,6 +11,7 @@ from uv_release_monorepo.shared.models import (
     PackageInfo,
     PlanConfig,
     ReleasePlan,
+    ShellCommand,
 )
 from uv_release_monorepo.shared.planner import build_plan
 
@@ -142,13 +143,15 @@ class TestBuildPlan:
     @patch("uv_release_monorepo.shared.planner._planner.generate_release_notes")
     @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
     @patch("uv_release_monorepo.shared.planner._planner.build_context")
-    def test_populates_release_matrix_and_ci_publish(
+    def test_populates_release_commands_and_ci_publish(
         self,
         mock_build_ctx: MagicMock,
         mock_detect: MagicMock,
         mock_gen_notes: MagicMock,
     ) -> None:
-        """build_plan populates release_matrix with precomputed notes and sets ci_publish=True."""
+        """build_plan populates release_commands with git tag + publish commands."""
+        from uv_release_monorepo.shared.models import PublishGithubReleaseCommand
+
         packages = {
             "pkg-a": PackageInfo(path="packages/a", version="1.0.0", deps=[]),
         }
@@ -164,13 +167,23 @@ class TestBuildPlan:
         )
 
         assert plan.ci_publish is True
-        assert len(plan.release_matrix) == 1
-        entry = plan.release_matrix[0]
-        assert entry["package"] == "pkg-a"
-        assert entry["version"] == "1.0.0"
-        assert entry["tag"] == "pkg-a/v1.0.0"
-        assert entry["title"] == "pkg-a 1.0.0"
-        assert entry["body"] == "**Released:** pkg-a 1.0.0"
+        # release_commands should contain git tag, publish, and push
+        assert len(plan.release_commands) >= 3
+        tag_cmds = [
+            c
+            for c in plan.release_commands
+            if isinstance(c, ShellCommand) and "tag" in c.args
+        ]
+        assert len(tag_cmds) == 1
+        assert tag_cmds[0].args == ["git", "tag", "pkg-a/v1.0.0"]
+        publish_cmds = [
+            c
+            for c in plan.release_commands
+            if isinstance(c, PublishGithubReleaseCommand)
+        ]
+        assert len(publish_cmds) == 1
+        assert publish_cmds[0].tag == "pkg-a/v1.0.0"
+        assert publish_cmds[0].notes == "**Released:** pkg-a 1.0.0"
 
     @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
     @patch("uv_release_monorepo.shared.planner._planner.build_context")

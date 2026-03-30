@@ -29,7 +29,7 @@ The `ReleaseWorkflow` model validates the full workflow structure — rejecting 
 - Good, because each setting exists in exactly one place — the YAML file
 - Good, because `uvr workflow` is fully general — any valid YAML path can be read, written, or deleted without adding new config keys or template variables
 - Good, because the mutation vocabulary (`--set`, `--add`, `--insert --at`, `--remove`, `--clear`) mirrors `uvr hooks`, giving users one mental model
-- Bad, because `uvr init --force` regenerates from the template and loses customizations that aren't hooks (permissions, job-level settings). Users must re-apply them or avoid `--force`.
+- Bad, because `uvr workflow init --force` regenerates from the template and loses customizations that aren't hooks (permissions, job-level settings). Users must re-apply them or avoid `--force`.
 - Bad, because PyYAML round-tripping loses comments and formatting from the template-generated file
 
 ## Comparison
@@ -39,7 +39,7 @@ The `ReleaseWorkflow` model validates the full workflow structure — rejecting 
 | Duplication | High — same values in TOML and YAML | None — YAML is the only copy |
 | Generality | Low — each new key needs a TOML schema + template variable | Full — any YAML path works |
 | Consistency with hooks | Inconsistent — hooks live in YAML, config in TOML | Consistent — everything in YAML |
-| `uvr init` safety | Safe — TOML survives regeneration | Risky — `--force` loses non-hook customizations |
+| `uvr workflow init` safety | Safe — TOML survives regeneration | Risky — `--force` loses non-hook customizations |
 | Formatting preservation | Good — template controls output | Lossy — PyYAML rewrites formatting |
 
 ## Links

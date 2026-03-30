@@ -3,7 +3,7 @@
 How `build_plan()` discovers packages, finds baselines, diffs, and propagates
 dirtiness through the dependency graph.
 
-See [Releasing](../user-guide/02-releasing.md) and [How it works](../user-guide/09-architecture.md) for usage context.
+See [Releasing](../user-guide/02-releasing.md) and [How it works](08-architecture.md) for usage context.
 
 ## Source files
 
@@ -133,8 +133,7 @@ build_plan(config)
        -> compute next versions
        -> build ChangedPackage for each changed package
        -> expand build matrix (per-package, per-runner)
-       -> compute release_matrix (release notes, tags, make_latest)
-       -> generate build_commands, release_commands, finalize_commands
+       -> generate build_commands, release_commands, bump_commands
        -> assemble ReleasePlan
   -> detect pin changes (dry-run)
   -> return (plan, pin_changes)

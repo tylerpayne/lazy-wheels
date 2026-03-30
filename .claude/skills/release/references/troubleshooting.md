@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## `uvr status` shows unexpected packages
+## `uvr release --dry-run` shows unexpected packages
 
 A package may have been modified without a version bump. Check `git log --oneline -- packages/<name>` since the last release tag to confirm the changes are real. If a package changed only in dev files (tests, docs), consider whether it truly needs a release.
 
@@ -48,7 +48,7 @@ When a release fails partway through, you don't need to start over. Use `--skip`
 gh run view <RUN_ID> --log-failed
 ```
 
-The release pipeline has three core jobs in order: **build → release → finalize**. Pick the right resume strategy based on where it failed:
+The release pipeline has three core jobs in order: **build → release → bump**. Pick the right resume strategy based on where it failed:
 
 ### Build failed
 
@@ -68,12 +68,12 @@ uvr release --skip-to release --reuse-run <RUN_ID>
 
 `--skip-to release` skips the build job. `--reuse-run` downloads artifacts from the prior run.
 
-### Release succeeded, finalize failed
+### Release succeeded, bump failed
 
 GitHub releases already exist, so tell uvr to skip both build and release:
 
 ```bash
-uvr release --skip-to finalize --reuse-release
+uvr release --skip-to bump --reuse-release
 ```
 
 `--reuse-release` means "don't try to create releases that already exist."
@@ -96,15 +96,15 @@ Custom jobs must check the plan's skip list in their `if` condition for this to 
 
 ### Constraints
 
-- `--reuse-run` requires build to be skipped (via `--skip build` or `--skip-to release`/`--skip-to finalize`)
-- `--reuse-release` requires both build and release to be skipped (via `--skip-to finalize`)
+- `--reuse-run` requires build to be skipped (via `--skip build` or `--skip-to release`/`--skip-to bump`)
+- `--reuse-release` requires both build and release to be skipped (via `--skip-to bump`)
 - `--reuse-run` and `--reuse-release` are mutually exclusive
 
 ## Main moved ahead of the release branch
 
-If other work was merged to main between when you branched and when the release finalized, you'll see conflicts when merging back.
+If other work was merged to main between when you branched and when the release bumpd, you'll see conflicts when merging back.
 
-**What happened:** The finalize job bumps versions and pins deps on the release branch. Meanwhile, main may have new commits that touch pyproject.toml, uv.lock, or the same source files.
+**What happened:** The bump job bumps versions and pins deps on the release branch. Meanwhile, main may have new commits that touch pyproject.toml, uv.lock, or the same source files.
 
 **How to resolve:**
 
@@ -123,7 +123,7 @@ git commit
 git push
 ```
 
-After merging, verify with `uvr status` — it should show no changed packages. If it does, the version bumps from finalize didn't land cleanly. Check pyproject.toml versions match what finalize set.
+After merging, verify with `uvr release --dry-run` — it should show no changed packages. If it does, the version bumps from the bump phase didn't land cleanly. Check pyproject.toml versions match what the bump phase set.
 
 **If the merge is too messy**, an alternative is to skip the merge and cherry-pick only your pre-release commits onto main, then let the next release pick up the changes naturally.
 

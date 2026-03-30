@@ -2,13 +2,13 @@
 
 The Pydantic model hierarchy that represents `.github/workflows/release.yml`.
 
-See [Add CI hooks](../user-guide/04-hooks.md) and [How it works](../user-guide/09-architecture.md) for usage.
+See [Add CI hooks](../user-guide/05-custom-jobs.md) and [How it works](08-architecture.md) for usage.
 
 ## Source files
 
 | Module | Key symbols |
 |--------|-------------|
-| `models/workflow.py` | `ReleaseWorkflow`, `WorkflowTrigger`, `WorkflowDispatch`, `WorkflowInput`, `WorkflowJobs`, `Job`, `BuildJob`, `ReleaseJob`, `FinalizeJob`, `JOB_ORDER`, `_frozen`, `_needs_validator`, `_P` |
+| `models/workflow.py` | `ReleaseWorkflow`, `WorkflowTrigger`, `WorkflowDispatch`, `WorkflowInput`, `WorkflowJobs`, `Job`, `BuildJob`, `ReleaseJob`, `BumpJob`, `JOB_ORDER`, `_frozen`, `_needs_validator`, `_P` |
 
 ## Top-level model: `ReleaseWorkflow`
 
@@ -69,7 +69,7 @@ There are three core job classes. All inherit directly from `Job`:
 |-------|-------------|-------------------|
 | `BuildJob` | `!contains(plan.skip, 'uvr-build')` | (none) |
 | `ReleaseJob` | `always() && !failure() && !cancelled() && !contains(plan.skip, 'uvr-release')` | `uvr-build` |
-| `FinalizeJob` | `always() && !failure() && !cancelled() && !contains(plan.skip, 'uvr-finalize')` | `uvr-release` |
+| `BumpJob` | `always() && !failure() && !cancelled() && !contains(plan.skip, 'uvr-bump')` | `uvr-release` |
 
 The `always() && !failure() && !cancelled()` pattern means downstream jobs run even when
 earlier jobs are skipped (via the `skip` list in the plan), but stop if a
@@ -97,7 +97,7 @@ Usage on each job class:
 class ReleaseJob(Job):
     _ensure_needs = _needs_validator("uvr-build")
 
-class FinalizeJob(Job):
+class BumpJob(Job):
     _ensure_needs = _needs_validator("uvr-release")
 ```
 
@@ -106,7 +106,7 @@ back. This preserves the linear pipeline without breaking user customizations.
 
 ### `_frozen` fields
 
-Core jobs (`BuildJob`, `ReleaseJob`, `FinalizeJob`) use `_frozen` to protect
+Core jobs (`BuildJob`, `ReleaseJob`, `BumpJob`) use `_frozen` to protect
 fields that contain `${{ fromJSON(inputs.plan) }}` expressions. These are
 annotated with `Annotated[type, _frozen(default)]`:
 
@@ -128,7 +128,7 @@ JOB_ORDER: list[str] = [
     "uvr-validate",
     "uvr-build",
     "uvr-release",
-    "uvr-finalize",
+    "uvr-bump",
 ]
 ```
 
@@ -146,7 +146,7 @@ class WorkflowJobs(BaseModel):
     uvr_validate: ValidatePlanJob = Field(default_factory=ValidatePlanJob, alias="uvr-validate")
     uvr_build: BuildJob = Field(default_factory=BuildJob, alias="uvr-build")
     uvr_release: ReleaseJob = Field(default_factory=ReleaseJob, alias="uvr-release")
-    uvr_finalize: FinalizeJob = Field(default_factory=FinalizeJob, alias="uvr-finalize")
+    uvr_bump: BumpJob = Field(default_factory=BumpJob, alias="uvr-bump")
 ```
 
 `extra="allow"` means the workflow **can** contain additional job names. Hook
@@ -182,6 +182,6 @@ _BUILD_IF = f"${{{{ !contains({_P}.skip, 'uvr-build') }}}}"
 # expands to: ${{ !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
 ```
 
-Step constant blocks (`_BUILD_STEPS`, `_RELEASE_STEPS`, `_FINALIZE_STEPS`) are
+Step constant blocks (`_BUILD_STEPS`, `_RELEASE_STEPS`, `_BUMP_STEPS`) are
 defined at module level and referenced by the frozen field defaults. See
 [CI execution](07-ci-execution.md) for what each step does.

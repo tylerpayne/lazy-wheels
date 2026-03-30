@@ -1,4 +1,4 @@
-"""Tests for CI workflow subcommands (uvr build, finalize, pin-deps)."""
+"""Tests for CI workflow subcommands (uvr jobs build, bump, release)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def _make_plan_json(
     *,
     ci_publish: bool = False,
     build_commands: dict | None = None,
-    finalize_commands: list | None = None,
+    bump_commands: list | None = None,
 ) -> str:
     """Helper to build a minimal ReleasePlan JSON string."""
     changed_pkgs = {
@@ -50,7 +50,7 @@ def _make_plan_json(
         unchanged=unchanged_pkgs,
         ci_publish=ci_publish,
         build_commands=build_commands or {},
-        finalize_commands=finalize_commands or [],
+        bump_commands=bump_commands or [],
     )
     return plan.model_dump_json()
 
@@ -81,25 +81,25 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
     with patch.object(
         sys,
         "argv",
-        ["uvr", "build", "--plan", plan_json, "--runner", '["ubuntu-latest"]'],
+        ["uvr", "jobs", "build", "--plan", plan_json, "--runner", '["ubuntu-latest"]'],
     ):
         cli()
     assert mock_run.call_count == 2
 
 
 @patch(_SUBPROCESS_RUN)
-def test_finalize_runs_commands(mock_run: MagicMock) -> None:
-    """uvr finalize runs the pre-computed finalize commands."""
+def test_bump_runs_commands(mock_run: MagicMock) -> None:
+    """uvr jobs bump runs the pre-computed bump commands."""
     mock_run.return_value = MagicMock(returncode=0)
     plan_json = _make_plan_json(
         changed=["pkg-a"],
         unchanged=[],
-        finalize_commands=[
+        bump_commands=[
             ShellCommand(args=["git", "tag", "pkg-a/v1.0.0"]).model_dump(),
             ShellCommand(args=["git", "push"]).model_dump(),
         ],
     )
-    with patch.object(sys, "argv", ["uvr", "finalize", "--plan", plan_json]):
+    with patch.object(sys, "argv", ["uvr", "jobs", "bump", "--plan", plan_json]):
         cli()
     assert mock_run.call_count == 2
 
@@ -111,28 +111,25 @@ def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     with patch.object(
         sys,
         "argv",
-        ["uvr", "build", "--plan", plan_json, "--runner", '["macos-latest"]'],
+        ["uvr", "jobs", "build", "--plan", plan_json, "--runner", '["macos-latest"]'],
     ):
         cli()
     mock_run.assert_not_called()
 
 
 @patch("uv_release_monorepo.shared.utils.dependencies.pin_dependencies")
-def test_pin_deps_writes(mock_pd: MagicMock) -> None:
-    """uvr pin-deps calls pin_dependencies."""
-    with patch.object(
-        sys,
-        "argv",
-        [
-            "uvr",
-            "pin-deps",
-            "--path",
-            "foo/pyproject.toml",
-            "alpha>=1.0",
-            "beta>=2.0",
-        ],
-    ):
-        cli()
-    mock_pd.assert_called_once()
-    versions = mock_pd.call_args[0][1]
-    assert versions == {"alpha": "1.0", "beta": "2.0"}
+def test_pin_deps_command_calls_pin_dependencies(mock_pd: MagicMock) -> None:
+    """PinDepsCommand.execute() calls pin_dependencies directly."""
+    from pathlib import Path
+
+    from uv_release_monorepo.shared.models import PinDepsCommand
+
+    cmd = PinDepsCommand(
+        path="foo/pyproject.toml",
+        versions={"alpha": "1.0", "beta": "2.0"},
+    )
+    result = cmd.execute()
+    assert result.returncode == 0
+    mock_pd.assert_called_once_with(
+        Path("foo/pyproject.toml"), {"alpha": "1.0", "beta": "2.0"}
+    )

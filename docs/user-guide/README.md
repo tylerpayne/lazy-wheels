@@ -8,21 +8,26 @@ For implementation details, see the companion [Under the Hood](../under-the-hood
 
 1. [Set up your first release](01-setup.md)
 2. [Release your packages](02-releasing.md)
-3. [Configure build runners](03-runners.md)
+
+## Configuring
+
+3. [Filter which packages are released](03-filtering.md)
+4. [Configure build runners](04-runners.md)
 
 ## Customizing the Pipeline
 
-4. [Add CI hooks (tests, linting, notifications)](04-hooks.md)
-5. [Publish to PyPI](05-pypi.md)
-6. [Skip jobs and reuse artifacts](06-skip-reuse.md)
+5. [Add custom workflow jobs (tests, PyPI, notifications)](05-custom-jobs.md)
+6. [Python hooks (code-level extension)](06-python-hooks.md)
 
-## Managing Packages
+## Consuming Releases
 
-7. [Filter which packages are released](07-filtering.md)
-8. [Install packages from GitHub releases](08-installing.md)
+7. [Install and download packages](07-installing.md)
+
+## Troubleshooting
+
+8. [Recovery, skip/reuse, and common errors](08-troubleshooting.md)
 
 ## Reference
 
-9. [How it works (architecture)](09-architecture.md)
-10. [Command reference](10-commands.md)
-11. [Configuration reference](11-configuration.md)
+9. [Command reference](09-commands.md)
+10. [Configuration reference](10-configuration.md)

@@ -15,7 +15,9 @@ from ..models import (
     ChangedPackage,
     FetchGithubReleaseCommand,
     PackageInfo,
+    PinDepsCommand,
     PlanConfig,
+    PublishGithubReleaseCommand,
     ReleasePlan,
     StageCommand,
     ShellCommand,
@@ -72,7 +74,7 @@ class ReleasePlanner:
     """Single entry point for creating release plans.
 
     Generates a ReleasePlan containing pre-computed shell commands for
-    every phase (build, publish, finalize). The executor is a dumb runner.
+    every phase (build, release, bump). The executor is a dumb runner.
     """
 
     def __init__(
@@ -189,9 +191,7 @@ class ReleasePlanner:
         # Generate command sequences
         build_commands = self._generate_build_commands(changed, unchanged, release_tags)
         release_commands = self._generate_release_commands(changed)
-        finalize_commands = self._generate_finalize_commands(
-            changed, published_versions
-        )
+        bump_commands = self._generate_bump_commands(changed, published_versions)
 
         # Validate no tag conflicts (uses targeted GitHub API checks)
         self._check_tag_conflicts(changed)
@@ -206,7 +206,7 @@ class ReleasePlanner:
             unchanged=unchanged,
             build_commands=build_commands,
             release_commands=release_commands,
-            finalize_commands=finalize_commands,
+            bump_commands=bump_commands,
         )
 
     def _apply_versions_and_pins(
@@ -375,40 +375,43 @@ class ReleasePlanner:
     def _generate_release_commands(
         self,
         changed: dict[str, ChangedPackage],
-    ) -> list[ShellCommand]:
-        """Generate publish commands (only for local execution)."""
-        if self.config.ci_publish:
-            return []
+    ) -> list[ShellCommand | PublishGithubReleaseCommand]:
+        """Generate release commands: tag, create GitHub releases, push tags."""
+        cmds: list[ShellCommand | PublishGithubReleaseCommand] = []
 
-        cmds: list[ShellCommand] = []
+        # Release tags on the current commit (the "set release versions" commit)
+        for name, pkg in sorted(changed.items()):
+            tag = f"{name}/v{pkg.release_version}"
+            cmds.append(ShellCommand(args=["git", "tag", tag], label=f"Tag {tag}"))
+
+        # Create GitHub releases with wheels
         for name, pkg in sorted(changed.items()):
             tag = f"{name}/v{pkg.release_version}"
             cmds.append(
-                ShellCommand(
-                    args=[
-                        "gh",
-                        "release",
-                        "create",
-                        tag,
-                        "--title",
-                        f"{name} {pkg.release_version}",
-                        "--notes",
-                        pkg.release_notes,
-                        "--pattern",
-                        f"dist/{_dist_name(name)}-{pkg.release_version}-*.whl",
-                    ],
+                PublishGithubReleaseCommand(
+                    tag=tag,
+                    title=f"{name} {pkg.release_version}",
+                    notes=pkg.release_notes,
+                    dist_pattern=f"dist/{_dist_name(name)}-{pkg.release_version}-*.whl",
+                    make_latest=pkg.make_latest,
                     label=f"Publish {tag}",
                 )
             )
+
+        # Push release tags (only after all releases succeed)
+        cmds.append(
+            ShellCommand(args=["git", "push", "--tags"], label="Push release tags")
+        )
+
         return cmds
 
-    def _generate_finalize_commands(
+    def _generate_bump_commands(
         self,
         changed: dict[str, ChangedPackage],
         published_versions: dict[str, str],
-    ) -> list[ShellCommand]:
-        """Generate finalize commands (tag, bump, commit, push)."""
-        cmds: list[ShellCommand] = []
+    ) -> list[ShellCommand | PinDepsCommand]:
+        """Generate bump commands (version bumps, commit, baseline tags, push)."""
+        cmds: list[ShellCommand | PinDepsCommand] = []
 
         # Git identity (CI only)
         if self.config.ci_publish:
@@ -426,12 +429,6 @@ class ReleasePlanner:
                 )
             )
 
-        # Release tags (local only -- CI publish action creates them)
-        if not self.config.ci_publish:
-            for name, pkg in sorted(changed.items()):
-                tag = f"{name}/v{pkg.release_version}"
-                cmds.append(ShellCommand(args=["git", "tag", tag], label=f"Tag {tag}"))
-
         # Version bumps + dep pinning
         pyproject_paths: list[str] = []
         for name, pkg in sorted(changed.items()):
@@ -445,15 +442,16 @@ class ReleasePlanner:
                 )
             )
 
-            dep_specs = [
-                f"{dep}>={published_versions[dep]}"
+            dep_versions = {
+                dep: published_versions[dep]
                 for dep in pkg.deps
                 if dep in published_versions
-            ]
-            if dep_specs:
+            }
+            if dep_versions:
                 cmds.append(
-                    ShellCommand(
-                        args=["uvr", "pin-deps", "--path", pyproject] + dep_specs,
+                    PinDepsCommand(
+                        path=pyproject,
+                        versions=dep_versions,
                         label=f"Pin {name} deps",
                     )
                 )
@@ -520,7 +518,7 @@ class ReleasePlanner:
                     conflicts.append(tag)
 
         # Release conflicts: if the release tag exists locally,
-        # a GitHub release almost certainly exists too (finalize pushes both).
+        # a GitHub release almost certainly exists too (bump pushes both).
         # No need for remote API calls — local refs are the source of truth.
         for name, pkg in changed.items():
             tag = f"{name}/v{pkg.release_version}"

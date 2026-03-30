@@ -1,4 +1,4 @@
-"""The ``uvr init``, ``uvr init --upgrade``, and ``uvr validate`` commands."""
+"""The ``uvr workflow init``, ``uvr workflow init --upgrade``, and ``uvr validate`` commands."""
 
 from __future__ import annotations
 
@@ -228,7 +228,9 @@ def cmd_validate(args: argparse.Namespace) -> None:
     dest = root / workflow_dir / "release.yml"
 
     if not dest.exists():
-        _fatal(f"No workflow found at {dest.relative_to(root)}. Run `uvr init` first.")
+        _fatal(
+            f"No workflow found at {dest.relative_to(root)}. Run `uvr workflow init` first."
+        )
 
     import difflib
     import warnings
@@ -296,11 +298,11 @@ def cmd_validate(args: argparse.Namespace) -> None:
         print("  Run `uvr validate --diff` to view differences from the template.")
     if version_diff:
         print(
-            f"  Run `uvr init --upgrade` to update from "
+            f"  Run `uvr workflow init --upgrade` to update from "
             f"v{stored_version} to v{__version__}."
         )
     elif not stored_version:
-        print("  Run `uvr init --upgrade` to track your workflow version.")
+        print("  Run `uvr workflow init --upgrade` to track your workflow version.")
 
     # --diff: show unified diff
     if getattr(args, "diff", False) and has_diff:
@@ -368,7 +370,9 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
     dest = root / workflow_dir / "release.yml"
 
     if not dest.exists():
-        _fatal(f"No workflow found at {dest.relative_to(root)}. Run `uvr init` first.")
+        _fatal(
+            f"No workflow found at {dest.relative_to(root)}. Run `uvr workflow init` first."
+        )
 
     # Ensure release.yml has no uncommitted changes
     result = subprocess.run(
@@ -400,13 +404,11 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
                 default="",
             )
         if stored_version:
-            uvx_cmd = (
-                f"uvx --from uv-release-monorepo=={stored_version} uvr init --base-only"
-            )
+            uvx_cmd = f"uvx --from uv-release-monorepo=={stored_version} uvr workflow init --base-only"
             print(
                 f"No merge base found. For a cleaner upgrade, recover the base first:\n"
                 f"  {uvx_cmd}\n"
-                f"  uvr init --upgrade\n"
+                f"  uvr workflow init --upgrade\n"
             )
             try:
                 run_it = input("Run the uvx command above? [y/N] ").strip().lower()
