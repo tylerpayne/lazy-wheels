@@ -187,3 +187,24 @@ def _fatal(msg: str) -> NoReturn:
     """Print error and exit."""
     print(f"Error: {msg}", file=sys.stderr)
     sys.exit(1)
+
+
+def _parse_install_spec(spec: str) -> tuple[str, str, str | None]:
+    """Parse an install spec into (gh_repo, package, version).
+
+    Required form: ``org/repo/package[@version]``
+    """
+    version: str | None = None
+    if "@" in spec:
+        spec, version = spec.rsplit("@", 1)
+
+    parts = spec.split("/")
+    if len(parts) == 3:
+        org, repo, package = parts
+        return f"{org}/{repo}", package, version
+    else:
+        _fatal(
+            f"Invalid install spec '{spec}'. "
+            "Expected 'org/repo/package', optionally with '@version'.\n"
+            "  Example: uvr install myorg/myrepo/my-pkg@1.0.0"
+        )

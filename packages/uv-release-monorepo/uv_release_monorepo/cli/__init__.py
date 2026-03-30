@@ -19,11 +19,16 @@ from ._common import (
 )
 from ._yaml import _MISSING, _yaml_delete, _yaml_get, _yaml_set
 from .init import cmd_init, cmd_upgrade, cmd_validate
-from .install import _find_latest_release_tag, _parse_install_spec, cmd_install
+from ._common import _parse_install_spec
+from ..shared.utils.tags import (
+    find_latest_remote_release_tag as _find_latest_release_tag,
+)
+from .install import cmd_install
 from .bump import cmd_bump
 from .release import cmd_release
 from .runners import cmd_runners
 from .skill import cmd_skill_init, cmd_skill_upgrade
+from .wheels import cmd_wheels
 
 __all__ = [
     "_MISSING",
@@ -51,6 +56,7 @@ __all__ = [
     "cmd_runners",
     "cmd_upgrade",
     "cmd_validate",
+    "cmd_wheels",
 ]
 
 
@@ -394,19 +400,31 @@ Run 'uvr <command> --help' for details on a specific command.
         "package",
         help="Install spec: ORG/REPO/PKG[@VERSION]",
     )
-    install_parser.add_argument(
+    install_parser.set_defaults(func=cmd_install)
+
+    # wheels
+    wheels_parser = subparsers.add_parser("wheels", help=_H)
+    wheels_parser.add_argument(
+        "package",
+        help="Install spec: ORG/REPO/PKG[@VERSION]",
+    )
+    wheels_parser.add_argument(
+        "--release-tag",
+        default=None,
+        help="Download from a GitHub release tag.",
+    )
+    wheels_parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Download from a GitHub Actions run's artifacts.",
+    )
+    wheels_parser.add_argument(
         "-o",
         "--output",
-        default=None,
-        help="Save wheels to this directory.",
+        default="dist",
+        help="Directory to save wheels into (default: dist/).",
     )
-    install_parser.add_argument(
-        "--no-install",
-        action="store_true",
-        default=False,
-        help="Download only, do not install. Requires -o/--output.",
-    )
-    install_parser.set_defaults(func=cmd_install)
+    wheels_parser.set_defaults(func=cmd_wheels)
 
     # init
     init_parser = subparsers.add_parser("init", help=_H)

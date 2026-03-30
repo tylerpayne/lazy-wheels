@@ -81,3 +81,45 @@ def find_release_tags(
         print(f"  {name}: {release_tags[name] or '<none>'}")
 
     return release_tags
+
+
+def find_latest_remote_release_tag(
+    package: str, gh_repo: str | None = None
+) -> str | None:
+    """Return the most recent non-dev release tag from a GitHub repository.
+
+    Unlike other functions in this module that inspect local git refs, this
+    queries the GitHub API via ``gh release list`` and works on **any**
+    repository — local or remote.
+
+    Args:
+        package: Package name (e.g. ``"my-pkg"``).
+        gh_repo: GitHub ``OWNER/REPO`` to query. If omitted, ``gh`` infers
+            the repo from the current directory.
+    """
+    import json
+    import subprocess
+
+    from packaging.version import Version
+
+    cmd = ["gh", "release", "list", "--json", "tagName", "--limit", "200"]
+    if gh_repo:
+        cmd.extend(["--repo", gh_repo])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    try:
+        releases = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+    prefix = f"{package}/v"
+    tags = [
+        r["tagName"]
+        for r in releases
+        if r["tagName"].startswith(prefix) and not r["tagName"].endswith("-dev")
+    ]
+    if not tags:
+        return None
+    return max(tags, key=lambda t: Version(t.split("/v")[-1]))

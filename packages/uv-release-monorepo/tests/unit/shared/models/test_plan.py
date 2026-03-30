@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from uv_release_monorepo.shared.models import (
     BuildStage,
     ChangedPackage,
     FetchGithubReleaseCommand,
+    FetchRunArtifactsCommand,
     PackageInfo,
     ReleasePlan,
     ShellCommand,
@@ -274,3 +276,89 @@ class TestFetchGithubReleaseCommand:
         stage = BuildStage.model_validate(data)
         assert isinstance(stage.setup[0], ShellCommand)
         assert stage.setup[0].args == ["mkdir", "-p", "deps"]
+
+
+class TestFetchRunArtifactsCommand:
+    """Tests for FetchRunArtifactsCommand.execute()."""
+
+    @patch(_SUBPROCESS_RUN)
+    def test_prefers_universal_wheel(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        """When a py3-none-any wheel exists, only that is copied."""
+        out = tmp_path / "out"
+
+        def fake_run(cmd, **kwargs):
+            cmd = list(cmd)
+            result = MagicMock(returncode=0)
+            if "download" in cmd:
+                dir_idx = cmd.index("--dir") + 1
+                base = Path(cmd[dir_idx])
+                subdir = base / "wheels-ubuntu-latest"
+                subdir.mkdir(parents=True, exist_ok=True)
+                (subdir / "pkg_alpha-1.0.0-py3-none-any.whl").write_bytes(b"")
+                subdir2 = base / "wheels-macos-14"
+                subdir2.mkdir(parents=True, exist_ok=True)
+                (
+                    subdir2 / "pkg_alpha-1.0.0-py3-none-macosx_11_0_arm64.whl"
+                ).write_bytes(b"")
+            return result
+
+        mock_run.side_effect = fake_run
+
+        cmd = FetchRunArtifactsCommand(
+            run_id="12345",
+            dist_name="pkg_alpha",
+            directory=str(out),
+        )
+        result = cmd.execute()
+
+        assert result.returncode == 0
+        wheels = list(out.glob("*.whl"))
+        assert len(wheels) == 1
+        assert wheels[0].name == "pkg_alpha-1.0.0-py3-none-any.whl"
+
+    @patch(_SUBPROCESS_RUN)
+    def test_returns_failure_when_no_wheels(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        """Returns non-zero when the run has no matching wheels."""
+        out = tmp_path / "out"
+
+        def fake_run(cmd, **kwargs):
+            cmd = list(cmd)
+            result = MagicMock(returncode=0)
+            if "download" in cmd:
+                dir_idx = cmd.index("--dir") + 1
+                base = Path(cmd[dir_idx])
+                subdir = base / "wheels-ubuntu-latest"
+                subdir.mkdir(parents=True, exist_ok=True)
+                # No matching wheels
+                (subdir / "other_pkg-1.0.0-py3-none-any.whl").write_bytes(b"")
+            return result
+
+        mock_run.side_effect = fake_run
+
+        cmd = FetchRunArtifactsCommand(
+            run_id="12345",
+            dist_name="pkg_alpha",
+            directory=str(out),
+        )
+        result = cmd.execute()
+
+        assert result.returncode != 0
+
+    @patch(_SUBPROCESS_RUN)
+    def test_returns_failure_when_download_fails(self, mock_run: MagicMock) -> None:
+        """Returns non-zero when gh run download fails."""
+        mock_run.return_value = MagicMock(returncode=1)
+
+        cmd = FetchRunArtifactsCommand(
+            run_id="12345",
+            dist_name="pkg_alpha",
+        )
+        result = cmd.execute()
+
+        assert result.returncode != 0
+
+    def test_type_discriminator(self) -> None:
+        cmd = FetchRunArtifactsCommand(run_id="12345", dist_name="pkg_alpha")
+        assert cmd.type == "fetch_run_artifacts"

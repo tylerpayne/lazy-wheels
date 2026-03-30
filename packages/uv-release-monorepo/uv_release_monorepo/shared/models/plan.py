@@ -247,8 +247,92 @@ class FetchGithubReleaseCommand(BaseModel):
         return subprocess.run(args)
 
 
+class FetchRunArtifactsCommand(BaseModel):
+    """Download platform-compatible wheels from a GitHub Actions run's artifacts.
+
+    At execution time, downloads artifacts matching ``wheels-*`` from the run,
+    then filters for wheels compatible with the current platform — preferring
+    universal (``py3-none-any``) wheels.
+
+    Attributes:
+        type: Discriminator for the command union.
+        run_id: GitHub Actions run ID to download artifacts from.
+        dist_name: Wheel distribution name prefix (e.g. ``"pkg_alpha"``).
+        directory: Local directory to save compatible wheels into.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["fetch_run_artifacts"] = "fetch_run_artifacts"
+    run_id: str
+    dist_name: str
+    directory: str = "dist"
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Download run artifacts and extract compatible wheels."""
+        import shutil
+        import tempfile
+
+        from packaging.tags import sys_tags
+        from packaging.utils import parse_wheel_filename
+
+        # 1. Download artifacts into a temp dir (gh extracts into subdirs)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [
+                    "gh",
+                    "run",
+                    "download",
+                    self.run_id,
+                    "--pattern",
+                    "wheels-*",
+                    "--dir",
+                    tmp,
+                ],
+            )
+            if result.returncode != 0:
+                return result
+
+            # 2. Glob all matching wheels from artifact subdirs
+            from pathlib import Path
+
+            all_wheels = list(Path(tmp).rglob(f"{self.dist_name}-*.whl"))
+            if not all_wheels:
+                return subprocess.CompletedProcess(args=[], returncode=1)
+
+            # 3. Prefer universal wheels (platform == "any")
+            universal = [
+                whl
+                for whl in all_wheels
+                if any(t.platform == "any" for t in parse_wheel_filename(whl.name)[3])
+            ]
+
+            if universal:
+                to_copy = universal
+            else:
+                # 4. Filter for platform-compatible wheels
+                compatible = set(sys_tags())
+                to_copy = [
+                    whl
+                    for whl in all_wheels
+                    if parse_wheel_filename(whl.name)[3] & compatible
+                ]
+
+            if not to_copy:
+                return subprocess.CompletedProcess(args=[], returncode=1)
+
+            # 5. Copy compatible wheels to output directory
+            Path(self.directory).mkdir(parents=True, exist_ok=True)
+            for whl in to_copy:
+                shutil.copy2(whl, self.directory)
+
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+
 StageCommand = Annotated[
-    Union[ShellCommand, FetchGithubReleaseCommand],
+    Union[ShellCommand, FetchGithubReleaseCommand, FetchRunArtifactsCommand],
     Field(discriminator="type"),
 ]
 """Union of command types that can appear in a build stage's setup list."""

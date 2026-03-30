@@ -17,6 +17,7 @@ from ..models import (
     PackageInfo,
     PlanConfig,
     ReleasePlan,
+    StageCommand,
     ShellCommand,
 )
 from ..utils.toml import read_pyproject
@@ -289,7 +290,7 @@ class ReleasePlanner:
             unchanged_deps = {n: unchanged[n] for n in needed if n in unchanged}
 
             # -- Stage 0: setup --
-            setup_cmds: list[ShellCommand | FetchGithubReleaseCommand] = [
+            setup_cmds: list[StageCommand] = [
                 ShellCommand(
                     args=[
                         "uv",

@@ -3,69 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
-from ._common import _fatal
-
-
-def _parse_install_spec(spec: str) -> tuple[str, str, str | None]:
-    """Parse an install spec into (gh_repo, package, version).
-
-    Required form: ``org/repo/package[@version]``
-    """
-    version: str | None = None
-    if "@" in spec:
-        spec, version = spec.rsplit("@", 1)
-
-    parts = spec.split("/")
-    if len(parts) == 3:
-        org, repo, package = parts
-        return f"{org}/{repo}", package, version
-    else:
-        _fatal(
-            f"Invalid install spec '{spec}'. "
-            "Expected 'org/repo/package', optionally with '@version'.\n"
-            "  Example: uvr install myorg/myrepo/my-pkg@1.0.0"
-        )
-
-
-def _find_latest_release_tag(package: str, gh_repo: str | None = None) -> str | None:
-    """Return the most recent non-dev release tag for a package.
-
-    Queries GitHub releases for tags matching {package}/v*, excludes -dev tags,
-    and returns the one with the highest version number.
-    """
-    import subprocess
-
-    from packaging.version import Version
-
-    cmd = ["gh", "release", "list", "--json", "tagName", "--limit", "200"]
-    if gh_repo:
-        cmd.extend(["--repo", gh_repo])
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        return None
-    try:
-        releases = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-
-    prefix = f"{package}/v"
-    tags = [
-        r["tagName"]
-        for r in releases
-        if r["tagName"].startswith(prefix) and not r["tagName"].endswith("-dev")
-    ]
-    if not tags:
-        return None
-    return max(tags, key=lambda t: Version(t.split("/v")[-1]))
+from ._common import _fatal, _parse_install_spec
+from ..shared.utils.tags import find_latest_remote_release_tag
 
 
 def cmd_install(args: argparse.Namespace) -> None:
     """Install a package and its transitive internal deps from GitHub releases."""
-    import shutil
     import subprocess
     import tempfile
 
@@ -74,14 +19,6 @@ def cmd_install(args: argparse.Namespace) -> None:
     from ..shared.models import FetchGithubReleaseCommand
 
     gh_repo, package, version = _parse_install_spec(args.package)
-    output_dir: str | None = getattr(args, "output", None)
-    no_install: bool = getattr(args, "no_install", False)
-
-    if no_install and not output_dir:
-        _fatal("--no-install requires -o/--output.")
-
-    if output_dir:
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # For now, install only the requested package; pip resolves external deps
     order = [package]
@@ -92,7 +29,7 @@ def cmd_install(args: argparse.Namespace) -> None:
             if pkg == package and version:
                 tag = f"{pkg}/v{version}"
             else:
-                tag = _find_latest_release_tag(pkg, gh_repo=gh_repo)
+                tag = find_latest_remote_release_tag(pkg, gh_repo=gh_repo)
             if not tag:
                 _fatal(f"No release found for '{pkg}'.")
 
@@ -113,11 +50,5 @@ def cmd_install(args: argparse.Namespace) -> None:
             wheels.append(str(found[0]))
             print(f"  {found[0].name}")
 
-        if output_dir:
-            for whl in wheels:
-                shutil.copy2(whl, output_dir)
-            print(f"\nSaved {len(wheels)} wheel(s) to {output_dir}/")
-
-        if not no_install:
-            print(f"Installing {len(wheels)} wheel(s)...")
-            subprocess.run(["uv", "pip", "install", *wheels], check=True)
+        print(f"\nInstalling {len(wheels)} wheel(s)...")
+        subprocess.run(["uv", "pip", "install", *wheels], check=True)

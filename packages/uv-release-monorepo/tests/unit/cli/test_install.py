@@ -12,9 +12,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from uv_release_monorepo.cli import (
-    _find_latest_release_tag,
     _parse_install_spec,
     cmd_install,
+)
+from uv_release_monorepo.shared.utils.tags import (
+    find_latest_remote_release_tag as _find_latest_release_tag,
 )
 
 from tests._helpers import _write_workspace_repo
