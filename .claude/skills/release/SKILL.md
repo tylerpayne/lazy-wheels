@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Releasing Packages
 
-Prerequisites: `uvr` (`uv tool install uv-release-monorepo`) and `gh`.
+Prerequisites: `uvr` (`uv add --dev uv-release-monorepo`) and `gh`.
 
 For first-time setup, scaffold the workflow with `uvr init` (see `references/cmd-init.md`). To install the Claude skills into your project, see `references/cmd-skill-init.md`.
 
@@ -14,11 +14,7 @@ If the project has existing CI checks (tests, linting, etc.) that aren't yet wir
 
 ## 1. Branch
 
-You must not be on main. If you are, create a release branch:
-
-```bash
-git checkout -b release/[<PACKAGE>]v<VERSION>
-```
+You must not be on main. If you are, create a release branch and switch to it.
 
 The working tree must be clean. Run `git status`. If dirty, ask the user whether to stash, commit, or abort.
 
@@ -148,18 +144,12 @@ If something goes wrong, see `references/troubleshooting.md`.
 
 ## 8. Merge
 
-Merge the release branch back to main — unless the branch should not be merged.
-
-**Merge with care** in these cases:
-- **Post-releases** (`uvr bump --post`) — these branch from an old tag, so pyproject.toml versions will conflict with main. You can merge and accept main's versions, or cherry-pick just the fix commits. See `references/post-releases.md`.
-- **Pre-releases** (`uvr bump --alpha/--beta/--rc`) — do not merge intermediate pre-releases. Stay on the branch through the alpha → beta → rc → final cycle, then merge after the final release. See `references/pre-releases.md`.
-
-**Do merge** for final releases and dev releases that branched from main:
+**ALWAYS** merge stable release branches back to main:
 
 ```bash
 git checkout main
 git pull --rebase
-git merge --no-ff <release-branch> -m "Merge release branch"
+git merge --no-ff <release-branch> -m "Merge <release-branch>"
 git push
 ```
 
@@ -170,13 +160,17 @@ rm -rf .uvr/release-notes/
 uvr status                       # should show no changed packages
 ```
 
+**DO NOT** merge pre-release branches back to main. Stay on the branch through the alpha → beta → rc → stable cycle, then merge after the stable release. See `references/pre-releases.md`.
+
+**TAKE CARE** merging post-release branches back to main — they branch from an old tag, so pyproject.toml versions will conflict. You may need to accept main's versions or cherry-pick just the fix commits. See `references/post-releases.md`.
+
 ---
 
 ## Example
 
 User says: "Let's release the new changes"
 
-1. Verify not on main, create `release/v0.3.0` branch
+1. Verify not on main, create a release branch
 2. Run `uvr status` — shows `my-lib` is dirty (2 commits: added export, fixed parser)
 3. Run `uvr release`, decline the prompt to see the full plan
 4. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"

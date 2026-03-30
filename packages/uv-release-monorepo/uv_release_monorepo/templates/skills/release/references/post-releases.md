@@ -19,7 +19,7 @@ uvr release                  # publishes 1.2.3.post1
 
 ## Version ordering
 
-Post-releases sort after the final release but before the next version:
+Post-releases sort after the stable release but before the next version:
 
 ```
 1.0.1 < 1.0.1.post0 < 1.0.1.post1 < 1.0.2.dev0 < 1.0.2
@@ -48,7 +48,7 @@ To resolve, either:
 
 ## Workflow
 
-Post-releases are made from the original release tag, not from main. **Do not merge the post-release branch back to main.**
+Post-releases are made from the original release tag, not from main. **Take care merging post-release branches back to main** — pyproject.toml versions will conflict since the branch is based on an old tag.
 
 ```bash
 # 1. Check out the original release tag
@@ -72,7 +72,7 @@ uvr release
 
 ## Merging
 
-The post-release branch is based on an old tag, so pyproject.toml versions will conflict with main — the branch has `X.Y.Z.post1.dev0` while main has `X.Y.Z+1.dev0`.
+**TAKE CARE** merging post-release branches back to main. The branch is based on an old tag, so pyproject.toml versions will conflict — the branch has `X.Y.Z.post1.dev0` while main has `X.Y.Z+1.dev0`.
 
 Two options for getting the fix onto main:
 

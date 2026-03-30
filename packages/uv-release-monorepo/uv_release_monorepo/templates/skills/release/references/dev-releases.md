@@ -1,6 +1,6 @@
 # Dev Releases
 
-Dev releases publish the current `.devN` version as-is, without stripping the suffix. They follow [PEP 440](https://peps.python.org/pep-0440/#developmental-releases) versioning. Use them for in-progress testing or CI integration before a final release.
+Dev releases publish the current `.devN` version as-is, without stripping the suffix. They follow [PEP 440](https://peps.python.org/pep-0440/#developmental-releases) versioning. Use them for in-progress testing or CI integration before a stable release.
 
 ## Usage
 
@@ -35,7 +35,7 @@ Dev releases sort before all other release types for the same base version:
 
 ## When to use
 
-- **CI integration testing**: publish a dev wheel so downstream jobs or repos can test against it before the final release
+- **CI integration testing**: publish a dev wheel so downstream jobs or repos can test against it before the stable release
 - **Early feedback**: let collaborators `pip install my-pkg==1.2.3.dev0` to try unreleased work
 - **Iterative publishing**: each `--dev` release increments the dev number, so you can publish multiple times during development
 
