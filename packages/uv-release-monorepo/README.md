@@ -63,6 +63,14 @@ uvr install myorg/myrepo/my-pkg           # latest release
 uvr install myorg/myrepo/my-pkg@1.2.3     # specific version
 ```
 
+## Downloading wheels
+
+```bash
+uvr wheels myorg/myrepo/my-pkg                  # latest release
+uvr wheels myorg/myrepo/my-pkg -o wheels/       # save to custom dir
+uvr wheels myorg/myrepo/my-pkg --run-id 12345   # from CI artifacts
+```
+
 ## Hooks
 
 Customize the release pipeline with Python hooks. Subclass `ReleaseHook` and override the methods you need:

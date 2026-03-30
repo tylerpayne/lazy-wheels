@@ -167,3 +167,21 @@ uvr install ORG/REPO/PKG[@VERSION]
 
 The install spec requires the three-part `org/repo/package` form. Append
 `@VERSION` to pin a specific release; otherwise the latest release is used.
+
+## `uvr wheels`
+
+Download platform-compatible wheels from GitHub releases or CI run artifacts
+without installing them.
+
+```
+uvr wheels ORG/REPO/PKG[@VERSION] [-o DIR] [--release-tag TAG] [--run-id ID]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-o`, `--output` | Directory to save wheels into (default: `dist/`) |
+| `--release-tag` | Download from a specific GitHub release tag |
+| `--run-id` | Download from a GitHub Actions run's artifacts |
+
+When neither `--release-tag` nor `--run-id` is given, the latest release for
+the package is used. Wheels are filtered by platform compatibility.

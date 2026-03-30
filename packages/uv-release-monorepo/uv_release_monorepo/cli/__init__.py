@@ -73,6 +73,7 @@ Commands:
   status        Preview the release plan (alias for release --dry-run)
   runners       Manage per-package build runners
   install       Install a package from GitHub releases (org/repo/pkg)
+  wheels        Download wheels from GitHub releases or CI artifacts
   init          Scaffold the GitHub Actions workflow
   validate      Validate an existing release.yml
   skill init    Copy Claude Code skills into your project
