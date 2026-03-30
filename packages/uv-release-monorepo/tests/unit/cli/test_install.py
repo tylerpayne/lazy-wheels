@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -19,6 +20,60 @@ from uv_release_monorepo.cli import (
 from tests._helpers import _write_workspace_repo
 
 
+def _make_fake_run(
+    *,
+    release_tags: list[dict[str, str]] | None = None,
+    wheel_name_fn: Callable[[str, str], str] | None = None,
+):
+    """Build a fake subprocess.run that handles gh list, view, download, and uv pip install.
+
+    Args:
+        release_tags: Response for ``gh release list`` (defaults to empty).
+        wheel_name_fn: Given (tag, tmp_dir), return the wheel filename to create.
+            Defaults to deriving from the tag.
+    """
+    release_tags = release_tags or []
+    calls: list[list[str]] = []
+
+    def _default_wheel_name(tag: str, _dir: str) -> str:
+        pkg_name = tag.split("/v")[0].replace("-", "_")
+        ver = tag.split("/v")[1]
+        return f"{pkg_name}-{ver}-py3-none-any.whl"
+
+    whl_fn = wheel_name_fn or _default_wheel_name
+
+    def fake_run(cmd, **kwargs):
+        cmd = list(cmd)
+        calls.append(cmd)
+        result = MagicMock()
+        result.returncode = 0
+
+        if "list" in cmd:
+            # gh release list
+            result.stdout = json.dumps(release_tags)
+        elif "view" in cmd:
+            # gh release view <tag> --json assets (from FetchGithubReleaseCommand)
+            tag_idx = cmd.index("view") + 1
+            tag = cmd[tag_idx]
+            whl = whl_fn(tag, "")
+            result.stdout = json.dumps({"assets": [{"name": whl}]})
+        elif "download" in cmd:
+            # gh release download
+            tag_idx = cmd.index("download") + 1
+            tag = cmd[tag_idx]
+            dir_idx = cmd.index("--dir") + 1
+            whl_dir = Path(cmd[dir_idx])
+            whl_dir.mkdir(parents=True, exist_ok=True)
+            whl = whl_fn(tag, str(whl_dir))
+            (whl_dir / whl).write_bytes(b"")
+        else:
+            # uv pip install etc.
+            result.stdout = ""
+        return result
+
+    return fake_run, calls
+
+
 class TestCmdInstall:
     """Tests for cmd_install()."""
 
@@ -26,24 +81,9 @@ class TestCmdInstall:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Installs the requested package from a remote repo."""
-        calls: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            calls.append(list(cmd))
-            result = MagicMock()
-            result.returncode = 0
-            result.stdout = json.dumps([{"tagName": "pkg-beta/v1.0.0"}])
-            if "download" in cmd:
-                dir_idx = cmd.index("--dir") + 1
-                whl_dir = Path(cmd[dir_idx])
-                whl_dir.mkdir(parents=True, exist_ok=True)
-                tag_idx = cmd.index("download") + 1
-                tag = cmd[tag_idx]
-                pkg_name = tag.split("/v")[0].replace("-", "_")
-                ver = tag.split("/v")[1]
-                (whl_dir / f"{pkg_name}-{ver}-py3-none-any.whl").write_bytes(b"")
-            return result
-
+        fake_run, calls = _make_fake_run(
+            release_tags=[{"tagName": "pkg-beta/v1.0.0"}],
+        )
         monkeypatch.setattr(subprocess, "run", fake_run)
 
         args = argparse.Namespace(package="acme/my-repo/pkg-beta")
@@ -68,20 +108,21 @@ class TestCmdInstall:
         """ORG/REPO/PACKAGE@VERSION uses that exact release tag."""
         download_tags: list[str] = []
 
-        def fake_run(cmd, **kwargs):
-            result = MagicMock()
-            result.returncode = 0
-            result.stdout = json.dumps([])
+        def wheel_name(tag: str, _dir: str) -> str:
+            return "pkg_alpha-0.1.5-py3-none-any.whl"
+
+        fake_run, calls = _make_fake_run(wheel_name_fn=wheel_name)
+
+        original_fake = fake_run
+
+        def tracking_run(cmd, **kwargs):
+            cmd = list(cmd)
             if "download" in cmd:
                 tag_idx = cmd.index("download") + 1
                 download_tags.append(cmd[tag_idx])
-                dir_idx = cmd.index("--dir") + 1
-                whl_dir = cmd[dir_idx]
-                Path(whl_dir).mkdir(parents=True, exist_ok=True)
-                (Path(whl_dir) / "pkg_alpha-0.1.5-py3-none-any.whl").write_bytes(b"")
-            return result
+            return original_fake(cmd, **kwargs)
 
-        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", tracking_run)
 
         args = argparse.Namespace(package="acme/my-repo/pkg-alpha@0.1.5")
         cmd_install(args)
@@ -99,26 +140,15 @@ class TestCmdInstallRemote:
         _write_workspace_repo(tmp_path, [])
         monkeypatch.chdir(tmp_path)
 
-        seen_cmds: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            seen_cmds.append(list(cmd))
-            result = MagicMock()
-            result.returncode = 0
-            result.stdout = json.dumps([{"tagName": "pkg-alpha/v1.0.0"}])
-            if "download" in cmd:
-                dir_idx = cmd.index("--dir") + 1
-                whl_dir = Path(cmd[dir_idx])
-                whl_dir.mkdir(parents=True, exist_ok=True)
-                (whl_dir / "pkg_alpha-1.0.0-py3-none-any.whl").write_bytes(b"")
-            return result
-
+        fake_run, calls = _make_fake_run(
+            release_tags=[{"tagName": "pkg-alpha/v1.0.0"}],
+        )
         monkeypatch.setattr(subprocess, "run", fake_run)
 
         args = argparse.Namespace(package="acme/my-monorepo/pkg-alpha")
         cmd_install(args)
 
-        repo_cmds = [c for c in seen_cmds if "--repo" in c]
+        repo_cmds = [c for c in calls if "--repo" in c]
         assert all("acme/my-monorepo" in c for c in repo_cmds)
 
     def test_remote_install_pinned_version_skips_tag_lookup(
@@ -128,28 +158,18 @@ class TestCmdInstallRemote:
         _write_workspace_repo(tmp_path, [])
         monkeypatch.chdir(tmp_path)
 
-        seen_cmds: list[list[str]] = []
+        def wheel_name(tag: str, _dir: str) -> str:
+            return "pkg_alpha-0.5.0-py3-none-any.whl"
 
-        def fake_run(cmd, **kwargs):
-            seen_cmds.append(list(cmd))
-            result = MagicMock()
-            result.returncode = 0
-            result.stdout = "[]"
-            if "download" in cmd:
-                dir_idx = cmd.index("--dir") + 1
-                whl_dir = Path(cmd[dir_idx])
-                whl_dir.mkdir(parents=True, exist_ok=True)
-                (whl_dir / "pkg_alpha-0.5.0-py3-none-any.whl").write_bytes(b"")
-            return result
-
+        fake_run, calls = _make_fake_run(wheel_name_fn=wheel_name)
         monkeypatch.setattr(subprocess, "run", fake_run)
 
         args = argparse.Namespace(package="acme/my-monorepo/pkg-alpha@0.5.0")
         cmd_install(args)
 
-        list_cmds = [c for c in seen_cmds if "list" in c]
+        list_cmds = [c for c in calls if "list" in c]
         assert len(list_cmds) == 0
-        download_cmds = [c for c in seen_cmds if "download" in c]
+        download_cmds = [c for c in calls if "download" in c]
         assert any("pkg-alpha/v0.5.0" in c for c in download_cmds)
 
 

@@ -7,8 +7,9 @@ the release pipeline.
 from __future__ import annotations
 
 import json as _json
+import subprocess
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, Protocol, Union
 
 from packaging.utils import canonicalize_name
 from pydantic import (
@@ -51,6 +52,20 @@ Serializes back to a JSON string for use as a dict key in JSON output.
 def _dist_name(name: str) -> str:
     """Convert a package name to its wheel/dist filename stem."""
     return canonicalize_name(name).replace("-", "_")
+
+
+# ---------------------------------------------------------------------------
+# Command protocol + implementations
+# ---------------------------------------------------------------------------
+
+
+class Command(Protocol):
+    """Interface for executable release-plan commands."""
+
+    label: str
+    check: bool
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]: ...
 
 
 @dataclass
@@ -121,21 +136,122 @@ class ChangedPackage(PackageInfo):
     runners: list[list[str]] = Field(default_factory=lambda: [["ubuntu-latest"]])
 
 
-class PlanCommand(BaseModel):
+class ShellCommand(BaseModel):
     """A single shell command in the release plan.
 
-    The planner pre-computes every command; the executor just runs them
-    via ``subprocess.run()``.
+    The planner pre-computes every command; the executor runs them
+    via ``execute()``.
 
     Attributes:
+        type: Discriminator for the command union.
         args: Command and arguments, e.g. ``["git", "tag", "pkg/v1.0.0"]``.
         label: Human-readable description printed before execution.
         check: If True, abort on non-zero exit code.
     """
 
+    type: Literal["shell"] = "shell"
     args: list[str]
     label: str = ""
     check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Run the command via subprocess."""
+        return subprocess.run(self.args)
+
+
+# Backwards-compatible alias for user hooks that import PlanCommand.
+PlanCommand = ShellCommand
+
+
+class FetchGithubReleaseCommand(BaseModel):
+    """Download platform-compatible wheels from a GitHub release.
+
+    At execution time, queries the release for available assets, prefers
+    universal (``py3-none-any``) wheels, and falls back to platform-filtered
+    downloads using ``packaging.tags.sys_tags()``.
+
+    Attributes:
+        type: Discriminator for the command union.
+        tag: GitHub release tag to download from (e.g. ``"pkg/v1.0.0"``).
+        dist_name: Wheel distribution name prefix (e.g. ``"pkg_alpha"``).
+        directory: Local directory to download wheels into.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["fetch_release"] = "fetch_release"
+    tag: str
+    dist_name: str
+    directory: str = "deps"
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Query release assets and download only compatible wheels."""
+        from packaging.tags import sys_tags
+        from packaging.utils import parse_wheel_filename
+
+        # 1. List release assets
+        result = subprocess.run(
+            ["gh", "release", "view", self.tag, "--json", "assets"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return subprocess.CompletedProcess(args=[], returncode=1)
+
+        assets = _json.loads(result.stdout).get("assets", [])
+        wheel_names = [
+            a["name"]
+            for a in assets
+            if a["name"].startswith(f"{self.dist_name}-") and a["name"].endswith(".whl")
+        ]
+
+        if not wheel_names:
+            return subprocess.CompletedProcess(args=[], returncode=1)
+
+        # 2. Prefer universal wheels (platform == "any")
+        universal = [
+            name
+            for name in wheel_names
+            if any(t.platform == "any" for t in parse_wheel_filename(name)[3])
+        ]
+
+        if universal:
+            to_download = universal
+        else:
+            # 3. Filter for platform-compatible wheels
+            compatible = set(sys_tags())
+            to_download = [
+                name
+                for name in wheel_names
+                if parse_wheel_filename(name)[3] & compatible
+            ]
+
+        if not to_download:
+            return subprocess.CompletedProcess(args=[], returncode=1)
+
+        # 4. Download with exact filenames as patterns
+        args = [
+            "gh",
+            "release",
+            "download",
+            self.tag,
+            "--dir",
+            self.directory,
+            "--clobber",
+        ]
+        for name in to_download:
+            args.extend(["--pattern", name])
+
+        return subprocess.run(args)
+
+
+StageCommand = Annotated[
+    Union[ShellCommand, FetchGithubReleaseCommand],
+    Field(discriminator="type"),
+]
+"""Union of command types that can appear in a build stage's setup list."""
 
 
 class BuildStage(BaseModel):
@@ -153,9 +269,23 @@ class BuildStage(BaseModel):
         cleanup: Commands that run sequentially after parallel builds.
     """
 
-    setup: list[PlanCommand] = Field(default_factory=list)
-    packages: dict[str, list[PlanCommand]] = Field(default_factory=dict)
-    cleanup: list[PlanCommand] = Field(default_factory=list)
+    setup: list[StageCommand] = Field(default_factory=list)
+    packages: dict[str, list[ShellCommand]] = Field(default_factory=dict)
+    cleanup: list[ShellCommand] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_command_types(cls, data: Any) -> Any:
+        """Add ``type='shell'`` to commands missing the discriminator.
+
+        Provides backwards compatibility with plans serialized before
+        the ``type`` field was introduced.
+        """
+        if isinstance(data, dict):
+            for cmd in data.get("setup", []):
+                if isinstance(cmd, dict) and "type" not in cmd:
+                    cmd["type"] = "shell"
+        return data
 
 
 class ReleasePlan(BaseModel):
@@ -172,7 +302,7 @@ class ReleasePlan(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    schema_version: int = 9
+    schema_version: int = 10
     uvr_version: str
     uvr_install: str = "uv-release-monorepo"
     python_version: str = "3.12"
@@ -186,8 +316,8 @@ class ReleasePlan(BaseModel):
 
     # Pre-computed command sequences for the executor
     build_commands: dict[RunnerKey, list[BuildStage]] = Field(default_factory=dict)
-    release_commands: list[PlanCommand] = Field(default_factory=list)
-    finalize_commands: list[PlanCommand] = Field(default_factory=list)
+    release_commands: list[ShellCommand] = Field(default_factory=list)
+    finalize_commands: list[ShellCommand] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _forbid_skip_validate(self) -> ReleasePlan:

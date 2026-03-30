@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import json
+from unittest.mock import MagicMock, patch
+
 from uv_release_monorepo.shared.models import (
+    BuildStage,
     ChangedPackage,
+    FetchGithubReleaseCommand,
     PackageInfo,
     ReleasePlan,
+    ShellCommand,
 )
+
+_SUBPROCESS_RUN = "uv_release_monorepo.shared.models.plan.subprocess.run"
 
 
 class TestPackageInfo:
@@ -45,9 +53,9 @@ class TestReleasePlan:
             unchanged={"pkg-beta": beta},
         )
 
-    def test_schema_version_defaults_to_9(self) -> None:
+    def test_schema_version_defaults_to_10(self) -> None:
         plan = self._make_plan()
-        assert plan.schema_version == 9
+        assert plan.schema_version == 10
 
     def test_extra_keys_survive_round_trip(self) -> None:
         plan = self._make_plan()
@@ -87,3 +95,182 @@ class TestReleasePlan:
         entry = data["release_matrix"][0]
         assert entry["package"] == "pkg-alpha"
         assert entry["tag"] == "pkg-alpha/v0.1.5"
+
+
+class TestShellCommand:
+    """Tests for ShellCommand.execute()."""
+
+    @patch(_SUBPROCESS_RUN)
+    def test_execute_calls_subprocess(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0)
+        cmd = ShellCommand(args=["echo", "hello"])
+        result = cmd.execute()
+        mock_run.assert_called_once_with(["echo", "hello"])
+        assert result.returncode == 0
+
+    def test_type_discriminator(self) -> None:
+        cmd = ShellCommand(args=["echo"])
+        assert cmd.type == "shell"
+
+
+class TestFetchGithubReleaseCommand:
+    """Tests for FetchGithubReleaseCommand.execute()."""
+
+    def _mock_gh_view(self, asset_names: list[str]) -> MagicMock:
+        """Return a MagicMock for the gh release view subprocess result."""
+        assets = [{"name": n} for n in asset_names]
+        result = MagicMock(returncode=0, stdout=json.dumps({"assets": assets}))
+        return result
+
+    @patch(_SUBPROCESS_RUN)
+    def test_prefers_universal_wheel(self, mock_run: MagicMock) -> None:
+        """When a py3-none-any wheel exists, only that is downloaded."""
+        view_result = self._mock_gh_view(
+            [
+                "pkg_alpha-1.0.0-py3-none-any.whl",
+                "pkg_alpha-1.0.0-cp311-cp311-linux_x86_64.whl",
+            ]
+        )
+        download_result = MagicMock(returncode=0)
+        mock_run.side_effect = [view_result, download_result]
+
+        cmd = FetchGithubReleaseCommand(
+            tag="pkg-alpha/v1.0.0",
+            dist_name="pkg_alpha",
+            directory="deps",
+        )
+        result = cmd.execute()
+
+        assert result.returncode == 0
+        download_call = mock_run.call_args_list[1]
+        download_args = (
+            download_call.args[0] if download_call.args else download_call[0][0]
+        )
+        assert "--pattern" in download_args
+        pattern_idx = download_args.index("--pattern")
+        assert download_args[pattern_idx + 1] == "pkg_alpha-1.0.0-py3-none-any.whl"
+        # Only one pattern — the universal wheel
+        assert download_args.count("--pattern") == 1
+
+    @patch(_SUBPROCESS_RUN)
+    def test_filters_platform_wheels(self, mock_run: MagicMock) -> None:
+        """When no universal wheel exists, filters by platform compatibility."""
+        import platform as _platform
+
+        # Use py3-none-<platform> so the test doesn't depend on cpython version.
+        # One wheel matches the test host, the other doesn't.
+        if _platform.system() == "Darwin":
+            compatible = "pkg_alpha-1.0.0-py3-none-macosx_11_0_arm64.whl"
+            incompatible = "pkg_alpha-1.0.0-py3-none-linux_x86_64.whl"
+        else:
+            compatible = "pkg_alpha-1.0.0-py3-none-linux_x86_64.whl"
+            incompatible = "pkg_alpha-1.0.0-py3-none-macosx_11_0_arm64.whl"
+
+        view_result = self._mock_gh_view([incompatible, compatible])
+        download_result = MagicMock(returncode=0)
+        mock_run.side_effect = [view_result, download_result]
+
+        cmd = FetchGithubReleaseCommand(
+            tag="pkg-alpha/v1.0.0",
+            dist_name="pkg_alpha",
+        )
+        result = cmd.execute()
+
+        assert result.returncode == 0
+        download_call = mock_run.call_args_list[1]
+        download_args = (
+            download_call.args[0] if download_call.args else download_call[0][0]
+        )
+        patterns = [
+            download_args[i + 1]
+            for i, a in enumerate(download_args)
+            if a == "--pattern"
+        ]
+        assert len(patterns) == 1
+        assert patterns[0] == compatible
+
+    @patch(_SUBPROCESS_RUN)
+    def test_returns_failure_when_no_compatible_wheels(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Returns non-zero when no wheels match the current platform."""
+        # Use a fake platform tag that won't match any real system
+        view_result = self._mock_gh_view(
+            [
+                "pkg_alpha-1.0.0-cp311-cp311-fakeos_99_0_fakearch.whl",
+            ]
+        )
+        mock_run.return_value = view_result
+
+        cmd = FetchGithubReleaseCommand(
+            tag="pkg-alpha/v1.0.0",
+            dist_name="pkg_alpha",
+        )
+        result = cmd.execute()
+
+        assert result.returncode != 0
+
+    @patch(_SUBPROCESS_RUN)
+    def test_returns_failure_when_no_assets(self, mock_run: MagicMock) -> None:
+        """Returns non-zero when the release has no matching wheel assets."""
+        view_result = self._mock_gh_view(["README.md", "checksums.txt"])
+        mock_run.return_value = view_result
+
+        cmd = FetchGithubReleaseCommand(
+            tag="pkg-alpha/v1.0.0",
+            dist_name="pkg_alpha",
+        )
+        result = cmd.execute()
+
+        assert result.returncode != 0
+
+    @patch(_SUBPROCESS_RUN)
+    def test_returns_failure_when_gh_view_fails(self, mock_run: MagicMock) -> None:
+        """Returns non-zero when gh release view fails."""
+        mock_run.return_value = MagicMock(returncode=1)
+
+        cmd = FetchGithubReleaseCommand(
+            tag="pkg-alpha/v1.0.0",
+            dist_name="pkg_alpha",
+        )
+        result = cmd.execute()
+
+        assert result.returncode != 0
+
+    def test_type_discriminator(self) -> None:
+        cmd = FetchGithubReleaseCommand(
+            tag="pkg-alpha/v1.0.0",
+            dist_name="pkg_alpha",
+        )
+        assert cmd.type == "fetch_release"
+
+    def test_serialization_round_trip(self) -> None:
+        """FetchGithubReleaseCommand survives JSON serialization in a BuildStage."""
+        stage = BuildStage(
+            setup=[
+                ShellCommand(args=["mkdir", "-p", "deps"]),
+                FetchGithubReleaseCommand(
+                    tag="pkg-alpha/v1.0.0",
+                    dist_name="pkg_alpha",
+                    directory="deps",
+                    label="Fetch pkg-alpha",
+                ),
+            ],
+        )
+        data = stage.model_dump(mode="json")
+        restored = BuildStage.model_validate(data)
+        assert len(restored.setup) == 2
+        assert isinstance(restored.setup[0], ShellCommand)
+        assert isinstance(restored.setup[1], FetchGithubReleaseCommand)
+        assert restored.setup[1].tag == "pkg-alpha/v1.0.0"
+
+    def test_backwards_compat_missing_type(self) -> None:
+        """Old plan JSON without type field deserializes as ShellCommand."""
+        data = {
+            "setup": [{"args": ["mkdir", "-p", "deps"]}],
+            "packages": {},
+            "cleanup": [],
+        }
+        stage = BuildStage.model_validate(data)
+        assert isinstance(stage.setup[0], ShellCommand)
+        assert stage.setup[0].args == ["mkdir", "-p", "deps"]

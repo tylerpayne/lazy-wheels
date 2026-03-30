@@ -10,10 +10,12 @@ from uv_release_monorepo.shared.models import (
     BuildStage,
     ChangedPackage,
     PackageInfo,
-    PlanCommand,
     ReleasePlan,
+    ShellCommand,
 )
 from uv_release_monorepo.cli import cli
+
+_SUBPROCESS_RUN = "uv_release_monorepo.shared.models.plan.subprocess.run"
 
 
 def _make_plan_json(
@@ -53,7 +55,7 @@ def _make_plan_json(
     return plan.model_dump_json()
 
 
-@patch("uv_release_monorepo.shared.executor.subprocess.run")
+@patch(_SUBPROCESS_RUN)
 def test_build_runs_commands(mock_run: MagicMock) -> None:
     """uvr build runs the pre-computed build stages for a runner."""
     mock_run.return_value = MagicMock(returncode=0)
@@ -62,11 +64,11 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
         unchanged=[],
         build_commands={
             ("ubuntu-latest",): [
-                BuildStage(setup=[PlanCommand(args=["mkdir", "-p", "dist"])]),
+                BuildStage(setup=[ShellCommand(args=["mkdir", "-p", "dist"])]),
                 BuildStage(
                     packages={
                         "pkg-a": [
-                            PlanCommand(
+                            ShellCommand(
                                 args=["uv", "build", "packages/pkg-a"],
                                 label="Build pkg-a",
                             )
@@ -85,7 +87,7 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
     assert mock_run.call_count == 2
 
 
-@patch("uv_release_monorepo.shared.executor.subprocess.run")
+@patch(_SUBPROCESS_RUN)
 def test_finalize_runs_commands(mock_run: MagicMock) -> None:
     """uvr finalize runs the pre-computed finalize commands."""
     mock_run.return_value = MagicMock(returncode=0)
@@ -93,8 +95,8 @@ def test_finalize_runs_commands(mock_run: MagicMock) -> None:
         changed=["pkg-a"],
         unchanged=[],
         finalize_commands=[
-            PlanCommand(args=["git", "tag", "pkg-a/v1.0.0"]).model_dump(),
-            PlanCommand(args=["git", "push"]).model_dump(),
+            ShellCommand(args=["git", "tag", "pkg-a/v1.0.0"]).model_dump(),
+            ShellCommand(args=["git", "push"]).model_dump(),
         ],
     )
     with patch.object(sys, "argv", ["uvr", "finalize", "--plan", plan_json]):
@@ -102,7 +104,7 @@ def test_finalize_runs_commands(mock_run: MagicMock) -> None:
     assert mock_run.call_count == 2
 
 
-@patch("uv_release_monorepo.shared.executor.subprocess.run")
+@patch(_SUBPROCESS_RUN)
 def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     """uvr build is a no-op when no commands exist for the runner."""
     plan_json = _make_plan_json(changed=["pkg-a"], unchanged=[])

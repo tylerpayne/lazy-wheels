@@ -13,10 +13,11 @@ from ..utils.shell import Progress
 from ..models import (
     BuildStage,
     ChangedPackage,
+    FetchGithubReleaseCommand,
     PackageInfo,
-    PlanCommand,
     PlanConfig,
     ReleasePlan,
+    ShellCommand,
 )
 from ..utils.toml import read_pyproject
 
@@ -288,8 +289,8 @@ class ReleasePlanner:
             unchanged_deps = {n: unchanged[n] for n in needed if n in unchanged}
 
             # -- Stage 0: setup --
-            setup_cmds: list[PlanCommand] = [
-                PlanCommand(
+            setup_cmds: list[ShellCommand | FetchGithubReleaseCommand] = [
+                ShellCommand(
                     args=[
                         "uv",
                         "run",
@@ -304,18 +305,10 @@ class ReleasePlanner:
                 tag = release_tags.get(name)
                 if tag:
                     setup_cmds.append(
-                        PlanCommand(
-                            args=[
-                                "gh",
-                                "release",
-                                "download",
-                                tag,
-                                "--pattern",
-                                f"{_dist_name(name)}-*.whl",
-                                "--dir",
-                                "deps/",
-                                "--clobber",
-                            ],
+                        FetchGithubReleaseCommand(
+                            tag=tag,
+                            dist_name=_dist_name(name),
+                            directory="deps",
                             label=f"Fetch {name} from {tag}",
                         )
                     )
@@ -325,7 +318,7 @@ class ReleasePlanner:
             layers = topo_layers(changed_to_build)
             max_layer = max(layers.values()) if layers else -1
             for layer in range(max_layer + 1):
-                layer_cmds: dict[str, list[PlanCommand]] = {}
+                layer_cmds: dict[str, list[ShellCommand]] = {}
                 for pkg, pkg_layer in sorted(layers.items()):
                     if pkg_layer != layer:
                         continue
@@ -343,7 +336,7 @@ class ReleasePlanner:
                         "--no-sources",
                     ]
                     layer_cmds[pkg] = [
-                        PlanCommand(args=build_args, label=f"Build {pkg}"),
+                        ShellCommand(args=build_args, label=f"Build {pkg}"),
                     ]
                 stages.append(BuildStage(packages=layer_cmds))
 
@@ -361,7 +354,7 @@ class ReleasePlanner:
                 stages.append(
                     BuildStage(
                         cleanup=[
-                            PlanCommand(
+                            ShellCommand(
                                 args=[
                                     "uv",
                                     "run",
@@ -381,16 +374,16 @@ class ReleasePlanner:
     def _generate_release_commands(
         self,
         changed: dict[str, ChangedPackage],
-    ) -> list[PlanCommand]:
+    ) -> list[ShellCommand]:
         """Generate publish commands (only for local execution)."""
         if self.config.ci_publish:
             return []
 
-        cmds: list[PlanCommand] = []
+        cmds: list[ShellCommand] = []
         for name, pkg in sorted(changed.items()):
             tag = f"{name}/v{pkg.release_version}"
             cmds.append(
-                PlanCommand(
+                ShellCommand(
                     args=[
                         "gh",
                         "release",
@@ -412,17 +405,17 @@ class ReleasePlanner:
         self,
         changed: dict[str, ChangedPackage],
         published_versions: dict[str, str],
-    ) -> list[PlanCommand]:
+    ) -> list[ShellCommand]:
         """Generate finalize commands (tag, bump, commit, push)."""
-        cmds: list[PlanCommand] = []
+        cmds: list[ShellCommand] = []
 
         # Git identity (CI only)
         if self.config.ci_publish:
             cmds.append(
-                PlanCommand(args=["git", "config", "user.name", "github-actions[bot]"])
+                ShellCommand(args=["git", "config", "user.name", "github-actions[bot]"])
             )
             cmds.append(
-                PlanCommand(
+                ShellCommand(
                     args=[
                         "git",
                         "config",
@@ -436,7 +429,7 @@ class ReleasePlanner:
         if not self.config.ci_publish:
             for name, pkg in sorted(changed.items()):
                 tag = f"{name}/v{pkg.release_version}"
-                cmds.append(PlanCommand(args=["git", "tag", tag], label=f"Tag {tag}"))
+                cmds.append(ShellCommand(args=["git", "tag", tag], label=f"Tag {tag}"))
 
         # Version bumps + dep pinning
         pyproject_paths: list[str] = []
@@ -445,7 +438,7 @@ class ReleasePlanner:
             pyproject_paths.append(pyproject)
 
             cmds.append(
-                PlanCommand(
+                ShellCommand(
                     args=["uv", "version", pkg.next_version, "--directory", pkg.path],
                     label=f"Bump {name} to {pkg.next_version}",
                 )
@@ -458,24 +451,24 @@ class ReleasePlanner:
             ]
             if dep_specs:
                 cmds.append(
-                    PlanCommand(
+                    ShellCommand(
                         args=["uvr", "pin-deps", "--path", pyproject] + dep_specs,
                         label=f"Pin {name} deps",
                     )
                 )
 
         # Sync, stage, commit
-        cmds.append(PlanCommand(args=["uv", "sync", "--all-groups", "--all-extras"]))
+        cmds.append(ShellCommand(args=["uv", "sync", "--all-groups", "--all-extras"]))
         for p in pyproject_paths:
-            cmds.append(PlanCommand(args=["git", "add", p]))
-        cmds.append(PlanCommand(args=["git", "add", "uv.lock"]))
+            cmds.append(ShellCommand(args=["git", "add", p]))
+        cmds.append(ShellCommand(args=["git", "add", "uv.lock"]))
 
         summary = "\n".join(
             f"  {n}: {pkg.release_version} -> {pkg.next_version}"
             for n, pkg in sorted(changed.items())
         )
         cmds.append(
-            PlanCommand(
+            ShellCommand(
                 args=[
                     "git",
                     "commit",
@@ -490,12 +483,12 @@ class ReleasePlanner:
         # Baseline tags
         for name, pkg in sorted(changed.items()):
             tag = f"{name}/v{pkg.next_version}-base"
-            cmds.append(PlanCommand(args=["git", "tag", tag], label=f"Baseline {tag}"))
+            cmds.append(ShellCommand(args=["git", "tag", tag], label=f"Baseline {tag}"))
 
         # Push
         if self.config.ci_publish:
-            cmds.append(PlanCommand(args=["git", "push"]))
-            cmds.append(PlanCommand(args=["git", "push", "--tags"]))
+            cmds.append(ShellCommand(args=["git", "push"]))
+            cmds.append(ShellCommand(args=["git", "push", "--tags"]))
 
         return cmds
 

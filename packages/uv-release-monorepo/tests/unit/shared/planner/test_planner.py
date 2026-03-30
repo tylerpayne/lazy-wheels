@@ -6,7 +6,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uv_release_monorepo.shared.models import PackageInfo, PlanConfig, ReleasePlan
+from uv_release_monorepo.shared.models import (
+    FetchGithubReleaseCommand,
+    PackageInfo,
+    PlanConfig,
+    ReleasePlan,
+)
 from uv_release_monorepo.shared.planner import build_plan
 
 from tests._helpers import _make_ctx
@@ -322,3 +327,75 @@ class TestBuildCommandStages:
         assert cleanup_stage.cleanup
         cleanup_cmd = cleanup_stage.cleanup[0]
         assert "tools" in " ".join(cleanup_cmd.args)
+
+    @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
+    @patch("uv_release_monorepo.shared.planner._planner.build_context")
+    def test_setup_uses_fetch_command_for_unchanged_deps(
+        self,
+        mock_build_ctx: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """Setup stage uses FetchGithubReleaseCommand for unchanged dep downloads."""
+        packages = {
+            "tools": PackageInfo(path="packages/tools", version="1.0.0", deps=[]),
+            "overlay": PackageInfo(
+                path="packages/overlay", version="1.0.0", deps=["tools"]
+            ),
+        }
+        mock_build_ctx.return_value = _make_ctx(
+            packages,
+            release_tags={"tools": "tools/v0.9.0", "overlay": None},
+        )
+        # Only overlay changed; tools is an unchanged dep
+        mock_detect.return_value = ["overlay"]
+
+        plan = build_plan(
+            PlanConfig(rebuild_all=False, matrix={}, uvr_version="0.3.0", dry_run=True)
+        )
+
+        stages = plan.build_commands[("ubuntu-latest",)]
+        setup = stages[0].setup
+
+        fetch_cmds = [
+            cmd for cmd in setup if isinstance(cmd, FetchGithubReleaseCommand)
+        ]
+        assert len(fetch_cmds) == 1
+        assert fetch_cmds[0].tag == "tools/v0.9.0"
+        assert fetch_cmds[0].dist_name == "tools"
+        assert fetch_cmds[0].directory == "deps"
+
+    @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
+    @patch("uv_release_monorepo.shared.planner._planner.build_context")
+    def test_setup_fetch_on_each_runner(
+        self,
+        mock_build_ctx: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """Each runner's setup stage gets its own fetch command."""
+        packages = {
+            "lib": PackageInfo(path="packages/lib", version="1.0.0", deps=[]),
+            "app": PackageInfo(path="packages/app", version="1.0.0", deps=["lib"]),
+        }
+        mock_build_ctx.return_value = _make_ctx(
+            packages,
+            release_tags={"lib": "lib/v0.9.0", "app": None},
+        )
+        mock_detect.return_value = ["app"]
+
+        plan = build_plan(
+            PlanConfig(
+                rebuild_all=False,
+                matrix={"app": [["ubuntu-latest"], ["macos-14"]]},
+                uvr_version="0.3.0",
+                dry_run=True,
+            )
+        )
+
+        for runner_key in [("ubuntu-latest",), ("macos-14",)]:
+            stages = plan.build_commands[runner_key]
+            setup = stages[0].setup
+            fetch_cmds = [
+                cmd for cmd in setup if isinstance(cmd, FetchGithubReleaseCommand)
+            ]
+            assert len(fetch_cmds) == 1, f"Missing fetch for {runner_key}"
+            assert fetch_cmds[0].tag == "lib/v0.9.0"

@@ -68,6 +68,10 @@ def cmd_install(args: argparse.Namespace) -> None:
     import subprocess
     import tempfile
 
+    from packaging.utils import canonicalize_name
+
+    from ..shared.models import FetchGithubReleaseCommand
+
     gh_repo, package, version = _parse_install_spec(args.package)
 
     # For now, install only the requested package; pip resolves external deps
@@ -83,25 +87,18 @@ def cmd_install(args: argparse.Namespace) -> None:
             if not tag:
                 _fatal(f"No release found for '{pkg}'.")
 
-            cmd = [
-                "gh",
-                "release",
-                "download",
-                tag,
-                "--pattern",
-                "*.whl",
-                "--dir",
-                tmp,
-                "--clobber",
-                "--repo",
-                gh_repo,
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            dist_name = canonicalize_name(pkg).replace("-", "_")
+            fetch = FetchGithubReleaseCommand(
+                tag=tag,
+                dist_name=dist_name,
+                directory=tmp,
+                label=f"Fetch {pkg}",
+            )
+            result = fetch.execute()
             if result.returncode != 0:
-                _fatal(f"Failed to download release {tag}: {result.stderr.strip()}")
+                _fatal(f"No compatible wheel for '{pkg}' in release {tag}.")
 
-            found = list(Path(tmp).glob(f"{pkg.replace('-', '_')}-*.whl"))
+            found = list(Path(tmp).glob(f"{dist_name}-*.whl"))
             if not found:
                 _fatal(f"No wheel found for '{pkg}' in release {tag}.")
             wheels.append(str(found[0]))
