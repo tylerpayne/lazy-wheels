@@ -73,42 +73,44 @@ def _load_workflow_jobs() -> list[str]:
         return []
 
 
+def _print_packages(plan: ReleasePlan) -> None:
+    """Print the packages table."""
+    _section("Packages")
+    all_names = sorted({*plan.changed, *plan.unchanged})
+    if not all_names:
+        return
+    sw = len("unchanged")  # status column width
+    nw = max(len(n) for n in all_names)
+    cur_strs: dict[str, str] = {}
+    rel_strs: dict[str, str] = {}
+    for name in all_names:
+        if name in plan.changed:
+            pkg = plan.changed[name]
+            cur_strs[name] = pkg.current_version
+            rel_strs[name] = pkg.release_version
+        else:
+            cur_strs[name] = plan.unchanged[name].version
+            rel_strs[name] = "—"
+    cw = max(len(v) for v in cur_strs.values())
+    print(
+        f"  {'STATUS'.ljust(sw)}  {'PACKAGE'.ljust(nw)}  "
+        f"{'CURRENT'.ljust(cw)}  WILL RELEASE"
+    )
+    for name in all_names:
+        status = "changed" if name in plan.changed else "unchanged"
+        print(
+            f"  {status.ljust(sw)}  {name.ljust(nw)}  "
+            f"{cur_strs[name].ljust(cw)}  {rel_strs[name]}"
+        )
+
+
 def _print_plan(
     plan: ReleasePlan,
     skipped: set[str],
 ) -> None:
     """Print a human-readable summary of the release plan."""
 
-    # -- Packages --
-    _section("Packages")
-    all_names = sorted({*plan.changed, *plan.unchanged})
-    if all_names:
-        sw = len("unchanged")  # status column width
-        nw = max(len(n) for n in all_names)
-        # Column 3: current pyproject version, Column 4: release/reuse version
-        cur_strs: dict[str, str] = {}
-        rel_strs: dict[str, str] = {}
-        for name in all_names:
-            if name in plan.changed:
-                pkg = plan.changed[name]
-                cur_strs[name] = pkg.current_version
-                rel_strs[name] = pkg.release_version
-            else:
-                cur_strs[name] = plan.unchanged[name].version
-                rel_strs[name] = "—"
-        cw = max(len(v) for v in cur_strs.values())
-
-        # Header
-        print(
-            f"  {'STATUS'.ljust(sw)}  {'PACKAGE'.ljust(nw)}  "
-            f"{'CURRENT'.ljust(cw)}  WILL RELEASE"
-        )
-        for name in all_names:
-            status = "changed" if name in plan.changed else "unchanged"
-            print(
-                f"  {status.ljust(sw)}  {name.ljust(nw)}  "
-                f"{cur_strs[name].ljust(cw)}  {rel_strs[name]}"
-            )
+    _print_packages(plan)
 
     # -- Pipeline (all jobs from release.yml) --
     _section("Pipeline")
@@ -282,10 +284,7 @@ def cmd_release(args: argparse.Namespace) -> None:
     import sys
 
     # Determine release type from flags
-    pre_kind = getattr(args, "pre_kind", None) or ""
-    release_type = getattr(args, "release_type", None) or (
-        "pre" if pre_kind else "final"
-    )
+    release_type = getattr(args, "release_type", None) or "final"
 
     # Load hook (if any) for pre_plan / post_plan
     from ..shared.hooks import load_hook
@@ -303,7 +302,6 @@ def cmd_release(args: argparse.Namespace) -> None:
         python_version=getattr(args, "python_version", "3.12"),
         ci_publish=(where == "ci"),
         release_type=release_type,
-        pre_kind=pre_kind,
         dry_run=dry_run,
     )
     if hook:
@@ -327,6 +325,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         if getattr(args, "json", False):
             print(plan.model_dump_json(indent=2))
         else:
+            _print_packages(plan)
             print()
             print(
                 "Nothing changed since last release. Use --rebuild-all to rebuild all."

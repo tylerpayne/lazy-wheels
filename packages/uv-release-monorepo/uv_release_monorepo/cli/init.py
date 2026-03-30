@@ -400,17 +400,34 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
                 default="",
             )
         if stored_version:
+            uvx_cmd = (
+                f"uvx --from uv-release-monorepo=={stored_version} uvr init --base-only"
+            )
             print(
                 f"No merge base found. For a cleaner upgrade, recover the base first:\n"
-                f"  uvx --from uv-release-monorepo=={stored_version} uvr init --base-only\n"
+                f"  {uvx_cmd}\n"
                 f"  uvr init --upgrade\n"
             )
             try:
-                answer = input("Continue with two-way merge? [y/N] ").strip().lower()
+                run_it = input("Run the uvx command above? [y/N] ").strip().lower()
             except (EOFError, KeyboardInterrupt):
-                answer = ""
-            if answer != "y":
-                return
+                run_it = ""
+            if run_it == "y":
+                result = subprocess.run(uvx_cmd, shell=True)
+                if result.returncode == 0:
+                    # Re-check for merge base after recovery
+                    base_text = _read_base(root, "release.yml")
+                    if base_text:
+                        print("Base recovered. Proceeding with three-way merge.")
+            else:
+                try:
+                    answer = (
+                        input("Continue with two-way merge? [y/N] ").strip().lower()
+                    )
+                except (EOFError, KeyboardInterrupt):
+                    answer = ""
+                if answer != "y":
+                    return
     fresh_text = _load_template()
 
     merged_text, has_conflicts = _three_way_merge(dest, base_text, fresh_text)

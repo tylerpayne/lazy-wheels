@@ -67,8 +67,7 @@ class PlanConfig:
         uvr_version: The uvr version to embed in the plan.
         python_version: Python version for CI builds.
         ci_publish: If True (default), plan targets CI execution.
-        release_type: One of "final", "dev", "pre", "post".
-        pre_kind: Pre-release kind ("a", "b", "rc"). Only used when release_type="pre".
+        release_type: One of "final", "minor", "major", "dev", "pre", "post".
         dry_run: If True, skip local writes (version bumps, dep pins).
     """
 
@@ -78,7 +77,6 @@ class PlanConfig:
     python_version: str = "3.12"
     ci_publish: bool = True
     release_type: str = "final"
-    pre_kind: str = ""
     dry_run: bool = False
 
 

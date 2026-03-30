@@ -23,14 +23,21 @@ uvr release
 uvr release --where local
 ```
 
-### Release types
+### Version bumping
 
 ```bash
-uvr release              # final: 1.0.1.dev0 → 1.0.1
-uvr release --dev        # dev:   publish 1.0.1.dev0 as-is
-uvr release --pre a      # alpha: 1.0.1.dev0 → 1.0.1a0
-uvr release --pre rc     # rc:    1.0.1.dev0 → 1.0.1rc0
-uvr release --post       # post:  1.0.1 → 1.0.1.post0
+uvr bump --all --minor       # 1.0.1.dev0 → 1.1.0.dev0
+uvr bump --all --alpha       # 1.0.1.dev0 → 1.0.1a0.dev0
+uvr bump --all --rc          # 1.0.1a2.dev0 → 1.0.1rc0.dev0
+uvr bump --package my-pkg --patch  # bump one package
+```
+
+`uvr release` auto-detects from the version — just strip `.devN` and publish:
+
+```bash
+uvr release              # 1.0.1.dev0 → release 1.0.1
+uvr release              # 1.0.1a0.dev0 → release 1.0.1a0
+uvr release --dev        # publish 1.0.1.dev0 as-is
 ```
 
 ### Skipping and reusing

@@ -4,18 +4,26 @@ Pre-releases let you publish alpha, beta, or release candidate versions for test
 
 ## Usage
 
+Use `uvr bump` to enter a pre-release cycle, then `uvr release` to publish:
+
 ```bash
-uvr release --pre a     # alpha   → 1.2.3a0
-uvr release --pre b     # beta    → 1.2.3b0
-uvr release --pre rc    # release candidate → 1.2.3rc0
+uvr bump --all --alpha       # enter alpha cycle → 1.2.3a0.dev0
+uvr release                  # publishes 1.2.3a0, bumps to 1.2.3a1.dev0
 ```
 
 ## How it works
 
-1. uvr strips the `.devN` suffix from each changed package's version to get the base `X.Y.Z`
-2. It scans existing git tags to find the next available pre-release number for that kind
-3. The published version becomes `X.Y.Za0` (or `b0`, `rc0`, etc.)
-4. After release, the pyproject.toml version is bumped to `X.Y.Za1.dev0` (dev toward the next pre-release of the same kind)
+1. `uvr bump --alpha` (or `--beta`, `--rc`) sets each package's version to `X.Y.Za0.dev0`
+2. `uvr release` strips `.devN` and publishes `X.Y.Za0`
+3. After release, the pyproject.toml version is bumped to `X.Y.Za1.dev0` (dev toward the next pre-release of the same kind)
+4. Subsequent `uvr release` calls publish `X.Y.Za1`, `X.Y.Za2`, etc.
+
+To advance to the next kind (alpha → beta → rc), bump again:
+
+```bash
+uvr bump --all --beta        # advance to beta → 1.2.3b0.dev0
+uvr release                  # publishes 1.2.3b0
+```
 
 ## Version ordering
 
@@ -25,45 +33,60 @@ Pre-releases sort before the final release:
 1.0.1.dev0 < 1.0.1a0 < 1.0.1a1 < 1.0.1b0 < 1.0.1rc0 < 1.0.1
 ```
 
-## Auto-incrementing
-
-The pre-release number auto-increments by scanning existing tags. If `my-pkg/v1.0.1a0` already exists, the next `--pre a` release will produce `1.0.1a1`.
-
 ## Example workflow
 
 ```bash
-# First alpha
-uvr release --pre a
-# → publishes my-pkg 1.2.3a0
-# → bumps pyproject.toml to 1.2.3a1.dev0
+# Enter alpha cycle
+uvr bump --all --alpha
+# pyproject.toml: 1.2.3a0.dev0
+
+uvr release
+# → publishes 1.2.3a0
+# → bumps to 1.2.3a1.dev0
 
 # Second alpha (after more changes)
-uvr release --pre a
-# → publishes my-pkg 1.2.3a1
-# → bumps pyproject.toml to 1.2.3a2.dev0
+uvr release
+# → publishes 1.2.3a1
+# → bumps to 1.2.3a2.dev0
 
-# Release candidate
-uvr release --pre rc
-# → publishes my-pkg 1.2.3rc0
+# Advance to release candidate
+uvr bump --all --rc
+# pyproject.toml: 1.2.3rc0.dev0
+
+uvr release
+# → publishes 1.2.3rc0
 
 # Final release
+uvr bump --all --patch
+# pyproject.toml: 1.2.4.dev0
+
 uvr release
-# → publishes my-pkg 1.2.3
-# → bumps pyproject.toml to 1.2.4.dev0
+# → publishes 1.2.4
+# → bumps to 1.2.5.dev0
 ```
+
+## Kind advancement rules
+
+`uvr bump` enforces that pre-release kinds only move forward:
+
+| Current | Allowed | Blocked |
+|---|---|---|
+| alpha | `--alpha`, `--beta`, `--rc` | — |
+| beta | `--beta`, `--rc` | `--alpha` (downgrade) |
+| rc | `--rc` | `--alpha`, `--beta` (downgrade) |
 
 ## Merging
 
 **Do not merge after each pre-release.** The typical pre-release workflow is multiple releases from the same branch (alpha → beta → rc → final). Stay on the branch through the entire cycle and merge only after the final release.
 
-After `--pre a`, finalize bumps the pyproject.toml version to something like `1.2.3a1.dev0`. If you merged that to main, main's version would be an intermediate pre-release dev version — confusing and unnecessary.
+After a pre-release, finalize bumps the pyproject.toml version to something like `1.2.3a1.dev0`. If you merged that to main, main's version would be an intermediate pre-release dev version — confusing and unnecessary.
 
-Instead, keep iterating on the branch until you're ready for the final release. A final `uvr release` automatically strips all suffixes (dev, pre, post) to produce a clean `X.Y.Z`:
+Instead, keep iterating on the branch until you're ready for the final release:
 
 ```bash
-uvr release --pre a      # 1.2.3a0 — stay on branch
-uvr release --pre rc     # 1.2.3rc0 — stay on branch
-uvr release              # 1.2.3 — now merge to main
+uvr bump --all --alpha && uvr release   # 1.2.3a0 — stay on branch
+uvr bump --all --rc && uvr release      # 1.2.3rc0 — stay on branch
+uvr bump --all --patch && uvr release   # 1.2.4 — now merge to main
 ```
 
 Merge to main only after the final release:

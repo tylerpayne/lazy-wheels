@@ -62,16 +62,49 @@ uvr runners [PKG] [--add RUNNER | --remove RUNNER | --clear]
 | `--remove RUNNER` | Remove a runner from the package |
 | `--clear` | Remove all runners for the package |
 
+## `uvr bump`
+
+Bump package versions in the workspace. Use `uvr bump` to prepare the version
+before releasing — the release type is determined by the version in pyproject.toml.
+
+```
+uvr bump <--all | --changed | --package PKG>
+         <--major | --minor | --patch | --alpha | --beta | --rc | --post | --dev>
+```
+
+**Scope** (required, mutually exclusive):
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Bump all workspace packages |
+| `--changed` | Bump only packages with changes since last release |
+| `--package PKG` | Bump a specific package (repeatable) |
+
+**Bump type** (required, mutually exclusive):
+
+| Flag | Description |
+|------|-------------|
+| `--major` | `(X+1).0.0.dev0` |
+| `--minor` | `X.(Y+1).0.dev0` |
+| `--patch` | `X.Y.(Z+1).dev0` |
+| `--alpha` | Enter/advance alpha cycle: `X.Y.Za(N+1).dev0` |
+| `--beta` | Enter/advance beta cycle: `X.Y.Zb(N+1).dev0` |
+| `--rc` | Enter/advance release candidate cycle: `X.Y.Zrc(N+1).dev0` |
+| `--post` | Advance post-release number: `X.Y.Z.post(N+1).dev0` |
+| `--dev` | Increment dev number: `X.Y.Z.dev(N+1)` |
+
 ## `uvr release`
 
 Plan and execute a release. By default, generates a plan and dispatches it to
 GitHub Actions. Use `--where local` to build and publish locally, or `--dry-run`
 to preview without changes.
 
+The release version is auto-detected from pyproject.toml — strip `.devN` and
+publish whatever is underneath. Use `uvr bump` to change what gets released.
+
 ```
-uvr release [--where {ci,local}] [--dry-run] [--plan JSON]
+uvr release [--where {ci,local}] [--dry-run] [--dev] [--plan JSON]
             [--rebuild-all] [--python VER]
-            [--dev | --pre {a,b,rc} | --post]
             [-y] [--skip JOB] [--skip-to JOB]
             [--reuse-run RUN_ID] [--reuse-release]
             [--no-push] [--json] [--workflow-dir DIR]
@@ -83,6 +116,7 @@ uvr release [--where {ci,local}] [--dry-run] [--plan JSON]
 |------|---------|-------------|
 | `--where` | `ci` | `ci` dispatches to GitHub Actions, `local` builds and publishes in this shell |
 | `--dry-run` | -- | Print what would be released without making changes |
+| `--dev` | -- | Publish the `.devN` version as-is instead of stripping it |
 | `--plan` | -- | Execute a pre-computed release plan locally |
 
 **Build options:**
@@ -91,14 +125,6 @@ uvr release [--where {ci,local}] [--dry-run] [--plan JSON]
 |------|---------|-------------|
 | `--rebuild-all` | -- | Rebuild all packages regardless of changes |
 | `--python` | `3.12` | Python version for CI builds |
-
-**Release type** (mutually exclusive, default: final):
-
-| Flag | Description |
-|------|-------------|
-| `--dev` | Publish a dev release (as-is `.devN` version) |
-| `--pre {a,b,rc}` | Publish a pre-release (alpha, beta, or rc) |
-| `--post` | Publish a post-release |
 
 **Dispatch (CI mode):**
 

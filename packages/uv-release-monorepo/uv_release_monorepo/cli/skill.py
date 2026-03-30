@@ -168,17 +168,37 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 default="",
             )
         if stored_version:
+            uvx_cmd = f"uvx --from uv-release-monorepo=={stored_version} uvr skill init --base-only"
             print(
                 f"No merge bases found for skills. For a cleaner upgrade, recover them first:\n"
-                f"  uvx --from uv-release-monorepo=={stored_version} uvr skill init --base-only\n"
+                f"  {uvx_cmd}\n"
                 f"  uvr skill init --upgrade\n"
             )
             try:
-                answer = input("Continue with two-way merge? [y/N] ").strip().lower()
+                run_it = input("Run the uvx command above? [y/N] ").strip().lower()
             except (EOFError, KeyboardInterrupt):
-                answer = ""
-            if answer != "y":
-                return
+                run_it = ""
+            if run_it == "y":
+                result = subprocess.run(uvx_cmd, shell=True)
+                if result.returncode == 0:
+                    # Re-check — if bases now exist, three-way merge will be used
+                    any_still_missing = any(
+                        (dest_base / name / rel_path).exists()
+                        and not _read_base(root, f".claude/skills/{name}/{rel_path}")
+                        for name in _SKILL_FILES
+                        for rel_path in _SKILL_FILES[name]
+                    )
+                    if not any_still_missing:
+                        print("Bases recovered. Proceeding with three-way merge.")
+            else:
+                try:
+                    answer = (
+                        input("Continue with two-way merge? [y/N] ").strip().lower()
+                    )
+                except (EOFError, KeyboardInterrupt):
+                    answer = ""
+                if answer != "y":
+                    return
 
     upgraded = 0
     up_to_date = 0

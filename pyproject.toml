@@ -11,7 +11,8 @@ uv-release-monorepo = { workspace = true }
 [tool.uvr.config]
 latest = "uv-release-monorepo"
 init_version = "0.18.0"
-skill_version = "0.18.0"
+skill_version = "0.18.2.dev0"
+workflow_version = "0.18.2.dev0"
 
 [dependency-groups]
 dev = [

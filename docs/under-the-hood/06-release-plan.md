@@ -21,7 +21,7 @@ See [How it works](../user-guide/09-architecture.md) and [Skip jobs and reuse ar
 | `uvr_version` | `str` | Version of uvr that created the plan. Empty string if running a `.dev` version. |
 | `uvr_install` | `str` | The pip install spec for CI (e.g., `uv-release-monorepo==0.5.2` or just `uv-release-monorepo` for dev). |
 | `python_version` | `str` | Python version for CI (default `"3.12"`). |
-| `release_type` | `str` | One of `"final"`, `"dev"`, `"pre"`, `"post"`. Defaults to `"final"`. |
+| `release_type` | `str` | One of `"final"`, `"dev"`. Defaults to `"final"`. Release type is auto-detected from the version. |
 | `rebuild_all` | `bool` | Whether `--rebuild-all` was passed. |
 | `changed` | `dict[str, ChangedPackage]` | Packages that need rebuilding. `ChangedPackage` extends `PackageInfo` with version lifecycle info and runners. |
 | `unchanged` | `dict[str, PackageInfo]` | Packages reused from previous releases. |
@@ -60,12 +60,12 @@ class ChangedPackage(PackageInfo):
     runners: list[list[str]]    # runner label sets for build matrix
 ```
 
-The next version depends on `release_type`:
+The next version is auto-detected from the release version:
 
-- After final `1.0.1`: `1.0.2.dev0`
+- After stable `1.0.1`: `1.0.2.dev0`
 - After dev `1.0.1.dev2`: `1.0.1.dev3`
-- After pre `1.0.1a0`: `1.0.1a1.dev0`
-- After post `1.0.0.post0`: `1.0.0.post1.dev0`
+- After pre-release `1.0.1a0`: `1.0.1a1.dev0`
+- After post-release `1.0.0.post0`: `1.0.0.post1.dev0`
 
 ### `PlanCommand`
 
@@ -100,7 +100,6 @@ class PlanConfig:
     python_version: str = "3.12"
     ci_publish: bool = True
     release_type: str = "final"
-    pre_kind: str = ""
 ```
 
 Internal configuration passed to `ReleasePlanner`. Uses `dataclass` (not

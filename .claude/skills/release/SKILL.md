@@ -43,7 +43,7 @@ Present the output to the user. For each changed package, show:
 Ask the user whether any packages need a minor bump instead of patch. Patch is the default — bump minor for new features, new public API, or breaking changes:
 
 ```bash
-uv version --bump minor --directory packages/<package-name>
+uvr bump --package <package-name> --minor
 ```
 
 ## 3. Review
@@ -151,8 +151,8 @@ If something goes wrong, see `references/troubleshooting.md`.
 Merge the release branch back to main — unless the branch should not be merged.
 
 **Merge with care** in these cases:
-- **Post-releases** (`--post`) — these branch from an old tag, so pyproject.toml versions will conflict with main. You can merge and accept main's versions, or cherry-pick just the fix commits. See `references/post-releases.md`.
-- **Pre-releases** (`--pre`) — do not merge intermediate pre-releases. Stay on the branch through the alpha → beta → rc → final cycle, then merge after the final release. See `references/pre-releases.md`.
+- **Post-releases** (`uvr bump --post`) — these branch from an old tag, so pyproject.toml versions will conflict with main. You can merge and accept main's versions, or cherry-pick just the fix commits. See `references/post-releases.md`.
+- **Pre-releases** (`uvr bump --alpha/--beta/--rc`) — do not merge intermediate pre-releases. Stay on the branch through the alpha → beta → rc → final cycle, then merge after the final release. See `references/pre-releases.md`.
 
 **Do merge** for final releases and dev releases that branched from main:
 
@@ -180,7 +180,7 @@ User says: "Let's release the new changes"
 2. Run `uvr status` — shows `my-lib` is dirty (2 commits: added export, fixed parser)
 3. Run `uvr release`, decline the prompt to see the full plan
 4. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
-5. User says "yes, bump minor" — run `uv version --bump minor --directory packages/my-lib`
+5. User says "yes, bump minor" — run `uvr bump --package my-lib --minor`
 6. Review docstrings and docs against current API — new `Parser` class exported but not documented. Fix docs.
 7. Draft release notes: "Added `Parser` class for structured input handling. Fixed crash on empty input." Present to user for approval.
 8. Write approved notes to `.uvr/release-notes/my-lib/0.3.0.md`

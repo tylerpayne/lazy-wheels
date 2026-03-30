@@ -11,6 +11,24 @@ uvr release              # plan + dispatch to CI
 uvr release --dry-run    # preview only (same as `uvr status`)
 ```
 
+## How versions work
+
+`uvr release` auto-detects the release type from the version in pyproject.toml:
+
+| Version in pyproject.toml | Release version | Next version |
+|---|---|---|
+| `1.2.3.dev0` | `1.2.3` (stable) | `1.2.4.dev0` |
+| `1.2.3a2.dev0` | `1.2.3a2` (pre-release) | `1.2.3a3.dev0` |
+| `1.2.3.post0.dev0` | `1.2.3.post0` (post-release) | `1.2.3.post1.dev0` |
+
+To change what gets released, use `uvr bump` before releasing:
+
+```bash
+uvr bump --all --minor       # prepare a minor release
+uvr bump --all --alpha       # enter alpha pre-release cycle
+uvr bump --all --post        # advance post-release number
+```
+
 ## Mode flags
 
 | Flag | Description |
@@ -21,14 +39,10 @@ uvr release --dry-run    # preview only (same as `uvr status`)
 
 ## Release type
 
-Mutually exclusive. Controls how versions are interpreted:
-
 | Flag | Description |
 |------|-------------|
-| *(none)* | Final release (default) — strips `.devN` suffix |
+| *(none)* | Strip `.devN` and release whatever is underneath (default) |
 | `--dev` | Dev release — publishes the current `.devN` version as-is (see `dev-releases.md`) |
-| `--pre {a,b,rc}` | Pre-release — alpha, beta, or release candidate (see `pre-releases.md`) |
-| `--post` | Post-release (see `post-releases.md`) |
 
 ## Build options
 

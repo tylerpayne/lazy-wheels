@@ -22,7 +22,7 @@ Every changed package **must** have a `.devN` version in its pyproject.toml. If 
 --dev release requires a .devN version in pyproject.toml, but these packages
 have clean versions: my-pkg
 Fix with:
-  uv version 1.2.3.dev0 --directory packages/my-pkg
+  uvr bump --package my-pkg --dev
 ```
 
 ## Version ordering

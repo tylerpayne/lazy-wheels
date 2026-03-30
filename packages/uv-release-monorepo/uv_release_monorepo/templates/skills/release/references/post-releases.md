@@ -4,17 +4,18 @@ Post-releases publish a corrected version of an already-released package without
 
 ## Usage
 
+Use `uvr bump` to enter the post-release cycle, then `uvr release` to publish:
+
 ```bash
-uvr release --post
-# → 1.2.3.post0
+uvr bump --all --post        # advance post number → 1.2.3.post1.dev0
+uvr release                  # publishes 1.2.3.post1
 ```
 
 ## How it works
 
-1. uvr strips the `.devN` suffix from each changed package's version to get the base `X.Y.Z`
-2. It scans existing git tags to find the next available post-release number
-3. The published version becomes `X.Y.Z.post0` (or `.post1`, etc.)
-4. After release, the pyproject.toml version is bumped to `X.Y.Z.post1.dev0` (dev toward the next post-release)
+1. `uvr bump --post` increments the post-release number (e.g., `.post0` → `.post1`)
+2. `uvr release` strips `.devN` and publishes `X.Y.Z.postN`
+3. After release, the pyproject.toml version is bumped to `X.Y.Z.post(N+1).dev0`
 
 ## Version ordering
 
@@ -24,30 +25,25 @@ Post-releases sort after the final release but before the next version:
 1.0.1 < 1.0.1.post0 < 1.0.1.post1 < 1.0.2.dev0 < 1.0.2
 ```
 
-## Auto-incrementing
-
-The post-release number auto-increments by scanning existing tags. If `my-pkg/v1.2.3.post0` already exists, the next `--post` release will produce `1.2.3.post1`.
-
 ## When to use
 
-- **Hotfix for a released version**: a critical bug needs to be patched on an older release while main has moved on. Check out the release tag, fix, and publish with `--post`.
+- **Hotfix for a released version**: a critical bug needs to be patched on an older release while main has moved on. Check out the release tag, fix, and publish as a post-release.
 - **Packaging fix**: the wheel was built incorrectly but the source code is fine
 - **Metadata correction**: wrong description, classifiers, or dependency constraints
 - **Documentation-only change**: README or other bundled docs needed updating
 
 ## Tag conflict resolution
 
-If `uvr release` detects that a release tag already exists (e.g., you already published `1.2.3`), it will suggest `--post` as one of the resolution options:
+If `uvr release` detects that a release tag already exists (e.g., you already published `1.2.3`), it will suggest a post-release or version bump:
 
 ```
 These tags/releases already exist and would conflict:
   my-pkg/v1.2.3
 
 To resolve, either:
-  1. Use --post to publish a post-release:
-     my-pkg: 1.2.3.post0
+  1. Use uvr bump --post to publish a post-release
   2. Bump past the conflict:
-     uv version 1.2.4.dev0 --directory packages/my-pkg
+     uvr bump --package my-pkg --patch
 ```
 
 ## Workflow
@@ -69,8 +65,9 @@ git add -A
 git commit -m "fix: correct widget parsing in my-pkg"
 git push -u origin post-release/my-pkg/v1.2.3
 
-# 5. Publish the post-release
-uvr release --post
+# 5. Enter post-release cycle and publish
+uvr bump --all --post
+uvr release
 ```
 
 ## Merging

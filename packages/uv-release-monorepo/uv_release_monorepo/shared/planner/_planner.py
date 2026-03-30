@@ -27,9 +27,11 @@ from ..utils.dependencies import pin_dependencies, set_version
 from ..utils.versions import (
     bump_dev,
     bump_patch,
+    extract_pre_kind,
     find_previous_release,
-    get_base_version,
     is_dev,
+    is_post,
+    is_pre,
     make_dev,
     make_post,
     make_pre,
@@ -42,6 +44,26 @@ from ..utils.versions import (
 def _dist_name(name: str) -> str:
     """Convert a package name to its wheel/dist filename stem."""
     return canonicalize_name(name).replace("-", "_")
+
+
+def _next_dev_version(release_version: str) -> str:
+    """Compute the next dev version after a release.
+
+    Auto-detects from the release version:
+    - ``1.0.1``       → ``1.0.2.dev0``   (stable → bump patch)
+    - ``1.0.1a2``     → ``1.0.1a3.dev0`` (pre → increment pre number)
+    - ``1.0.1.post0`` → ``1.0.1.post1.dev0`` (post → increment post number)
+    """
+    if is_pre(release_version):
+        kind = extract_pre_kind(release_version)
+        m = re.search(rf"{re.escape(kind)}(\d+)$", release_version)
+        n = int(m.group(1)) + 1 if m else 1
+        return make_dev(make_pre(release_version, kind, n))
+    if is_post(release_version):
+        m = re.search(r"\.post(\d+)$", release_version)
+        n = int(m.group(1)) + 1 if m else 1
+        return make_dev(make_post(release_version, n))
+    return make_dev(bump_patch(release_version))
 
 
 class ReleasePlanner:
@@ -77,7 +99,6 @@ class ReleasePlanner:
                 baselines[name] = resolve_baseline(
                     info.version,
                     self.config.release_type,
-                    self.config.pre_kind,
                     name,
                     self.ctx.repo,
                 )
@@ -217,26 +238,10 @@ class ReleasePlanner:
                 result[name] = (
                     info.version if is_dev(info.version) else make_dev(info.version)
                 )
-        elif rt == "pre":
-            kind = self.config.pre_kind
-            for name, info in changed.items():
-                without_dev = strip_dev(info.version)
-                # If already the right kind (e.g. version is 1.0.1b2.dev0
-                # and --pre b), strip dev → 1.0.1b2
-                if re.search(rf"{re.escape(kind)}\d+$", without_dev):
-                    result[name] = without_dev
-                else:
-                    # Different kind or no pre suffix — start at kind0
-                    # e.g. 1.0.1a6.dev0 + --pre b → 1.0.1b0
-                    result[name] = f"{get_base_version(info.version)}{kind}0"
-        elif rt == "post":
-            for name, info in changed.items():
-                # Strip .devN → release the post-release version as-is
-                # e.g. 1.0.1.post0.dev0 → 1.0.1.post0
-                result[name] = strip_dev(info.version)
         else:
+            # Default: strip .devN, release whatever is underneath
             for name, info in changed.items():
-                result[name] = get_base_version(info.version)
+                result[name] = strip_dev(info.version)
 
         return result
 
@@ -248,17 +253,9 @@ class ReleasePlanner:
         for name, info in changed.items():
             if rt == "dev":
                 result[name] = bump_dev(info.version)
-            elif rt == "pre":
-                kind = self.config.pre_kind
-                m = re.search(rf"{re.escape(kind)}(\d+)$", info.version)
-                n = int(m.group(1)) + 1 if m else 1
-                result[name] = make_dev(make_pre(info.version, kind, n))
-            elif rt == "post":
-                m = re.search(r"\.post(\d+)$", info.version)
-                n = int(m.group(1)) + 1 if m else 1
-                result[name] = make_dev(make_post(info.version, n))
             else:
-                result[name] = make_dev(bump_patch(info.version))
+                # Auto-detect from the release version
+                result[name] = _next_dev_version(info.version)
 
         return result
 

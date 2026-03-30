@@ -20,6 +20,7 @@ from ._common import (
 from ._yaml import _MISSING, _yaml_delete, _yaml_get, _yaml_set
 from .init import cmd_init, cmd_upgrade, cmd_validate
 from .install import _find_latest_release_tag, _parse_install_spec, cmd_install
+from .bump import cmd_bump
 from .release import cmd_release
 from .runners import cmd_runners
 from .skill import cmd_skill_init, cmd_skill_upgrade
@@ -38,6 +39,7 @@ __all__ = [
     "_yaml_delete",
     "_yaml_get",
     "_yaml_set",
+    "cmd_bump",
     "PlanConfig",
     "ReleaseExecutor",
     "ReleasePlanner",
@@ -61,6 +63,7 @@ Lazy monorepo wheel builder — only rebuilds what changed.
 
 Commands:
   release       Plan and execute a release (locally or via CI)
+  bump          Bump package versions in the workspace
   status        Preview the release plan (alias for release --dry-run)
   runners       Manage per-package build runners
   install       Install a package from GitHub releases (org/repo/pkg)
@@ -170,10 +173,10 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     _rtype_mut.add_argument(
         "--pre",
-        choices=["a", "b", "rc"],
-        dest="pre_kind",
-        metavar="{a,b,rc}",
-        help="Publish a pre-release (alpha, beta, or rc).",
+        action="store_const",
+        const="pre",
+        dest="release_type",
+        help="Publish the pre-release version as-is (requires pre suffix).",
     )
     _rtype_mut.add_argument(
         "--post",
@@ -181,6 +184,20 @@ Run 'uvr <command> --help' for details on a specific command.
         const="post",
         dest="release_type",
         help="Publish a post-release.",
+    )
+    _rtype_mut.add_argument(
+        "--minor",
+        action="store_const",
+        const="minor",
+        dest="release_type",
+        help="Bump minor version and release (X.Y+1.0).",
+    )
+    _rtype_mut.add_argument(
+        "--major",
+        action="store_const",
+        const="major",
+        dest="release_type",
+        help="Bump major version and release (X+1.0.0).",
     )
     _dispatch = release_parser.add_argument_group("dispatch (CI mode)")
     _dispatch.add_argument(
@@ -249,7 +266,6 @@ Run 'uvr <command> --help' for details on a specific command.
         a.reuse_release = False
         a.json = False
         a.release_type = None
-        a.pre_kind = None
         cmd_release(a)
 
     status_parser = subparsers.add_parser("status", help=_H)
@@ -269,6 +285,93 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Show plan as if all packages changed.",
     )
     status_parser.set_defaults(func=_cmd_status)
+
+    # bump
+    bump_parser = subparsers.add_parser(
+        "bump",
+        help=_H,
+        description="Bump package versions in the workspace.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _bscope = bump_parser.add_argument_group("scope (required)")
+    _bscope_mut = _bscope.add_mutually_exclusive_group(required=True)
+    _bscope_mut.add_argument(
+        "--all",
+        action="store_true",
+        dest="bump_all",
+        help="Bump all workspace packages.",
+    )
+    _bscope_mut.add_argument(
+        "--changed",
+        action="store_true",
+        help="Bump only packages with changes since last release.",
+    )
+    _bscope_mut.add_argument(
+        "--package",
+        action="append",
+        dest="packages",
+        metavar="PKG",
+        help="Bump a specific package (repeatable).",
+    )
+    _btype = bump_parser.add_argument_group("bump type (required)")
+    _btype_mut = _btype.add_mutually_exclusive_group(required=True)
+    _btype_mut.add_argument(
+        "--major",
+        action="store_const",
+        const="major",
+        dest="bump_type",
+        help="Bump major version: (X+1).0.0.dev0",
+    )
+    _btype_mut.add_argument(
+        "--minor",
+        action="store_const",
+        const="minor",
+        dest="bump_type",
+        help="Bump minor version: X.(Y+1).0.dev0",
+    )
+    _btype_mut.add_argument(
+        "--patch",
+        action="store_const",
+        const="patch",
+        dest="bump_type",
+        help="Bump patch version: X.Y.(Z+1).dev0",
+    )
+    _btype_mut.add_argument(
+        "--alpha",
+        action="store_const",
+        const="alpha",
+        dest="bump_type",
+        help="Enter alpha pre-release cycle.",
+    )
+    _btype_mut.add_argument(
+        "--beta",
+        action="store_const",
+        const="beta",
+        dest="bump_type",
+        help="Enter beta pre-release cycle.",
+    )
+    _btype_mut.add_argument(
+        "--rc",
+        action="store_const",
+        const="rc",
+        dest="bump_type",
+        help="Enter release candidate cycle.",
+    )
+    _btype_mut.add_argument(
+        "--post",
+        action="store_const",
+        const="post",
+        dest="bump_type",
+        help="Enter a post-release cycle.",
+    )
+    _btype_mut.add_argument(
+        "--dev",
+        action="store_const",
+        const="dev",
+        dest="bump_type",
+        help="Increment the dev number.",
+    )
+    bump_parser.set_defaults(func=cmd_bump)
 
     # runners
     runners_parser = subparsers.add_parser("runners", help=_H)

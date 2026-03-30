@@ -144,8 +144,17 @@ _PRE_KIND_ORDER = {"a": 0, "b": 1, "rc": 2}  # ordered low to high for compariso
 _PRE_KIND_RE = re.compile(r"(a|b|rc)\d+")
 
 
-def _extract_pre_kind(version_str: str) -> str:
-    """Extract the pre-release kind (a, b, rc) from a version string."""
+def extract_pre_kind(version_str: str) -> str:
+    """Extract the pre-release kind (a, b, rc) from a version string.
+
+    Returns an empty string if no pre-release suffix is present.
+
+    Examples:
+        "1.2.3a1" -> "a"
+        "1.2.3b0.dev0" -> "b"
+        "1.2.3rc2" -> "rc"
+        "1.2.3.dev0" -> ""
+    """
     m = _PRE_KIND_RE.search(version_str)
     return m.group(1) if m else ""
 
@@ -316,7 +325,6 @@ def is_post(version_str: str) -> bool:
 def resolve_baseline(
     current_version: str,
     release_type: str,
-    pre_kind: str,
     name: str,
     repo: object,
 ) -> str | None:
@@ -327,8 +335,7 @@ def resolve_baseline(
 
     Args:
         current_version: Version string from pyproject.toml.
-        release_type: One of "final", "dev", "pre", "post".
-        pre_kind: Pre-release kind ("a", "b", "rc") when release_type is "pre".
+        release_type: One of "final", "minor", "major", "dev", "pre", "post".
         name: Package name (for tag prefix).
         repo: pygit2.Repository for ref lookups.
 
@@ -352,8 +359,8 @@ def resolve_baseline(
 
     # --- Dev version ---
 
-    # Validate: post-release dev + final/pre → invalid
-    if has_post and release_type in ("final", "pre"):
+    # Validate: post-release dev + final/minor/major/pre → invalid
+    if has_post and release_type in ("final", "minor", "major", "pre"):
         msg = (
             f"Cannot {release_type}-release from post-release version {current_version}"
         )
@@ -368,35 +375,28 @@ def resolve_baseline(
     if release_type == "dev":
         return f"{name}/v{current_version}-base"
 
-    # Pre-release base → check if this is a kind upgrade, same-kind, or downgrade
-    if has_pre:
-        current_kind = _extract_pre_kind(strip_dev(current_version))
-        target_order = _PRE_KIND_ORDER.get(pre_kind, -1)
-        current_order = _PRE_KIND_ORDER.get(current_kind, -1)
-
-        # Validate: kind downgrade (b→a, rc→a, rc→b) is invalid
-        if release_type == "pre" and target_order < current_order:
-            msg = (
-                f"Cannot downgrade pre-release kind from "
-                f"{current_kind} to {pre_kind} ({current_version})"
-            )
-            raise ValueError(msg)
-
-        is_upgrade = release_type == "final" or (
-            release_type == "pre" and target_order > current_order
+    # Validate: --pre requires a pre-release suffix in the version
+    if release_type == "pre" and not has_pre:
+        msg = (
+            f"Cannot --pre release from version {current_version} "
+            f"— no pre-release suffix. Use 'uvr bump --pre {{a,b,rc}}' first."
         )
-        if is_upgrade:
-            # Kind upgrade (a→b, b→rc, etc.) or final → cumulative since last final
-            base = get_base_version(current_version)
-            prev = find_previous_release(base, name, repo)
-            if prev is None:
-                return None
-            return f"{name}/v{prev}"
-        # Same kind or demotion → incremental from dev0 baseline
+        raise ValueError(msg)
+
+    # Pre-release → incremental from dev0 baseline (kind is in the version)
+    if has_pre and release_type == "pre":
         dev_m = _DEV_NUM_RE.search(current_version)
         if dev_m and int(dev_m.group(1)) > 0:
             return f"{name}/v{strip_dev(current_version)}.dev0-base"
         return f"{name}/v{current_version}-base"
+
+    # Final/minor/major from pre-release dev → cumulative since last final
+    if has_pre and release_type in ("final", "minor", "major"):
+        base = get_base_version(current_version)
+        prev = find_previous_release(base, name, repo)
+        if prev is None:
+            return None
+        return f"{name}/v{prev}"
 
     # Post-release dev + post → use dev0 baseline
     if has_post and release_type == "post":
@@ -458,3 +458,77 @@ def bump_patch(version_str: str) -> str:
         "1.0" -> "1.0.1"
     """
     return str(parse_version(version_str).bump_patch())
+
+
+def bump_minor(version_str: str) -> str:
+    """Increment the minor version, reset patch, and return as a string.
+
+    Strips all dev/pre/post suffixes before bumping.
+
+    Examples:
+        "1.2.3" -> "1.3.0"
+        "1.2.3.dev0" -> "1.3.0"
+        "1.2.3a1" -> "1.3.0"
+        "0.0.0" -> "0.1.0"
+    """
+    return str(parse_version(version_str).bump_minor())
+
+
+def bump_major(version_str: str) -> str:
+    """Increment the major version, reset minor and patch, and return as a string.
+
+    Strips all dev/pre/post suffixes before bumping.
+
+    Examples:
+        "1.2.3" -> "2.0.0"
+        "0.5.2.dev0" -> "1.0.0"
+        "0.5.2a3" -> "1.0.0"
+    """
+    return str(parse_version(version_str).bump_major())
+
+
+def validate_bump(
+    current_version: str,
+    bump_type: str,
+    pre_kind: str = "",
+) -> None:
+    """Validate that a version bump is legal given the current version state.
+
+    Mirrors the validation rules in :func:`resolve_baseline` so that
+    ``uvr bump`` and ``uvr release`` enforce identical invariants.
+
+    Args:
+        current_version: Version string from pyproject.toml.
+        bump_type: One of "major", "minor", "patch", "alpha", "beta",
+            "rc", "post", "dev".
+        pre_kind: PEP 440 short pre-release kind ("a", "b", "rc").
+            Required when bump_type is a pre-release name.
+
+    Raises:
+        ValueError: If the transition is invalid.
+    """
+    if bump_type in ("major", "minor", "patch", "dev"):
+        return
+
+    has_pre = is_pre(strip_dev(current_version))
+    has_post = is_post(current_version)
+
+    if bump_type == "post" and not has_post:
+        msg = f"Cannot enter post-release from unreleased version {current_version}"
+        raise ValueError(msg)
+
+    is_pre_bump = bump_type in ("alpha", "beta", "rc") or pre_kind
+    if is_pre_bump and has_post:
+        msg = f"Cannot enter pre-release from post-release version {current_version}"
+        raise ValueError(msg)
+
+    if is_pre_bump and has_pre and pre_kind:
+        current_kind = extract_pre_kind(strip_dev(current_version))
+        target_order = _PRE_KIND_ORDER.get(pre_kind, -1)
+        current_order = _PRE_KIND_ORDER.get(current_kind, -1)
+        if target_order < current_order:
+            msg = (
+                f"Cannot downgrade pre-release kind from "
+                f"{current_kind} to {pre_kind} ({current_version})"
+            )
+            raise ValueError(msg)

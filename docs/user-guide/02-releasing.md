@@ -57,13 +57,15 @@ uvr release
 
 ## Version bumping
 
-You control **major.minor** by editing `version` in each package's `pyproject.toml`. CI controls **patch** — after every release, it bumps the patch number and appends `.dev0`.
-
-To bump minor before releasing:
+Use `uvr bump` to prepare the next version. CI controls patch bumps after each release — you own major, minor, and pre-release transitions:
 
 ```bash
-uv version --bump minor --directory packages/my-pkg
+uvr bump --all --minor           # prepare a minor release
+uvr bump --all --major           # prepare a major release
+uvr bump --package my-pkg --alpha  # enter alpha cycle for one package
 ```
+
+The release type is auto-detected from the version — `uvr release` just strips `.devN` and publishes whatever is underneath.
 
 ## Print raw plan JSON
 
