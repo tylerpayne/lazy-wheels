@@ -317,7 +317,6 @@ class ReleasePlanner:
                                 "--clobber",
                             ],
                             label=f"Fetch {name} from {tag}",
-                            check=False,
                         )
                     )
             stages.append(BuildStage(setup=setup_cmds))
@@ -372,7 +371,6 @@ class ReleasePlanner:
                                     f"from pathlib import Path; {globs}",
                                 ],
                                 label="Remove transitive dep wheels",
-                                check=False,
                             )
                         ]
                     )
