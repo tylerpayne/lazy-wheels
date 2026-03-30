@@ -19,7 +19,7 @@ Replace the no-op step with download + publish steps:
 ```yaml
   post-release:
     runs-on: ubuntu-latest
-    if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
+    if: ${{ always() && !failed() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
     needs:
     - uvr-finalize
     environment: pypi

@@ -23,7 +23,7 @@ jobs:
       run: uv run uvr validate-plan
   uvr-build:
     runs-on: ${{ matrix.runner }}
-    if: ${{ !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
+    if: ${{ always() && !failed() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
     needs:
     - uvr-validate
     strategy:
@@ -53,7 +53,7 @@ jobs:
         if-no-files-found: error
   uvr-release:
     runs-on: ubuntu-latest
-    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-release') }}
+    if: ${{ always() && !failed() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-release') }}
     needs:
     - uvr-build
     strategy:
@@ -78,7 +78,7 @@ jobs:
         make_latest: ${{ matrix.make_latest }}
   uvr-finalize:
     runs-on: ubuntu-latest
-    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-finalize') }}
+    if: ${{ always() && !failed() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-finalize') }}
     needs:
     - uvr-release
     steps:

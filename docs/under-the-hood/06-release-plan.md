@@ -114,7 +114,7 @@ if: ${{ !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
 ```
 
 When a job name is in `skip`, its `if` evaluates to `false` and GitHub Actions
-skips it. Downstream jobs with `always() && !failure()` conditions still run.
+skips it. Downstream jobs with `always() && !failed() && !cancelled()` conditions still run.
 
 `cmd_release` populates `skip` from two CLI flags:
 

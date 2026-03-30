@@ -36,7 +36,7 @@ Unconfigured hooks have a no-op default step and are auto-skipped in the release
 ```yaml
   post-release:
     runs-on: ubuntu-latest
-    if: ${{ always() && !failure() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
+    if: ${{ always() && !failed() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'post-release') }}
     needs:
     - uvr-finalize
     steps:
