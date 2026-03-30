@@ -1,6 +1,6 @@
 [project]
 name = "pkg-beta"
-version = "0.1.9.dev0"
+version = "0.1.9a0.dev0"
 description = "Dummy package beta - depends on alpha"
 requires-python = ">=3.12"
 license = "MIT"
