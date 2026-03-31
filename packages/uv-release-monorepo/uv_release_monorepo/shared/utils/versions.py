@@ -559,24 +559,49 @@ def detect_release_type(packages: dict) -> str:
     return "stable"
 
 
+class VersionConflict:
+    """A package whose dev version targets an already-released version."""
+
+    def __init__(self, name: str, version: str, release_version: str, tag: str) -> None:
+        self.name = name
+        self.version = version
+        self.release_version = release_version
+        self.tag = tag
+
+    def warning(self) -> str:
+        return (
+            f"{self.name} {self.version} is a dev version for {self.release_version} "
+            f"and {self.release_version} was already released (tag: {self.tag})"
+        )
+
+    def hint(self) -> str:
+        """Suggest a bump command to resolve the conflict."""
+        if is_pre(self.release_version):
+            # e.g. 1.0.1a1 already released → bump to next alpha
+            kind = extract_pre_kind(self.release_version)
+            kind_name = {"a": "alpha", "b": "beta", "rc": "rc"}.get(kind, kind)
+            return f"uvr bump --package {self.name} --{kind_name}"
+        if is_post(self.release_version):
+            return f"uvr bump --package {self.name} --post"
+        return f"uvr bump --package {self.name} --patch"
+
+
 def find_version_conflicts(
     packages: dict,
     repo: object,
-) -> list[str]:
+) -> list[VersionConflict]:
     """Find packages whose dev version targets an already-released version.
 
     For example, if version is ``1.0.1a1.dev0`` and the tag
     ``pkg/v1.0.1a1`` already exists, that's a conflict — the version
     was already released and we shouldn't be developing toward it.
-
-    Returns a list of human-readable warning strings.
     """
     import pygit2
 
     if not isinstance(repo, pygit2.Repository):
         return []
 
-    warnings: list[str] = []
+    conflicts: list[VersionConflict] = []
     for name, info in packages.items():
         v = info.version
         if not is_dev(v):
@@ -584,8 +609,5 @@ def find_version_conflicts(
         release_version = strip_dev(v)
         tag = f"{name}/v{release_version}"
         if repo.references.get(f"refs/tags/{tag}") is not None:
-            warnings.append(
-                f"{name} {v} is a pre-release version for {release_version} "
-                f"and {release_version} was already released (tag: {tag})"
-            )
-    return warnings
+            conflicts.append(VersionConflict(name, v, release_version, tag))
+    return conflicts

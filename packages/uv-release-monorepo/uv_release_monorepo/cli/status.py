@@ -93,8 +93,9 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     # Version conflicts (dev version targets already-released version)
     version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
-    version_conflict_tags = {w.split("tag: ", 1)[1].rstrip(")") for w in version_conflicts}
-    all_warnings.extend(version_conflicts)
+    version_conflict_tags = {c.tag for c in version_conflicts}
+    for c in version_conflicts:
+        all_warnings.append(f"{c.warning()}\n    Fix: {c.hint()}")
 
     # Tag conflicts (skip if already covered by a version conflict)
     for tag in sorted(plan.tag_conflicts):

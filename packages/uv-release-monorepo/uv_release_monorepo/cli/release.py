@@ -338,11 +338,10 @@ def cmd_release(args: argparse.Namespace) -> None:
 
         version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
         if version_conflicts and not dry_run:
-            fatal(
-                "Version conflicts detected:\n"
-                + "\n".join(f"  {w}" for w in version_conflicts)
-                + "\n\nBump past the conflict with: uvr bump --package <pkg> --patch"
+            lines = "\n".join(
+                f"  {c.warning()}\n    Fix: {c.hint()}" for c in version_conflicts
             )
+            fatal(f"Version conflicts detected:\n{lines}")
 
         # Apply --bump if provided (bump all packages before planning)
         bump_type = getattr(args, "bump", None)
