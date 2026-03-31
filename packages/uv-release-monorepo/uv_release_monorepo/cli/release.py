@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from ..shared.models import ReleasePlan
@@ -70,7 +71,8 @@ def _load_workflow_jobs() -> list[str]:
 
         doc = load_yaml(workflow)
         return list(doc.get("jobs", {}).keys())
-    except Exception:
+    except Exception as exc:
+        print(f"WARNING: Could not load workflow: {exc}", file=sys.stderr)
         return []
 
 
@@ -572,5 +574,5 @@ def cmd_release(args: argparse.Namespace) -> None:
                 status = runs[0].get("status", "")
                 print(f"Status: {status}")
                 print(f"Watch:  {url}")
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as exc:
+            print(f"WARNING: Could not parse run status: {exc}", file=sys.stderr)

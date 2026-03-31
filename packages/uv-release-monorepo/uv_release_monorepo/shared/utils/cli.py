@@ -180,7 +180,11 @@ def discover_packages(root: Path | None = None) -> dict[str, tuple[str, list[str
         for dep_str in dep_strs:
             try:
                 dep_name = canonicalize_name(Requirement(dep_str).name)
-            except Exception:
+            except Exception as exc:
+                print(
+                    f"WARNING: Skipping malformed dependency {dep_str!r}: {exc}",
+                    file=sys.stderr,
+                )
                 continue
             if dep_name in workspace_names and dep_name != name:
                 packages[name][1].append(dep_name)
