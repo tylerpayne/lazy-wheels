@@ -333,16 +333,36 @@ def cmd_release(args: argparse.Namespace) -> None:
 
         dry_run = getattr(args, "dry_run", False) or json_only
 
+        # Check for version conflicts (dev version of already-released version)
+        from ..shared.utils.versions import find_version_conflicts
+
+        version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
+        if version_conflicts and not dry_run:
+            fatal(
+                "Version conflicts detected:\n"
+                + "\n".join(f"  {w}" for w in version_conflicts)
+                + "\n\nBump past the conflict with: uvr bump --all --patch"
+            )
+
         # Apply --bump if provided (bump all packages before planning)
         bump_type = getattr(args, "bump", None)
         if bump_type:
             from .bump import compute_bumped_version
+            from ..shared.utils.versions import strip_dev
 
             if not dry_run:
                 from ..shared.utils.dependencies import set_version
 
-            for info in ctx.packages.values():
+            for name, info in ctx.packages.items():
                 new_version = compute_bumped_version(info.version, bump_type=bump_type)
+                # Check if the bumped-to release version already exists
+                release_ver = strip_dev(new_version)
+                bump_tag = f"{name}/v{release_ver}"
+                if ctx.repo.references.get(f"refs/tags/{bump_tag}") is not None:
+                    fatal(
+                        f"Cannot --bump {bump_type}: {name} {release_ver} was already "
+                        f"released (tag: {bump_tag}). Bump further with uvr bump."
+                    )
                 if not dry_run:
                     set_version(Path(info.path) / "pyproject.toml", new_version)
                 info.version = new_version

@@ -12,7 +12,7 @@ from ..shared.utils.cli import __version__, diff_stat, read_matrix
 from ..shared.models import PlanConfig
 from ..shared.planner import ReleasePlanner
 from ..shared.context import build_context
-from ..shared.utils.versions import detect_release_type
+from ..shared.utils.versions import detect_release_type, find_version_conflicts
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -88,13 +88,25 @@ def cmd_status(args: argparse.Namespace) -> None:
     for row in rows:
         print(f"  {_row(row)}")
 
-    # Warn on tag conflicts
-    if plan.tag_conflicts:
+    # Collect warnings
+    all_warnings: list[str] = []
+
+    # Version conflicts (dev version targets already-released version)
+    version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
+    all_warnings.extend(version_conflicts)
+
+    # Tag conflicts (planned release tags already exist)
+    for tag in sorted(plan.tag_conflicts):
+        pkg_name, version = tag.split("/v", 1) if "/v" in tag else (tag, "")
+        all_warnings.append(
+            f"Tag conflict: {pkg_name} {version} already exists (tag: {tag})"
+        )
+
+    if all_warnings:
         print()
         print("Warnings")
         print("--------")
-        for tag in sorted(plan.tag_conflicts):
-            pkg_name, version = tag.split("/v", 1) if "/v" in tag else (tag, "")
-            print(f"  Version conflict: {pkg_name} {version} already exists (tag: {tag})")
+        for warning in all_warnings:
+            print(f"  {warning}")
 
     print()

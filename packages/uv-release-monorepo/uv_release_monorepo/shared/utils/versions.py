@@ -557,3 +557,35 @@ def detect_release_type(packages: dict) -> str:
             return "post"
         return "stable"
     return "stable"
+
+
+def find_version_conflicts(
+    packages: dict,
+    repo: object,
+) -> list[str]:
+    """Find packages whose dev version targets an already-released version.
+
+    For example, if version is ``1.0.1a1.dev0`` and the tag
+    ``pkg/v1.0.1a1`` already exists, that's a conflict — the version
+    was already released and we shouldn't be developing toward it.
+
+    Returns a list of human-readable warning strings.
+    """
+    import pygit2
+
+    if not isinstance(repo, pygit2.Repository):
+        return []
+
+    warnings: list[str] = []
+    for name, info in packages.items():
+        v = info.version
+        if not is_dev(v):
+            continue
+        release_version = strip_dev(v)
+        tag = f"{name}/v{release_version}"
+        if repo.references.get(f"refs/tags/{tag}") is not None:
+            warnings.append(
+                f"{name} {v} targets {release_version} which was already released "
+                f"(tag: {tag})"
+            )
+    return warnings
