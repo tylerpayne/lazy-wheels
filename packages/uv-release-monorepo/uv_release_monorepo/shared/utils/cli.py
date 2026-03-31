@@ -7,8 +7,12 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+from importlib.metadata import version as pkg_version
+
 from .config import get_hooks, get_matrix
 from .toml import read_pyproject
+
+__version__ = pkg_version("uv-release-monorepo")
 
 
 def fatal(msg: str) -> NoReturn:

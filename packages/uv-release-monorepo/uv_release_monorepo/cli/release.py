@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from ..shared.models import ReleasePlan
-from ._common import __version__
+from ..shared.utils.cli import __version__
 from ..shared.utils.cli import fatal, read_matrix, resolve_plan_json
 
 # Executor pipeline phases — the order ReleaseExecutor.run() executes them.

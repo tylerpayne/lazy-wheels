@@ -139,7 +139,7 @@ def _resolve_editor(args: argparse.Namespace, root: Path) -> str | None:
 
 def _store_workflow_version(root: Path) -> None:
     """Store the current uvr package version as workflow_version in [tool.uvr.config]."""
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
@@ -169,7 +169,7 @@ def cmd_init_dispatch(args: argparse.Namespace) -> None:
 
 def cmd_init(args: argparse.Namespace) -> None:
     """Scaffold the GitHub Actions workflow into your repo."""
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     root = Path.cwd()
     base_only = getattr(args, "base_only", False)
@@ -248,7 +248,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
     existing = _load_yaml(dest)
     rel = dest.relative_to(root)
 
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     # Resolve versions
     stored_version = ""
@@ -393,7 +393,7 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
             "  Commit or stash them before upgrading."
         )
 
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     rel_dest = str(dest.relative_to(root))
     existing_text = dest.read_text()

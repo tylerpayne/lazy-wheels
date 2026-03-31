@@ -50,7 +50,7 @@ def _init_and_get_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Scaffold a workspace, init the workflow, and set up workflow_version."""
     import subprocess as _sp
 
-    from uv_release_monorepo.cli._common import __version__
+    from uv_release_monorepo.shared.utils.cli import __version__
     from uv_release_monorepo.cli.init import _load_template, _write_base
 
     _write_workspace_repo(tmp_path, ["pkg-alpha"])

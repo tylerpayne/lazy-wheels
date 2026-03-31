@@ -7,7 +7,7 @@ import io
 import sys
 from pathlib import Path
 
-from ._common import __version__
+from ..shared.utils.cli import __version__
 from ..shared.utils.cli import diff_stat, read_matrix
 from ..shared.models import PlanConfig
 from ..shared.planner import ReleasePlanner

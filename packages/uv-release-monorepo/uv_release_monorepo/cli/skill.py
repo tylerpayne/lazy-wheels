@@ -45,7 +45,7 @@ def _load_skill_file(skill_name: str, rel_path: str) -> str:
 
 def _store_skill_version(root: Path) -> None:
     """Store the current uvr package version as skill_version in [tool.uvr.config]."""
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
@@ -70,7 +70,7 @@ def cmd_skill_dispatch(args: argparse.Namespace) -> None:
 
 def cmd_skill_init(args: argparse.Namespace) -> None:
     """Copy bundled Claude Code skills into the current project."""
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     root = Path.cwd()
     base_only = getattr(args, "base_only", False)
@@ -113,7 +113,7 @@ def cmd_skill_init(args: argparse.Namespace) -> None:
     print()
     if written:
         _store_skill_version(root)
-        from ._common import __version__
+        from ..shared.utils.cli import __version__
 
         print(f"OK: Wrote {written} file(s) to .claude/skills/ (uvr v{__version__})")
     if skipped:
@@ -357,6 +357,6 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 return
 
     _store_skill_version(root)
-    from ._common import __version__
+    from ..shared.utils.cli import __version__
 
     print(f"\nUpgraded skills (uvr v{__version__}). Review and commit the changes.")
