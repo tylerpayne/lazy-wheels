@@ -69,7 +69,8 @@ before releasing — the release type is determined by the version in pyproject.
 
 ```
 uvr bump <--all | --changed | --package PKG>
-         <--major | --minor | --patch | --alpha | --beta | --rc | --post | --dev>
+         <--major | --minor | --patch | --alpha | --beta | --rc | --post | --dev | --stable>
+         [--force]
 ```
 
 **Scope** (required, mutually exclusive):
@@ -78,7 +79,7 @@ uvr bump <--all | --changed | --package PKG>
 |------|-------------|
 | `--all` | Bump all workspace packages |
 | `--changed` | Bump only packages with changes since last release |
-| `--package PKG` | Bump a specific package (repeatable) |
+| `--package PKG` | Bump a specific package (repeatable). Fails if other packages also have unreleased changes — use `--force` to skip this check. |
 
 **Bump type** (required, mutually exclusive):
 
@@ -92,6 +93,13 @@ uvr bump <--all | --changed | --package PKG>
 | `--rc` | Enter/advance release candidate cycle: `X.Y.Zrc(N+1).dev0` |
 | `--post` | Advance post-release number: `X.Y.Z.post(N+1).dev0` |
 | `--dev` | Increment dev number: `X.Y.Z.dev(N+1)` |
+| `--stable` | Strip pre-release markers: `X.Y.Z.dev0` |
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Skip the changed-package guard when using `--package` |
 
 ## `uvr release`
 

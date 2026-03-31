@@ -17,11 +17,11 @@ See [How it works](08-architecture.md) and [Skip jobs and reuse artifacts](../us
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `int` | Currently `9`. Bumped when the plan shape changes. |
+| `schema_version` | `int` | Currently `11`. Bumped when the plan shape changes. |
 | `uvr_version` | `str` | Version of uvr that created the plan. Empty string if running a `.dev` version. |
 | `uvr_install` | `str` | The pip install spec for CI (e.g., `uv-release-monorepo==0.5.2` or just `uv-release-monorepo` for dev). |
 | `python_version` | `str` | Python version for CI (default `"3.12"`). |
-| `release_type` | `str` | One of `"final"`, `"dev"`. Defaults to `"final"`. Release type is auto-detected from the version. |
+| `dev_release` | `bool` | `True` when `--dev` is passed (publish `.devN` versions as-is). Defaults to `False`. |
 | `rebuild_all` | `bool` | Whether `--rebuild-all` was passed. |
 | `changed` | `dict[str, ChangedPackage]` | Packages that need rebuilding. `ChangedPackage` extends `PackageInfo` with version lifecycle info and runners. |
 | `unchanged` | `dict[str, PackageInfo]` | Packages reused from previous releases. |
@@ -98,7 +98,8 @@ class PlanConfig:
     uvr_version: str
     python_version: str = "3.12"
     ci_publish: bool = True
-    release_type: str = "final"
+    dev_release: bool = False
+    dry_run: bool = False
 ```
 
 Internal configuration passed to `ReleasePlanner`. Uses `dataclass` (not
@@ -149,10 +150,10 @@ This value is used in the CI setup step to install the correct version of uvr.
 
 ## Schema versioning
 
-`schema_version` is currently `9`. It is a simple integer that gets bumped when
-the plan shape changes in a backward-incompatible way. There is no migration
-logic -- if CI receives a plan with an unexpected schema version, it will likely
-fail with a Pydantic validation error.
+`schema_version` is currently `11`. It is a simple integer that gets bumped when
+the plan shape changes in a backward-incompatible way. A migration validator
+converts older plans (e.g., the legacy `release_type` string field is mapped to
+`dev_release: bool`).
 
 ## Serialization
 
