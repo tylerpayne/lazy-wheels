@@ -147,11 +147,8 @@ class ReleasePlanner:
         else:
             release_tags: dict[str, str | None] = {}
             for name, info in packages.items():
-                try:
-                    prev = find_previous_release(info.version, name, self.ctx.repo)
-                    release_tags[name] = f"{name}/v{prev}" if prev else None
-                except ValueError:
-                    release_tags[name] = None
+                prev = find_previous_release(info.version, name, self.ctx.repo)
+                release_tags[name] = f"{name}/v{prev}" if prev else None
 
         published_versions = self._published_versions(
             versioned, changed_names, packages, release_tags
