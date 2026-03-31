@@ -14,6 +14,7 @@ from ..shared.utils.versions import (
     bump_major,
     bump_minor,
     bump_patch,
+    detect_release_type_for_version,
     extract_pre_kind,
     get_base_version,
     is_post,
@@ -131,6 +132,19 @@ def cmd_bump(args: argparse.Namespace) -> None:
         print("No packages to bump.")
         return
 
+    # Guard: when targeting specific packages, fail if other packages also
+    # have unreleased changes (unless --force is passed).
+    force = getattr(args, "force", False)
+    if package_names and not force:
+        all_changed = _resolve_changed(packages)
+        missed = sorted(set(all_changed) - set(targets))
+        if missed:
+            names = ", ".join(missed)
+            fatal(
+                f"Other packages also have unreleased changes: {names}\n"
+                f"  Include them with --package or use --force to skip this check."
+            )
+
     # Determine bump type
     bump_type: str = getattr(args, "bump_type", None) or ""
     if not bump_type:
@@ -217,9 +231,8 @@ def _resolve_changed(
         baselines: dict[str, str | None] = {}
         for name, info in ctx.packages.items():
             try:
-                baselines[name] = resolve_baseline(
-                    info.version, "stable", name, ctx.repo
-                )
+                rt = detect_release_type_for_version(info.version)
+                baselines[name] = resolve_baseline(info.version, rt, name, ctx.repo)
             except ValueError:
                 baselines[name] = None
         changed_names = detect_changes(ctx.packages, baselines, False, ctx=ctx)

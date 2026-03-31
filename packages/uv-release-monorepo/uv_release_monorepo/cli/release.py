@@ -324,7 +324,6 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     from ..shared.context import build_context
     from ..shared.utils.shell import Progress
-    from ..shared.utils.versions import detect_release_type
 
     # Steps: discover + resolve baselines + detect changes + compute versions + generate notes
     old_stdout = sys.stdout
@@ -368,17 +367,13 @@ def cmd_release(args: argparse.Namespace) -> None:
                     set_version(Path(info.path) / "pyproject.toml", new_version)
                 info.version = new_version
 
-        # Auto-detect release type from versions, allow CLI override
-        release_type = getattr(args, "release_type", None) or detect_release_type(
-            ctx.packages
-        )
         config = _cli.PlanConfig(
             rebuild_all=args.rebuild_all,
             matrix=package_runners,
             uvr_version=__version__,
             python_version=getattr(args, "python_version", "3.12"),
             ci_publish=(where == "ci"),
-            release_type=release_type,
+            dev_release=getattr(args, "release_type", None) == "dev",
             dry_run=dry_run,
         )
         if hook:

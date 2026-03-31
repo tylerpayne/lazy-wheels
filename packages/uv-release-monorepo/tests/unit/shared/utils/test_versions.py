@@ -9,6 +9,7 @@ import pytest
 from uv_release_monorepo.shared.utils.versions import (
     bump_dev,
     bump_patch,
+    detect_release_type_for_version,
     find_previous_release,
     get_base_version,
     is_dev,
@@ -156,9 +157,8 @@ class TestStripVersion:
     def test_dev_leaves_pre(self) -> None:
         assert strip_version("1.2.3rc1.dev0", dev=True) == "1.2.3rc1"
 
-    def test_pre_alone_on_pre_dev_is_noop(self) -> None:
-        # pre regex requires suffix at end; .dev0 blocks it — use dev=True too
-        assert strip_version("1.2.3a1.dev0", pre=True) == "1.2.3a1.dev0"
+    def test_pre_alone_on_pre_dev_strips_pre(self) -> None:
+        assert strip_version("1.2.3a1.dev0", pre=True) == "1.2.3.dev0"
 
     def test_pre_alone_on_bare_pre(self) -> None:
         assert strip_version("1.2.3a1", pre=True) == "1.2.3"
@@ -310,28 +310,27 @@ class TestFindPreviousRelease:
         repo = self._repo({"pkg/v1.5.2"})
         assert find_previous_release("2.0.0.dev0", "pkg", repo) == "1.5.2"
 
-    # Case 9: 0.0.0 → error
-    def test_zero_version_raises(self) -> None:
+    # Case 9: 0.0.0 → None (no previous possible)
+    def test_zero_version_returns_none(self) -> None:
         repo = self._repo(set())
-        with pytest.raises(ValueError, match="0.0.0"):
-            find_previous_release("0.0.0.dev0", "pkg", repo)
+        assert find_previous_release("0.0.0.dev0", "pkg", repo) is None
 
-    def test_zero_clean_raises(self) -> None:
+    def test_zero_clean_returns_none(self) -> None:
         repo = self._repo(set())
-        with pytest.raises(ValueError, match="0.0.0"):
-            find_previous_release("0.0.0", "pkg", repo)
+        assert find_previous_release("0.0.0", "pkg", repo) is None
+
+    # -- Ordering: finds highest tag < target by PEP 440 ordering --
 
     # Edge cases
-    def test_tag_not_found_falls_through(self) -> None:
+    def test_no_tags_returns_none(self) -> None:
         repo = self._repo(set())
         assert find_previous_release("1.0.1.dev0", "pkg", repo) is None
 
-    def test_glob_returns_none_if_no_matches(self) -> None:
+    def test_no_matching_tags_returns_none(self) -> None:
         repo = self._repo(set())
         assert find_previous_release("1.1.0.dev0", "pkg", repo) is None
 
-    # -- Clean versions (no .devN) --
-
+    # Clean versions (no .devN)
     def test_clean_final(self) -> None:
         repo = self._repo({"pkg/v1.0.0"})
         assert find_previous_release("1.0.1", "pkg", repo) == "1.0.0"
@@ -356,8 +355,7 @@ class TestFindPreviousRelease:
         repo = self._repo({"pkg/v1.0.1"})
         assert find_previous_release("1.0.1.post0", "pkg", repo) == "1.0.1"
 
-    # -- Kind chain: pre N=0 walks down rc → b → a → final --
-
+    # Kind chain
     def test_beta_0_finds_highest_alpha(self) -> None:
         repo = self._repo({"pkg/v1.0.1a0", "pkg/v1.0.1a3", "pkg/v1.0.1a1"})
         assert find_previous_release("1.0.1b0", "pkg", repo) == "1.0.1a3"
@@ -384,6 +382,63 @@ class TestFindPreviousRelease:
         """Same kind chain works with .dev0 suffix."""
         repo = self._repo({"pkg/v1.0.1a3"})
         assert find_previous_release("1.0.1b0.dev0", "pkg", repo) == "1.0.1a3"
+
+    # -- Stable dev after alpha cycle (the bug that prompted this rewrite) --
+
+    def test_stable_dev_finds_last_alpha(self) -> None:
+        """0.20.1.dev0 after alpha releases should find the last alpha."""
+        repo = self._repo(
+            {
+                "pkg/v0.20.0",
+                "pkg/v0.20.1a0",
+                "pkg/v0.20.1a1",
+                "pkg/v0.20.1a2",
+            }
+        )
+        assert find_previous_release("0.20.1.dev0", "pkg", repo) == "0.20.1a2"
+
+    def test_stable_dev_finds_last_rc(self) -> None:
+        """Stable dev after rc releases should find the last rc."""
+        repo = self._repo(
+            {
+                "pkg/v1.0.0",
+                "pkg/v1.0.1a0",
+                "pkg/v1.0.1b0",
+                "pkg/v1.0.1rc0",
+                "pkg/v1.0.1rc1",
+            }
+        )
+        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.1rc1"
+
+    def test_stable_dev_no_prereleases_finds_final(self) -> None:
+        """Stable dev with no prereleases falls back to previous final."""
+        repo = self._repo({"pkg/v1.0.0"})
+        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.0"
+
+    # -- Ignores non-release tags --
+
+    def test_ignores_base_tags(self) -> None:
+        """Base tags (-base suffix) are not releases."""
+        repo = self._repo(
+            {
+                "pkg/v1.0.0",
+                "pkg/v1.0.1.dev0-base",
+                "pkg/v1.0.1a0",
+                "pkg/v1.0.1a1.dev0-base",
+            }
+        )
+        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.1a0"
+
+    def test_ignores_dev_tags(self) -> None:
+        """Dev release tags (.devN) are not stable releases."""
+        repo = self._repo(
+            {
+                "pkg/v1.0.0",
+                "pkg/v1.0.1.dev0",
+                "pkg/v1.0.1.dev1",
+            }
+        )
+        assert find_previous_release("1.0.1.dev2", "pkg", repo) == "1.0.1.dev1"
 
     # -- Idempotency: inv_bump(bump(v)) == v --
 
@@ -416,3 +471,31 @@ class TestFindPreviousRelease:
         assert result == release_ver, (
             f"inv_bump({next_ver!r}) should be {release_ver!r}, got {result!r}"
         )
+
+
+class TestDetectReleaseTypeForVersion:
+    """Per-version release type detection."""
+
+    def test_stable_clean(self) -> None:
+        assert detect_release_type_for_version("1.0.1") == "stable"
+
+    def test_stable_dev(self) -> None:
+        assert detect_release_type_for_version("1.0.1.dev0") == "stable"
+
+    def test_pre_clean(self) -> None:
+        assert detect_release_type_for_version("1.0.1a1") == "pre"
+
+    def test_pre_dev(self) -> None:
+        assert detect_release_type_for_version("1.0.1a1.dev0") == "pre"
+
+    def test_post_clean(self) -> None:
+        assert detect_release_type_for_version("1.0.1.post0") == "post"
+
+    def test_post_dev(self) -> None:
+        assert detect_release_type_for_version("1.0.1.post0.dev0") == "post"
+
+    def test_beta_dev(self) -> None:
+        assert detect_release_type_for_version("1.0.1b2.dev3") == "pre"
+
+    def test_rc_clean(self) -> None:
+        assert detect_release_type_for_version("1.0.1rc0") == "pre"

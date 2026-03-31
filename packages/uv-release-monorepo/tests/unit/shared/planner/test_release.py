@@ -25,7 +25,7 @@ def _planner(release_type: str = "stable") -> ReleasePlanner:
             matrix={},
             uvr_version="0.7.1",
             ci_publish=False,
-            release_type=release_type,
+            dev_release=(release_type == "dev"),
             dry_run=True,
         ),
         RepositoryContext(

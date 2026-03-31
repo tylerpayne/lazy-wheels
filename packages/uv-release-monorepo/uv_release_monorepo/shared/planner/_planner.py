@@ -31,6 +31,7 @@ from ..utils.dependencies import pin_dependencies, set_version
 from ..utils.versions import (
     bump_dev,
     bump_patch,
+    detect_release_type_for_version,
     extract_pre_kind,
     find_previous_release,
     is_dev,
@@ -100,9 +101,14 @@ class ReleasePlanner:
         else:
             baselines: dict[str, str | None] = {}
             for name, info in packages.items():
+                rt = (
+                    "dev"
+                    if self.config.dev_release
+                    else detect_release_type_for_version(info.version)
+                )
                 baselines[name] = resolve_baseline(
                     info.version,
-                    self.config.release_type,
+                    rt,
                     name,
                     self.ctx.repo,
                 )
@@ -200,7 +206,7 @@ class ReleasePlanner:
             uvr_version=self.config.uvr_version,
             python_version=self.config.python_version,
             rebuild_all=self.config.rebuild_all,
-            release_type=self.config.release_type,
+            dev_release=self.config.dev_release,
             ci_publish=self.config.ci_publish,
             changed=changed,
             unchanged=unchanged,
@@ -231,10 +237,9 @@ class ReleasePlanner:
         changed: dict[str, PackageInfo],
     ) -> dict[str, str]:
         """Compute the release version string for each changed package."""
-        rt = self.config.release_type
         result: dict[str, str] = {}
 
-        if rt == "dev":
+        if self.config.dev_release:
             for name, info in changed.items():
                 # If already dev, publish as-is; otherwise append .dev0
                 result[name] = (
@@ -249,11 +254,10 @@ class ReleasePlanner:
 
     def _compute_next_versions(self, changed: dict[str, PackageInfo]) -> dict[str, str]:
         """Compute the post-release dev version for each changed package."""
-        rt = self.config.release_type
         result: dict[str, str] = {}
 
         for name, info in changed.items():
-            if rt == "dev":
+            if self.config.dev_release:
                 result[name] = bump_dev(info.version)
             else:
                 # Auto-detect from the release version

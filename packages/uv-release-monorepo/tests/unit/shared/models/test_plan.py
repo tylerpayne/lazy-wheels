@@ -55,9 +55,9 @@ class TestReleasePlan:
             unchanged={"pkg-beta": beta},
         )
 
-    def test_schema_version_defaults_to_10(self) -> None:
+    def test_schema_version_defaults_to_11(self) -> None:
         plan = self._make_plan()
-        assert plan.schema_version == 10
+        assert plan.schema_version == 11
 
     def test_extra_keys_survive_round_trip(self) -> None:
         plan = self._make_plan()

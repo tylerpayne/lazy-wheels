@@ -12,7 +12,7 @@ from ..shared.utils.cli import __version__, diff_stat, read_matrix
 from ..shared.models import PlanConfig
 from ..shared.planner import ReleasePlanner
 from ..shared.context import build_context
-from ..shared.utils.versions import detect_release_type, find_version_conflicts
+from ..shared.utils.versions import find_version_conflicts
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -30,13 +30,11 @@ def cmd_status(args: argparse.Namespace) -> None:
     sys.stdout = io.StringIO()
     try:
         ctx = build_context()
-        release_type = detect_release_type(ctx.packages)
         config = PlanConfig(
             rebuild_all=getattr(args, "rebuild_all", False),
             matrix=read_matrix(Path.cwd()),
             uvr_version=__version__,
             ci_publish=True,
-            release_type=release_type,
             dry_run=True,
         )
         plan = ReleasePlanner(config, ctx).plan()

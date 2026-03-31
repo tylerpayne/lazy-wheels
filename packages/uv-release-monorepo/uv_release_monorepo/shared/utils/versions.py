@@ -1,18 +1,67 @@
 """Version parsing and bumping utilities.
 
-Handles conversion between version strings and semver objects, with
-special handling for incomplete version strings (e.g., "1.0" -> "1.0.0")
-and PEP 440 dev/pre/post versions.
+Uses ``packaging.version.Version`` for PEP 440 parsing and comparison,
+and ``semver`` for major/minor/patch arithmetic.
 """
 
 from __future__ import annotations
 
-import re
-
 import semver
+from packaging.version import InvalidVersion
+from packaging.version import Version as PkgVersion
 
-_DEV_RE = re.compile(r"\.dev\d*$")
-_DEV_NUM_RE = re.compile(r"\.dev(\d+)$")
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse(version_str: str) -> PkgVersion:
+    """Parse a version string into a ``packaging.version.Version``."""
+    return PkgVersion(version_str)
+
+
+def _format_version(
+    release: tuple[int, ...],
+    *,
+    pre: tuple[str, int] | None = None,
+    post: int | None = None,
+    dev: int | None = None,
+) -> str:
+    """Build a PEP 440 version string from components."""
+    result = ".".join(str(x) for x in release)
+    if pre is not None:
+        result += f"{pre[0]}{pre[1]}"
+    if post is not None:
+        result += f".post{post}"
+    if dev is not None:
+        result += f".dev{dev}"
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Predicates
+# ---------------------------------------------------------------------------
+
+
+def is_dev(version_str: str) -> bool:
+    """Check if a version has a .devN suffix."""
+    return _parse(version_str).dev is not None
+
+
+def is_pre(version_str: str) -> bool:
+    """Check if a version has an alpha, beta, or rc suffix."""
+    return _parse(version_str).pre is not None
+
+
+def is_post(version_str: str) -> bool:
+    """Check if a version has a .postN suffix (ignoring any trailing .devN)."""
+    return _parse(version_str).post is not None
+
+
+# ---------------------------------------------------------------------------
+# Stripping / extraction
+# ---------------------------------------------------------------------------
 
 
 def strip_dev(version_str: str) -> str:
@@ -23,46 +72,8 @@ def strip_dev(version_str: str) -> str:
         "1.2.3" -> "1.2.3"
         "1.2.3.post0.dev0" -> "1.2.3.post0"
     """
-    return _DEV_RE.sub("", version_str)
-
-
-def make_dev(version_str: str) -> str:
-    """Add a ``.dev0`` suffix. Idempotent.
-
-    Examples:
-        "1.2.3" -> "1.2.3.dev0"
-        "1.2.3.dev0" -> "1.2.3.dev0"
-        "1.2.3.post0" -> "1.2.3.post0.dev0"
-    """
-    return f"{strip_dev(version_str)}.dev0"
-
-
-def bump_dev(version_str: str) -> str:
-    """Increment the dev number.
-
-    Examples:
-        "1.2.3.dev0" -> "1.2.3.dev1"
-        "1.2.3.dev5" -> "1.2.3.dev6"
-        "1.2.3" -> "1.2.3.dev0"  (adds .dev0 if not present)
-    """
-    m = _DEV_NUM_RE.search(version_str)
-    if m:
-        n = int(m.group(1))
-        return version_str[: m.start()] + f".dev{n + 1}"
-    return f"{version_str}.dev0"
-
-
-def is_dev(version_str: str) -> bool:
-    """Check if a version has a .devN suffix."""
-    return _DEV_RE.search(version_str) is not None
-
-
-_PRE_RE = re.compile(r"(a|b|rc)\d+")
-
-
-def is_pre(version_str: str) -> bool:
-    """Check if a version has an alpha, beta, or rc suffix."""
-    return _PRE_RE.search(version_str) is not None
+    v = _parse(version_str)
+    return _format_version(v.release, pre=v.pre, post=v.post)
 
 
 def strip_version(
@@ -86,16 +97,14 @@ def strip_version(
         strip_version("1.2.3rc1.dev0", dev=True) -> "1.2.3rc1"
         strip_version("1.2.3rc1.dev0", dev=True, pre=True) -> "1.2.3"
         strip_version("1.2.3.post0.dev0", dev=True, post=True) -> "1.2.3"
-        strip_version("1.2.3.post0.dev0", dev=True, pre=True, post=True) -> "1.2.3"
     """
-    v = version_str
-    if dev:
-        v = _DEV_RE.sub("", v)
-    if post:
-        v = re.sub(r"\.post\d+$", "", v)
-    if pre:
-        v = re.sub(r"(a|b|rc)\d+$", "", v)
-    return v
+    v = _parse(version_str)
+    return _format_version(
+        v.release,
+        pre=None if pre else v.pre,
+        post=None if post else v.post,
+        dev=None if dev else v.dev,
+    )
 
 
 def get_base_version(version_str: str) -> str:
@@ -107,7 +116,54 @@ def get_base_version(version_str: str) -> str:
         "1.2.3.post0.dev0" -> "1.2.3"
         "1.2.3rc2" -> "1.2.3"
     """
-    return strip_version(version_str, dev=True, pre=True, post=True)
+    return _format_version(_parse(version_str).release)
+
+
+def extract_pre_kind(version_str: str) -> str:
+    """Extract the pre-release kind (a, b, rc) from a version string.
+
+    Returns an empty string if no pre-release suffix is present.
+
+    Examples:
+        "1.2.3a1" -> "a"
+        "1.2.3b0.dev0" -> "b"
+        "1.2.3rc2" -> "rc"
+        "1.2.3.dev0" -> ""
+    """
+    v = _parse(version_str)
+    if v.pre is not None:
+        return v.pre[0]
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Construction / bumping
+# ---------------------------------------------------------------------------
+
+
+def make_dev(version_str: str) -> str:
+    """Add a ``.dev0`` suffix. Idempotent.
+
+    Examples:
+        "1.2.3" -> "1.2.3.dev0"
+        "1.2.3.dev0" -> "1.2.3.dev0"
+        "1.2.3.post0" -> "1.2.3.post0.dev0"
+    """
+    v = _parse(version_str)
+    return _format_version(v.release, pre=v.pre, post=v.post, dev=0)
+
+
+def bump_dev(version_str: str) -> str:
+    """Increment the dev number.
+
+    Examples:
+        "1.2.3.dev0" -> "1.2.3.dev1"
+        "1.2.3.dev5" -> "1.2.3.dev6"
+        "1.2.3" -> "1.2.3.dev0"  (adds .dev0 if not present)
+    """
+    v = _parse(version_str)
+    n = v.dev if v.dev is not None else -1
+    return _format_version(v.release, pre=v.pre, post=v.post, dev=n + 1)
 
 
 def make_pre(version_str: str, kind: str, n: int = 0) -> str:
@@ -122,7 +178,7 @@ def make_pre(version_str: str, kind: str, n: int = 0) -> str:
         make_pre("1.2.3.dev2", "a") -> "1.2.3a0"
         make_pre("1.2.3.dev2", "rc", 1) -> "1.2.3rc1"
     """
-    return f"{get_base_version(version_str)}{kind}{n}"
+    return _format_version(_parse(version_str).release, pre=(kind, n))
 
 
 def make_post(version_str: str, n: int = 0) -> str:
@@ -136,296 +192,14 @@ def make_post(version_str: str, n: int = 0) -> str:
         make_post("1.2.3") -> "1.2.3.post0"
         make_post("1.2.3", 1) -> "1.2.3.post1"
     """
-    return f"{get_base_version(version_str)}.post{n}"
+    return _format_version(_parse(version_str).release, post=n)
 
 
-_PRE_KINDS = ("rc", "b", "a")  # ordered high to low for kind chain
-_PRE_KIND_ORDER = {"a": 0, "b": 1, "rc": 2}  # ordered low to high for comparison
-_PRE_KIND_RE = re.compile(r"(a|b|rc)\d+")
+# ---------------------------------------------------------------------------
+# Semver parsing and major/minor/patch bumps
+# ---------------------------------------------------------------------------
 
-
-def extract_pre_kind(version_str: str) -> str:
-    """Extract the pre-release kind (a, b, rc) from a version string.
-
-    Returns an empty string if no pre-release suffix is present.
-
-    Examples:
-        "1.2.3a1" -> "a"
-        "1.2.3b0.dev0" -> "b"
-        "1.2.3rc2" -> "rc"
-        "1.2.3.dev0" -> ""
-    """
-    m = _PRE_KIND_RE.search(version_str)
-    return m.group(1) if m else ""
-
-
-def find_previous_release(
-    version_str: str,
-    name: str,
-    repo: object,
-) -> str | None:
-    """Derive the previous release version from any version string.
-
-    Works with both dev versions (1.0.1.dev0) and clean versions (1.0.1b0).
-    Uses O(1) ref lookups for common cases, narrow globs for minor/major bumps.
-
-    Args:
-        version_str: Current version (with or without .devN suffix).
-        name: Package name for tag prefix.
-        repo: pygit2.Repository for ref lookups.
-
-    Returns:
-        The previous release version string, or None if not found.
-
-    Raises:
-        ValueError: If version resolves to 0.0.0 (no possible previous).
-
-    Examples:
-        Dev versions:
-        "1.0.1.dev3"       → "1.0.1.dev2"
-        "1.0.1.dev0"       → "1.0.0"
-        "1.0.1a1.dev0"     → "1.0.1a0"
-        "1.0.1a0.dev0"     → "1.0.0"
-
-        Clean versions:
-        "1.0.1b0"          → highest a* tag (kind chain)
-        "1.0.1rc0"         → highest b* tag, else highest a*
-        "1.0.1a0"          → "1.0.0" (previous final)
-        "1.0.1"            → "1.0.0"
-        "1.0.1.post0"      → "1.0.1"
-    """
-
-    def _tag_exists(ver: str) -> bool:
-        return repo.references.get(f"refs/tags/{name}/v{ver}") is not None  # type: ignore[union-attr]
-
-    def _glob_highest(prefix: str) -> str | None:
-        """Find highest version matching a tag prefix.
-
-        Uses filesystem glob on .git/refs/tags/ when available (fast),
-        falls back to pygit2 ref scan for packed refs or mock repos.
-        """
-        from pathlib import Path
-
-        candidates = []
-
-        # Fast path: filesystem glob
-        try:
-            tag_dir = Path(repo.path) / "refs" / "tags" / name  # type: ignore[union-attr]
-            if tag_dir.is_dir():
-                for path in tag_dir.glob(f"v{prefix}*"):
-                    if path.name.endswith("-base"):
-                        continue
-                    ver_str = path.name[1:]  # strip leading "v"
-                    try:
-                        candidates.append((parse_version(ver_str), ver_str))
-                    except (ValueError, TypeError):
-                        continue
-        except (AttributeError, OSError):
-            pass
-
-        # Fallback: pygit2 ref scan (for packed refs or mocks)
-        if not candidates:
-            ref_prefix = f"refs/tags/{name}/v{prefix}"
-            for ref in repo.listall_references():  # type: ignore[union-attr]
-                if ref.startswith(ref_prefix) and not ref.endswith("-base"):
-                    ver_str = ref.split("/v")[-1]
-                    try:
-                        candidates.append((parse_version(ver_str), ver_str))
-                    except (ValueError, TypeError):
-                        continue
-
-        if not candidates:
-            return None
-        candidates.sort(reverse=True)
-        return candidates[0][1]
-
-    # Step 1: Handle .devN suffix
-    dev_m = _DEV_NUM_RE.search(version_str)
-    if dev_m:
-        dev_n = int(dev_m.group(1))
-        if dev_n > 0:
-            # 1a: dev N > 0 → previous dev
-            prev = strip_dev(version_str) + f".dev{dev_n - 1}"
-            if _tag_exists(prev):
-                return prev
-            return None
-        # 1b: dev 0 → strip .dev0, fall through to clean version rules
-        clean = strip_dev(version_str)
-    else:
-        clean = version_str
-
-    # Step 2: Pre-release suffix (a/b/rc)
-    pre_m = re.search(r"(a|b|rc)(\d+)$", clean)
-    if pre_m:
-        kind = pre_m.group(1)
-        pre_n = int(pre_m.group(2))
-        base_prefix = clean[: pre_m.start()]
-
-        if pre_n > 0:
-            # 2a: pre N > 0 → decrement same kind
-            prev = f"{base_prefix}{kind}{pre_n - 1}"
-            if _tag_exists(prev):
-                return prev
-
-        # 2b: pre N == 0 (or N-1 not found) → walk down kind chain
-        kind_idx = _PRE_KINDS.index(kind) if kind in _PRE_KINDS else -1
-        for lower_kind in _PRE_KINDS[kind_idx + 1 :]:
-            found = _glob_highest(f"{base_prefix}{lower_kind}")
-            if found:
-                return found
-
-        # No lower pre-release found → fall through to plain X.Y.Z
-
-    # Step 3: Post-release suffix
-    post_m = re.search(r"\.post(\d+)$", clean)
-    if post_m:
-        post_n = int(post_m.group(1))
-        if post_n > 0:
-            # 3a: post N > 0 → decrement post
-            prev = f"{clean[: post_m.start()]}.post{post_n - 1}"
-            if _tag_exists(prev):
-                return prev
-        # 3b: post 0 → the final it patches
-        prev = clean[: post_m.start()]
-        if _tag_exists(prev):
-            return prev
-        return None
-
-    # Step 4: Plain X.Y.Z
-    base = get_base_version(clean)
-    sv = parse_version(base)
-
-    # 4a: patch > 0 → decrement patch
-    if sv.patch > 0:
-        prev = f"{sv.major}.{sv.minor}.{sv.patch - 1}"
-        if _tag_exists(prev):
-            return prev
-
-    # 4b: minor > 0 → glob X.{Y-1}.*
-    if sv.minor > 0:
-        return _glob_highest(f"{sv.major}.{sv.minor - 1}.")
-
-    # 4c: major > 0 → glob {X-1}.*
-    if sv.major > 0:
-        return _glob_highest(f"{sv.major - 1}.")
-
-    # 4d: 0.0.0 — no previous release possible
-    msg = f"Cannot determine previous release for {version_str} — version is 0.0.0"
-    raise ValueError(msg)
-
-
-_POST_RE = re.compile(r"\.post\d+")
-
-
-def is_post(version_str: str) -> bool:
-    """Check if a version has a .postN suffix (ignoring any trailing .devN)."""
-    return _POST_RE.search(strip_dev(version_str)) is not None
-
-
-def resolve_baseline(
-    current_version: str,
-    release_type: str,
-    name: str,
-    repo: object,
-) -> str | None:
-    """Determine the baseline tag for change detection.
-
-    Given the current pyproject.toml version and the requested release type,
-    returns the tag to diff against for determining which packages changed.
-
-    Args:
-        current_version: Version string from pyproject.toml.
-        release_type: One of "stable", "dev", "pre", "post".
-        name: Package name (for tag prefix).
-        repo: pygit2.Repository for ref lookups.
-
-    Returns:
-        Baseline tag string (e.g. "pkg/v1.0.0" or "pkg/v1.0.1.dev0-base"),
-        or None if no previous release exists (package is new).
-
-    Raises:
-        ValueError: If the (current_version, release_type) combination is invalid.
-    """
-    has_dev = is_dev(current_version)
-    has_pre = is_pre(strip_dev(current_version))
-    has_post = is_post(current_version)
-
-    # --- Clean version (no .dev suffix) ---
-    if not has_dev:
-        prev = find_previous_release(current_version, name, repo)
-        if prev is None:
-            return None
-        return f"{name}/v{prev}"
-
-    # --- Dev version ---
-
-    # Validate: post-release dev + final/minor/major/pre → invalid
-    if has_post and release_type in ("stable", "pre"):
-        msg = (
-            f"Cannot {release_type}-release from post-release version {current_version}"
-        )
-        raise ValueError(msg)
-
-    # Validate: non-post dev + post → invalid
-    if not has_post and release_type == "post":
-        msg = f"Cannot post-release from unreleased version {current_version}"
-        raise ValueError(msg)
-
-    # Dev release → always use current version's own -base tag
-    if release_type == "dev":
-        return f"{name}/v{current_version}-base"
-
-    # Validate: --pre requires a pre-release suffix in the version
-    if release_type == "pre" and not has_pre:
-        msg = (
-            f"Cannot --pre release from version {current_version} "
-            f"— no pre-release suffix. Use 'uvr bump --pre {{a,b,rc}}' first."
-        )
-        raise ValueError(msg)
-
-    # Pre-release → incremental from dev0 baseline (kind is in the version)
-    if has_pre and release_type == "pre":
-        dev_m = _DEV_NUM_RE.search(current_version)
-        if dev_m and int(dev_m.group(1)) > 0:
-            return f"{name}/v{strip_dev(current_version)}.dev0-base"
-        return f"{name}/v{current_version}-base"
-
-    # Final/minor/major from pre-release dev → cumulative since last final
-    if has_pre and release_type in ("stable",):
-        base = get_base_version(current_version)
-        prev = find_previous_release(base, name, repo)
-        if prev is None:
-            return None
-        return f"{name}/v{prev}"
-
-    # Post-release dev + post → use dev0 baseline
-    if has_post and release_type == "post":
-        dev_m = _DEV_NUM_RE.search(current_version)
-        if dev_m and int(dev_m.group(1)) > 0:
-            # devN (N > 0) → rewind to dev0-base
-            return f"{name}/v{strip_dev(current_version)}.dev0-base"
-        return f"{name}/v{current_version}-base"
-
-    # Final dev (X.X.X.devN) + non-dev release → use dev0 baseline
-    dev_m = _DEV_NUM_RE.search(current_version)
-    if dev_m and int(dev_m.group(1)) > 0:
-        # devN (N > 0) → rewind to dev0-base
-        return f"{name}/v{strip_dev(current_version)}.dev0-base"
-
-    # dev0 → current baseline
-    return f"{name}/v{current_version}-base"
-
-
-def parse_tag_version(tag: str) -> str:
-    """Extract the version string from a release tag.
-
-    Tags follow the pattern ``{package-name}/v{version}``.
-
-    Examples:
-        "pkg/v1.0.0" -> "1.0.0"
-        "my-pkg/v2.3.4.dev0" -> "2.3.4.dev0"
-    """
-    return tag.split("/v")[-1]
+_PRE_KIND_ORDER = {"a": 0, "b": 1, "rc": 2}
 
 
 def parse_version(version_str: str) -> semver.Version:
@@ -439,11 +213,11 @@ def parse_version(version_str: str) -> semver.Version:
     - "1.2.3.dev0" -> "1.2.3"
     - "1.2.3a1" -> "1.2.3"
     """
-    cleaned = get_base_version(version_str)
-    parts = cleaned.split(".")
-    while len(parts) < 3:
-        parts.append("0")
-    return semver.Version.parse(".".join(parts[:3]))
+    r = _parse(version_str).release
+    major = r[0]
+    minor = r[1] if len(r) > 1 else 0
+    patch = r[2] if len(r) > 2 else 0
+    return semver.Version(major=major, minor=minor, patch=patch)
 
 
 def bump_patch(version_str: str) -> str:
@@ -487,6 +261,191 @@ def bump_major(version_str: str) -> str:
     return str(parse_version(version_str).bump_major())
 
 
+# ---------------------------------------------------------------------------
+# Tag helpers
+# ---------------------------------------------------------------------------
+
+
+def parse_tag_version(tag: str) -> str:
+    """Extract the version string from a release tag.
+
+    Tags follow the pattern ``{package-name}/v{version}``.
+
+    Examples:
+        "pkg/v1.0.0" -> "1.0.0"
+        "my-pkg/v2.3.4.dev0" -> "2.3.4.dev0"
+    """
+    return tag.split("/v")[-1]
+
+
+def find_previous_release(
+    version_str: str,
+    name: str,
+    repo: object,
+) -> str | None:
+    """Find the highest released version below the current version.
+
+    Discovers all ``{name}/v*`` tags in *repo*, parses them as PEP 440
+    versions, and returns the highest one that sorts below the target
+    (``strip_dev(version_str)``).  Tags with a ``-base`` suffix are
+    ignored (they are development baselines, not releases).
+
+    Args:
+        version_str: Current version (with or without .devN suffix).
+        name: Package name for tag prefix.
+        repo: pygit2.Repository for ref lookups.
+
+    Returns:
+        The previous release version string, or None if not found.
+    """
+    from pathlib import Path
+
+    target = _parse(strip_dev(version_str))
+
+    # Collect all release tags for this package
+    tag_prefix = f"refs/tags/{name}/v"
+    candidates: list[tuple[PkgVersion, str]] = []
+
+    # Fast path: filesystem glob
+    try:
+        tag_dir = Path(repo.path) / "refs" / "tags" / name  # type: ignore[union-attr]
+        if tag_dir.is_dir():
+            for path in tag_dir.rglob("v*"):
+                if path.name.endswith("-base"):
+                    continue
+                ver_str = path.name[1:]  # strip leading "v"
+                try:
+                    v = _parse(ver_str)
+                except InvalidVersion:
+                    continue
+                if v < target:
+                    candidates.append((v, ver_str))
+    except (AttributeError, OSError):
+        pass
+
+    # Fallback: pygit2 ref scan (for packed refs or mock repos)
+    if not candidates:
+        for ref in repo.listall_references():  # type: ignore[union-attr]
+            if not ref.startswith(tag_prefix) or ref.endswith("-base"):
+                continue
+            ver_str = ref.split("/v")[-1]
+            try:
+                v = _parse(ver_str)
+            except InvalidVersion:
+                continue
+            if v < target:
+                candidates.append((v, ver_str))
+
+    if not candidates:
+        return None
+
+    # Highest version below target
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
+# ---------------------------------------------------------------------------
+# Baseline resolution
+# ---------------------------------------------------------------------------
+
+
+def resolve_baseline(
+    current_version: str,
+    release_type: str,
+    name: str,
+    repo: object,
+) -> str | None:
+    """Determine the baseline tag for change detection.
+
+    Given the current pyproject.toml version and the requested release type,
+    returns the tag to diff against for determining which packages changed.
+
+    Args:
+        current_version: Version string from pyproject.toml.
+        release_type: One of "stable", "dev", "pre", "post".
+        name: Package name (for tag prefix).
+        repo: pygit2.Repository for ref lookups.
+
+    Returns:
+        Baseline tag string (e.g. "pkg/v1.0.0" or "pkg/v1.0.1.dev0-base"),
+        or None if no previous release exists (package is new).
+
+    Raises:
+        ValueError: If the (current_version, release_type) combination is invalid.
+    """
+    v = _parse(current_version)
+    has_dev = v.dev is not None
+    has_pre = _parse(strip_dev(current_version)).pre is not None
+    has_post = v.post is not None
+
+    # --- Clean version (no .dev suffix) ---
+    if not has_dev:
+        prev = find_previous_release(current_version, name, repo)
+        if prev is None:
+            return None
+        return f"{name}/v{prev}"
+
+    # --- Dev version ---
+
+    # Validate: post-release dev + final/minor/major/pre → invalid
+    if has_post and release_type in ("stable", "pre"):
+        msg = (
+            f"Cannot {release_type}-release from post-release version {current_version}"
+        )
+        raise ValueError(msg)
+
+    # Validate: non-post dev + post → invalid
+    if not has_post and release_type == "post":
+        msg = f"Cannot post-release from unreleased version {current_version}"
+        raise ValueError(msg)
+
+    # Dev release → always use current version's own -base tag
+    if release_type == "dev":
+        return f"{name}/v{current_version}-base"
+
+    # Validate: --pre requires a pre-release suffix in the version
+    if release_type == "pre" and not has_pre:
+        msg = (
+            f"Cannot --pre release from version {current_version} "
+            f"— no pre-release suffix. Use 'uvr bump --pre {{a,b,rc}}' first."
+        )
+        raise ValueError(msg)
+
+    # Pre-release → incremental from dev0 baseline (kind is in the version)
+    if has_pre and release_type == "pre":
+        if v.dev is not None and v.dev > 0:
+            return f"{name}/v{strip_dev(current_version)}.dev0-base"
+        return f"{name}/v{current_version}-base"
+
+    # Final/minor/major from pre-release dev → cumulative since last final
+    if has_pre and release_type in ("stable",):
+        base = get_base_version(current_version)
+        prev = find_previous_release(base, name, repo)
+        if prev is None:
+            return None
+        return f"{name}/v{prev}"
+
+    # Post-release dev + post → use dev0 baseline
+    if has_post and release_type == "post":
+        if v.dev is not None and v.dev > 0:
+            # devN (N > 0) → rewind to dev0-base
+            return f"{name}/v{strip_dev(current_version)}.dev0-base"
+        return f"{name}/v{current_version}-base"
+
+    # Final dev (X.X.X.devN) + non-dev release → use dev0 baseline
+    if v.dev is not None and v.dev > 0:
+        # devN (N > 0) → rewind to dev0-base
+        return f"{name}/v{strip_dev(current_version)}.dev0-base"
+
+    # dev0 → current baseline
+    return f"{name}/v{current_version}-base"
+
+
+# ---------------------------------------------------------------------------
+# Bump validation
+# ---------------------------------------------------------------------------
+
+
 def validate_bump(
     current_version: str,
     bump_type: str,
@@ -510,11 +469,12 @@ def validate_bump(
     if bump_type in ("major", "minor", "patch", "dev"):
         return
 
-    has_pre = is_pre(strip_dev(current_version))
-    has_post = is_post(current_version)
+    v = _parse(strip_dev(current_version))
+    has_pre = v.pre is not None
+    has_post = v.post is not None
 
     if bump_type == "stable":
-        if has_post or is_post(strip_dev(current_version)):
+        if has_post or _parse(strip_dev(current_version)).post is not None:
             msg = (
                 f"Cannot bump to stable from post-release {current_version} "
                 f"— the stable version was already released. "
@@ -533,7 +493,7 @@ def validate_bump(
         raise ValueError(msg)
 
     if is_pre_bump and has_pre and pre_kind:
-        current_kind = extract_pre_kind(strip_dev(current_version))
+        current_kind = v.pre[0] if v.pre else ""
         target_order = _PRE_KIND_ORDER.get(pre_kind, -1)
         current_order = _PRE_KIND_ORDER.get(current_kind, -1)
         if target_order < current_order:
@@ -544,29 +504,45 @@ def validate_bump(
             raise ValueError(msg)
 
 
+# ---------------------------------------------------------------------------
+# Release type detection
+# ---------------------------------------------------------------------------
+
+
+def detect_release_type_for_version(version: str) -> str:
+    """Detect the release type implied by a single version string.
+
+    Args:
+        version: A PEP 440 version string (may include ``.devN``).
+
+    Returns:
+        One of ``"stable"``, ``"pre"``, ``"post"``.
+        Never returns ``"dev"`` — that is a CLI flag concern.
+    """
+    v = _parse(version)
+    # Look at the non-dev part to determine the release track
+    base = _parse(strip_dev(version)) if v.dev is not None else v
+    if base.pre is not None:
+        return "pre"
+    if base.post is not None:
+        return "post"
+    return "stable"
+
+
 def detect_release_type(packages: dict) -> str:
-    """Auto-detect release type from package versions.
+    """Auto-detect release type from the first package's version.
 
-    Examines the first package's version to determine what kind of release
-    the user is working toward, so baselines resolve correctly.
-
-    Returns one of ``"stable"``, ``"pre"``, ``"post"``.
+    .. deprecated::
+        Use :func:`detect_release_type_for_version` per-package instead.
     """
     for info in packages.values():
-        v = info.version
-        if is_dev(v):
-            base = v.rsplit(".dev", 1)[0]
-            if is_pre(base):
-                return "pre"
-            if is_post(base):
-                return "post"
-            return "stable"
-        if is_pre(v):
-            return "pre"
-        if is_post(v):
-            return "post"
-        return "stable"
+        return detect_release_type_for_version(info.version)
     return "stable"
+
+
+# ---------------------------------------------------------------------------
+# Version conflicts
+# ---------------------------------------------------------------------------
 
 
 class VersionConflict:
@@ -586,12 +562,12 @@ class VersionConflict:
 
     def hint(self) -> str:
         """Suggest a bump command to resolve the conflict."""
-        if is_pre(self.release_version):
-            # e.g. 1.0.1a1 already released → bump to next alpha
-            kind = extract_pre_kind(self.release_version)
+        v = _parse(self.release_version)
+        if v.pre is not None:
+            kind = v.pre[0]
             kind_name = {"a": "alpha", "b": "beta", "rc": "rc"}.get(kind, kind)
             return f"uvr bump --package {self.name} --{kind_name}"
-        if is_post(self.release_version):
+        if v.post is not None:
             return f"uvr bump --package {self.name} --post"
         return f"uvr bump --package {self.name} --patch"
 
@@ -613,11 +589,11 @@ def find_version_conflicts(
 
     conflicts: list[VersionConflict] = []
     for name, info in packages.items():
-        v = info.version
-        if not is_dev(v):
+        v = _parse(info.version)
+        if v.dev is None:
             continue
-        release_version = strip_dev(v)
+        release_version = strip_dev(info.version)
         tag = f"{name}/v{release_version}"
         if repo.references.get(f"refs/tags/{tag}") is not None:
-            conflicts.append(VersionConflict(name, v, release_version, tag))
+            conflicts.append(VersionConflict(name, info.version, release_version, tag))
     return conflicts

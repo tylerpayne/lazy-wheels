@@ -7,7 +7,8 @@ import pygit2
 from ..models import PackageInfo
 from .shell import print_step
 
-from .versions import parse_version
+from packaging.version import InvalidVersion
+from packaging.version import Version as PkgVersion
 
 
 def find_baseline_tags(
@@ -61,7 +62,7 @@ def find_release_tags(
     release_tag_names = gh_releases
     release_tags: dict[str, str | None] = {}
     for name, info in packages.items():
-        current_base = parse_version(info.version)
+        current_base = PkgVersion(info.version)
         # Filter to this package's releases, sorted by version descending
         pkg_releases = []
         prefix = f"{name}/v"
@@ -70,8 +71,8 @@ def find_release_tags(
                 continue
             tag_ver_str = tag[len(prefix) :]
             try:
-                tag_ver = parse_version(tag_ver_str)
-            except (ValueError, TypeError):
+                tag_ver = PkgVersion(tag_ver_str)
+            except InvalidVersion:
                 continue
             if tag_ver < current_base:
                 pkg_releases.append((tag_ver, tag))

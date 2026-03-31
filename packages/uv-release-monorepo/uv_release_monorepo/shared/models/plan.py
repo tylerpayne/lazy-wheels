@@ -76,7 +76,7 @@ class PlanConfig:
         uvr_version: The uvr version to embed in the plan.
         python_version: Python version for CI builds.
         ci_publish: If True (default), plan targets CI execution.
-        release_type: One of "stable", "dev", "pre", "post".
+        dev_release: If True, publish .devN versions as-is (``--dev`` mode).
         dry_run: If True, skip local writes (version bumps, dep pins).
     """
 
@@ -85,7 +85,7 @@ class PlanConfig:
     uvr_version: str
     python_version: str = "3.12"
     ci_publish: bool = True
-    release_type: str = "stable"
+    dev_release: bool = False
     dry_run: bool = False
 
 
@@ -483,11 +483,11 @@ class ReleasePlan(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    schema_version: int = 10
+    schema_version: int = 11
     uvr_version: str
     uvr_install: str = "uv-release-monorepo"
     python_version: str = "3.12"
-    release_type: str = "stable"
+    dev_release: bool = False
     rebuild_all: bool
     ci_publish: bool = False
     changed: dict[str, ChangedPackage]
@@ -502,13 +502,17 @@ class ReleasePlan(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _default_command_union_types(cls, data: Any) -> Any:
-        """Add ``type='shell'`` to commands missing the discriminator.
+    def _migrate_and_default(cls, data: Any) -> Any:
+        """Backwards-compatibility migrations for older plan JSON.
 
-        Provides backwards compatibility with plans serialized before
-        discriminated union command types were introduced.
+        - Convert legacy ``release_type`` string to ``dev_release`` bool.
+        - Add ``type='shell'`` to commands missing the discriminator.
         """
         if isinstance(data, dict):
+            # Migrate release_type → dev_release (schema ≤10)
+            if "release_type" in data and "dev_release" not in data:
+                data["dev_release"] = data.pop("release_type") == "dev"
+
             for key in ("release_commands", "bump_commands"):
                 for cmd in data.get(key, []):
                     if isinstance(cmd, dict) and "type" not in cmd:
