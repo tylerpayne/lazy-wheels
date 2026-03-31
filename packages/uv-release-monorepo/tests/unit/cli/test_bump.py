@@ -196,11 +196,11 @@ _MATRIX: list[tuple[str, str, str]] = [
     ("1.0.1.post2.dev0",   "rc", E),
     ("1.0.1.post2.dev3",   "rc", E),
 
-    # ── --post (6 valid, 21 errors) ──
-    ("1.0.1",              "post", E),  # no post suffix
-    ("1.0.1.dev0",         "post", E),
+    # ── --post (9 valid, 18 errors) ──
+    ("1.0.1",              "post", "1.0.1.post0.dev0"),  # clean final → enter post track
+    ("1.0.1.dev0",         "post", E),  # dev → unreleased
     ("1.0.1.dev3",         "post", E),
-    ("1.0.1a0",            "post", E),
+    ("1.0.1a0",            "post", E),  # pre-release → unreleased
     ("1.0.1a0.dev0",       "post", E),
     ("1.0.1a0.dev3",       "post", E),
     ("1.0.1a2",            "post", E),

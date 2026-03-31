@@ -484,8 +484,12 @@ def validate_bump(
         return
 
     if bump_type == "post" and not has_post:
-        msg = f"Cannot enter post-release from unreleased version {current_version}"
-        raise ValueError(msg)
+        cv = _parse(current_version)
+        # Post is valid from a clean final (released) version.
+        # Reject from dev or pre-release versions — those aren't released yet.
+        if cv.dev is not None or cv.pre is not None:
+            msg = f"Cannot enter post-release from unreleased version {current_version}"
+            raise ValueError(msg)
 
     is_pre_bump = bump_type in ("alpha", "beta", "rc") or pre_kind
     if is_pre_bump and has_post:
