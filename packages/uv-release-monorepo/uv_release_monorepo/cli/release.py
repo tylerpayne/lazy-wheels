@@ -337,7 +337,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         from ..shared.utils.versions import find_version_conflicts
 
         version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
-        if version_conflicts and not dry_run:
+        if version_conflicts:
             lines = "\n".join(
                 f"  {c.warning()}\n    Fix: {c.hint()}" for c in version_conflicts
             )
