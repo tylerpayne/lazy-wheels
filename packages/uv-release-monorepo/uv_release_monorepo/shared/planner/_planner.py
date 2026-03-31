@@ -193,8 +193,9 @@ class ReleasePlanner:
         release_commands = self._generate_release_commands(changed)
         bump_commands = self._generate_bump_commands(changed, published_versions)
 
-        # Validate no tag conflicts (uses targeted GitHub API checks)
-        self._check_tag_conflicts(changed)
+        # Validate no tag conflicts (skip for dry-run / status)
+        if not self.config.dry_run:
+            self._check_tag_conflicts(changed)
 
         return ReleasePlan(
             uvr_version=self.config.uvr_version,
