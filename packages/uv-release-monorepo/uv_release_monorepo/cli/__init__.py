@@ -6,7 +6,7 @@ from ..shared.models import PlanConfig, ReleasePlan  # noqa: F401 (re-exported)
 from ..shared.planner import ReleasePlanner, build_plan
 from ..shared.executor import ReleaseExecutor
 from ..shared.utils.cli import __version__
-from ._yaml import _MISSING, _yaml_delete, _yaml_get, _yaml_set
+from ..shared.utils.yaml import MISSING, yaml_delete, yaml_get, yaml_set
 from ._cli import cli
 from .init import cmd_init, cmd_upgrade, cmd_validate
 from .install import cmd_install
@@ -16,11 +16,11 @@ from .runners import cmd_runners
 from .wheels import cmd_wheels
 
 __all__ = [
-    "_MISSING",
+    "MISSING",
     "__version__",
-    "_yaml_delete",
-    "_yaml_get",
-    "_yaml_set",
+    "yaml_delete",
+    "yaml_get",
+    "yaml_set",
     "cmd_bump",
     "PlanConfig",
     "ReleaseExecutor",

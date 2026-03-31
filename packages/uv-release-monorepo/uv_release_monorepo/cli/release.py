@@ -66,9 +66,9 @@ def _load_workflow_jobs() -> list[str]:
     if not workflow.exists():
         return []
     try:
-        from ..cli._yaml import _load_yaml
+        from ..shared.utils.yaml import load_yaml
 
-        doc = _load_yaml(workflow)
+        doc = load_yaml(workflow)
         return list(doc.get("jobs", {}).keys())
     except Exception:
         return []

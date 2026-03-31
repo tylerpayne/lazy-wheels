@@ -14,7 +14,7 @@ from ..shared.models.workflow import ReleaseWorkflow, frozen_paths
 from ..shared.utils.config import get_config
 from ..shared.utils.toml import get_path, read_pyproject, write_pyproject
 from ..shared.utils.cli import fatal
-from ._yaml import _MISSING, _load_yaml, _yaml_get
+from ..shared.utils.yaml import MISSING, load_yaml, yaml_get
 
 
 _FALLBACK_EDITORS = ("code", "vim", "vi", "nano")
@@ -44,7 +44,7 @@ def _load_template_yaml() -> dict:
         f.write(text)
         tmp = Path(f.name)
     try:
-        return _load_yaml(tmp)
+        return load_yaml(tmp)
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -85,11 +85,11 @@ def _check_frozen_paths(existing: dict, template: dict) -> list[str]:
     warnings: list[str] = []
     for path in frozen_paths(ReleaseWorkflow):
         keys = path.split(".")
-        user_val = _yaml_get(existing, keys)
-        tmpl_val = _yaml_get(template, keys)
-        if user_val is _MISSING:
+        user_val = yaml_get(existing, keys)
+        tmpl_val = yaml_get(template, keys)
+        if user_val is MISSING:
             continue  # field absent in user file — skip
-        if tmpl_val is _MISSING:
+        if tmpl_val is MISSING:
             continue  # field absent in template — skip
         if user_val != tmpl_val:
             warnings.append(f"{path} was modified from template default")
@@ -245,7 +245,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
     from pydantic import ValidationError
 
-    existing = _load_yaml(dest)
+    existing = load_yaml(dest)
     rel = dest.relative_to(root)
 
     from ..shared.utils.cli import __version__
