@@ -94,6 +94,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         print("Warnings")
         print("--------")
         for tag in sorted(plan.tag_conflicts):
-            print(f"  tag conflict: {tag}")
+            version = tag.split("/v", 1)[1] if "/v" in tag else tag
+            print(f"  Version conflict: {version} already exists (tag: {tag})")
 
     print()
