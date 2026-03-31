@@ -91,9 +91,9 @@ def cmd_status(args: argparse.Namespace) -> None:
     # Warn on tag conflicts
     if plan.tag_conflicts:
         print()
-        print("Conflicts")
-        print("---------")
+        print("Warnings")
+        print("--------")
         for tag in sorted(plan.tag_conflicts):
-            print(f"  {tag}")
+            print(f"  tag conflict: {tag}")
 
     print()
