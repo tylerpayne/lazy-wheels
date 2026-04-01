@@ -316,6 +316,11 @@ Run 'uvr <command> --help' for details on a specific command.
         default=None,
         help="GitHub repository (ORG/REPO). Inferred from cwd if omitted.",
     )
+    install_parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Install from a GitHub Actions run's artifacts instead of a release.",
+    )
     install_parser.set_defaults(func=cmd_install)
 
     # download
