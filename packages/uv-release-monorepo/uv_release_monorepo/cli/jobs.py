@@ -42,8 +42,13 @@ def cmd_download(args: argparse.Namespace) -> None:
     plan_obj = ReleasePlan.model_validate_json(resolve_plan_json(args.plan))
 
     # Use reuse_run_id if set, otherwise fall back to current run
-    # (GITHUB_RUN_ID is always set in GitHub Actions)
-    run_id = plan_obj.reuse_run_id or os.environ.get("GITHUB_RUN_ID", "")
+    run_id = plan_obj.reuse_run_id or os.environ.get("GITHUB_RUN_ID")
+    if not run_id:
+        print(
+            "ERROR: No run ID. Set --reuse-run or run in GitHub Actions.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Build the packages dict: name → release tag (for fallback)
     packages = {
