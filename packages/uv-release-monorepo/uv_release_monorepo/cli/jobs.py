@@ -41,11 +41,30 @@ def cmd_download(args: argparse.Namespace) -> None:
 
     plan_obj = ReleasePlan.model_validate_json(resolve_plan_json(args.plan))
 
+    from pathlib import Path
+
+    from packaging.utils import canonicalize_name
+
+    # Check if wheels already exist locally (e.g. local build)
+    dist = Path("dist")
+    if dist.is_dir():
+        all_present = True
+        for name, pkg in plan_obj.changed.items():
+            dist_name = canonicalize_name(name).replace("-", "_")
+            pattern = f"{dist_name}-{pkg.release_version}-*.whl"
+            if not list(dist.glob(pattern)):
+                all_present = False
+                break
+        if all_present:
+            print("All wheels already in dist/, skipping download.")
+            return
+
     # Use reuse_run_id if set, otherwise fall back to current run
     run_id = plan_obj.reuse_run_id or os.environ.get("GITHUB_RUN_ID")
     if not run_id:
         print(
-            "ERROR: No run ID. Set --reuse-run or run in GitHub Actions.",
+            "ERROR: No run ID and wheels not in dist/. "
+            "Set --reuse-run or run in GitHub Actions.",
             file=sys.stderr,
         )
         sys.exit(1)
