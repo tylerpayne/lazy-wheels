@@ -193,6 +193,10 @@ class FetchGithubReleaseCommand(BaseModel):
             text=True,
         )
         if result.returncode != 0:
+            print(
+                f"ERROR: Could not find release {self.tag}: {result.stderr.strip()}",
+                file=sys.stderr,
+            )
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         assets = _json.loads(result.stdout).get("assets", [])
@@ -203,6 +207,12 @@ class FetchGithubReleaseCommand(BaseModel):
         ]
 
         if not wheel_names:
+            all_names = [a["name"] for a in assets]
+            print(
+                f"ERROR: Release {self.tag} has no wheels for {self.dist_name}. "
+                f"Assets: {all_names or '(none)'}",
+                file=sys.stderr,
+            )
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         # 2. Prefer universal wheels (platform == "any")
@@ -224,6 +234,11 @@ class FetchGithubReleaseCommand(BaseModel):
             ]
 
         if not to_download:
+            print(
+                f"ERROR: No platform-compatible wheels in {self.tag}. "
+                f"Available: {wheel_names}",
+                file=sys.stderr,
+            )
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         # 4. Download with exact filenames as patterns

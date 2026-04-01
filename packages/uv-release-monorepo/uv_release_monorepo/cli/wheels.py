@@ -47,7 +47,7 @@ def cmd_wheels(args: argparse.Namespace) -> None:
 
     result = cmd.execute()
     if result.returncode != 0:
-        fatal(f"No compatible wheels found for '{package}'.")
+        fatal(f"Download failed for '{package}'. See errors above.")
 
     found = list(Path(output_dir).glob(f"{dist_name}-*.whl"))
     for whl in found:
