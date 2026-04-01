@@ -88,12 +88,11 @@ jobs:
       run: |
         uv python install ${{ fromJSON(inputs.plan).python_version }}
     - id: download
-      uses: actions/download-artifact@v4
-      with:
-        pattern: wheels-*
-        merge-multiple: true
-        path: dist
-        run-id: ${{ fromJSON(inputs.plan).reuse_run_id != '' && fromJSON(inputs.plan).reuse_run_id || github.run_id }}
+      name: Download wheels
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UVR_PLAN: ${{ inputs.plan }}
+      run: uv run uvr jobs download
     - id: publish
       name: Tag and publish releases
       env:

@@ -32,6 +32,36 @@ def cmd_release(args: argparse.Namespace) -> None:
     ReleaseExecutor(plan_obj, hook).publish()
 
 
+def cmd_download(args: argparse.Namespace) -> None:
+    """Download wheels for all changed packages into dist/."""
+    import os
+    import sys
+
+    from ..shared.models import DownloadWheelsCommand
+
+    plan_obj = ReleasePlan.model_validate_json(resolve_plan_json(args.plan))
+
+    # Use reuse_run_id if set, otherwise fall back to current run
+    # (GITHUB_RUN_ID is always set in GitHub Actions)
+    run_id = plan_obj.reuse_run_id or os.environ.get("GITHUB_RUN_ID", "")
+
+    # Build the packages dict: name → release tag (for fallback)
+    packages = {
+        name: f"{name}/v{pkg.release_version}" for name, pkg in plan_obj.changed.items()
+    }
+
+    cmd = DownloadWheelsCommand(
+        packages=packages,
+        run_id=run_id,
+        directory="dist",
+        label="Download release wheels",
+    )
+    result = cmd.execute()
+    if result.returncode != 0:
+        print("ERROR: Failed to download wheels.", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_bump(args: argparse.Namespace) -> None:
     """Bump versions, commit, baseline tags, and push."""
     plan_obj = ReleasePlan.model_validate_json(resolve_plan_json(args.plan))

@@ -487,6 +487,7 @@ Run 'uvr <command> --help' for details on a specific command.
     from .jobs import (
         cmd_validate_plan,
         cmd_build,
+        cmd_download as cmd_job_download,
         cmd_release as cmd_job_release,
         cmd_bump as cmd_job_bump,
     )
@@ -509,6 +510,16 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     build_parser.add_argument("--runner", required=True)
     build_parser.set_defaults(func=cmd_build)
+
+    download_job_parser = jobs_sub.add_parser(
+        "download", help="Download wheels for changed packages."
+    )
+    download_job_parser.add_argument(
+        "--plan",
+        default=None,
+        help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
+    )
+    download_job_parser.set_defaults(func=cmd_job_download)
 
     release_job_parser = jobs_sub.add_parser(
         "release", help="Tag, create GitHub releases, and push release tags."
