@@ -13,7 +13,7 @@ from ..utils.shell import Progress
 from ..models import (
     BuildStage,
     ChangedPackage,
-    FetchGithubReleaseCommand,
+    DownloadWheelsCommand,
     PackageInfo,
     PinDepsCommand,
     PlanConfig,
@@ -303,17 +303,27 @@ class ReleasePlanner:
                 )
             ]
 
+            # Fetch unchanged deps — single smart command handles run-id
+            # fallback, transitive resolution, and caching.
+            dep_tags: dict[str, str] = {}
             for name in sorted(unchanged_deps):
                 tag = release_tags.get(name)
-                if tag:
-                    setup_cmds.append(
-                        FetchGithubReleaseCommand(
-                            tag=tag,
-                            dist_name=_dist_name(name),
-                            directory="deps",
-                            label=f"Fetch {name} from {tag}",
-                        )
+                if not tag:
+                    msg = (
+                        f"Cannot fetch unchanged dependency '{name}': "
+                        f"no release tag found. Has it ever been released?"
                     )
+                    raise ValueError(msg)
+                dep_tags[name] = tag
+            if dep_tags:
+                setup_cmds.append(
+                    DownloadWheelsCommand(
+                        packages=dep_tags,
+                        exclude=list(changed_to_build.keys()),
+                        directory="deps",
+                        label="Fetch unchanged dependencies",
+                    )
+                )
             stages.append(BuildStage(setup=setup_cmds))
 
             # -- Build stages: one per topo layer --

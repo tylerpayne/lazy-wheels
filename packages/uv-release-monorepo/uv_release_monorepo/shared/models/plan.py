@@ -419,8 +419,133 @@ class PublishGithubReleaseCommand(BaseModel):
         return subprocess.run(args)
 
 
+class DownloadWheelsCommand(BaseModel):
+    """Smart wheel fetcher: run artifacts → release fallback, with transitive deps.
+
+    At execution time, for each package in ``packages``:
+
+    1. Check ``directory`` for a cached wheel (skip if found).
+    2. If ``run_id`` is set, download all run artifacts into ``directory``.
+    3. Fall back to the latest GitHub release for the package.
+    4. Parse the wheel's ``METADATA`` for internal deps and fetch those too.
+
+    Packages in ``exclude`` are skipped (they'll be built, not fetched).
+
+    Attributes:
+        type: Discriminator for the command union.
+        packages: Map of package name → release tag (e.g. ``{"pkg": "pkg/v1.0"}``)
+            for fallback. Tag may be empty if no release exists.
+        exclude: Package names to skip (changed packages that will be built).
+        gh_repo: GitHub ``ORG/REPO`` for API calls.
+        run_id: If set, try downloading from this CI run first.
+        directory: Local directory to save wheels into.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["download_wheels"] = "download_wheels"
+    packages: dict[str, str]  # name → release tag
+    exclude: list[str] = Field(default_factory=list)
+    gh_repo: str = ""
+    run_id: str = ""
+    directory: str = "deps"
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Fetch wheels with run-id → release fallback and transitive resolution."""
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        from packaging.metadata import Metadata
+        from packaging.utils import canonicalize_name
+
+        out = Path(self.directory)
+        out.mkdir(parents=True, exist_ok=True)
+        exclude = {canonicalize_name(n) for n in self.exclude}
+
+        # Known packages (for transitive dep detection)
+        known = {canonicalize_name(n) for n in self.packages}
+
+        # If run_id, download all artifacts upfront
+        if self.run_id:
+            print(f"  Downloading artifacts from run {self.run_id}...")
+            fetch = FetchRunArtifactsCommand(
+                run_id=self.run_id,
+                dist_name="",  # all wheels
+                gh_repo=self.gh_repo,
+                directory=str(out),
+            )
+            fetch.execute()  # best-effort; missing packages fall back to releases
+
+        # BFS fetch
+        to_fetch = list(self.packages.keys())
+        fetched: set[str] = set()
+
+        while to_fetch:
+            pkg = to_fetch.pop(0)
+            canon = canonicalize_name(pkg)
+            if canon in fetched or canon in exclude:
+                continue
+            fetched.add(canon)
+
+            dist_name = canon.replace("-", "_")
+
+            # Check if already in output dir (from run artifacts or prior fetch)
+            cached = sorted(out.glob(f"{dist_name}-*.whl"))
+            if cached:
+                whl = cached[-1]
+                print(f"  {pkg}: {whl.name} (cached)")
+            else:
+                # Fall back to GitHub release
+                tag = self.packages.get(pkg, "")
+                if not tag:
+                    print(f"  {pkg}: no release tag, skipping", file=sys.stderr)
+                    continue
+
+                release_fetch = FetchGithubReleaseCommand(
+                    tag=tag,
+                    dist_name=dist_name,
+                    gh_repo=self.gh_repo,
+                    directory=str(out),
+                )
+                result = release_fetch.execute()
+                if result.returncode != 0:
+                    print(f"  {pkg}: download failed, skipping", file=sys.stderr)
+                    continue
+
+                found = sorted(out.glob(f"{dist_name}-*.whl"))
+                if not found:
+                    continue
+                whl = found[-1]
+                print(f"  {pkg}: {whl.name}")
+
+            # Resolve transitive deps from wheel metadata
+            try:
+                with ZipFile(whl) as zf:
+                    for entry in zf.namelist():
+                        if entry.endswith(".dist-info/METADATA"):
+                            meta = Metadata.from_email(zf.read(entry))
+                            for req in meta.requires_dist or []:
+                                if req.marker and "extra" in str(req.marker):
+                                    continue
+                                dep = canonicalize_name(req.name)
+                                if dep in known and dep not in fetched:
+                                    to_fetch.append(dep)
+                            break
+            except Exception:
+                pass
+
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+
 StageCommand = Annotated[
-    Union[ShellCommand, FetchGithubReleaseCommand, FetchRunArtifactsCommand],
+    Union[
+        ShellCommand,
+        FetchGithubReleaseCommand,
+        FetchRunArtifactsCommand,
+        DownloadWheelsCommand,
+    ],
     Field(discriminator="type"),
 ]
 """Union of command types that can appear in a build stage's setup list."""

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uv_release_monorepo.shared.models import (
-    FetchGithubReleaseCommand,
+    DownloadWheelsCommand,
     PackageInfo,
     PlanConfig,
     ReleasePlan,
@@ -348,7 +348,7 @@ class TestBuildCommandStages:
         mock_build_ctx: MagicMock,
         mock_detect: MagicMock,
     ) -> None:
-        """Setup stage uses FetchGithubReleaseCommand for unchanged dep downloads."""
+        """Setup stage uses DownloadWheelsCommand for unchanged dep downloads."""
         packages = {
             "tools": PackageInfo(path="packages/tools", version="1.0.0", deps=[]),
             "overlay": PackageInfo(
@@ -369,13 +369,10 @@ class TestBuildCommandStages:
         stages = plan.build_commands[("ubuntu-latest",)]
         setup = stages[0].setup
 
-        fetch_cmds = [
-            cmd for cmd in setup if isinstance(cmd, FetchGithubReleaseCommand)
-        ]
-        assert len(fetch_cmds) == 1
-        assert fetch_cmds[0].tag == "tools/v0.9.0"
-        assert fetch_cmds[0].dist_name == "tools"
-        assert fetch_cmds[0].directory == "deps"
+        dl_cmds = [cmd for cmd in setup if isinstance(cmd, DownloadWheelsCommand)]
+        assert len(dl_cmds) == 1
+        assert dl_cmds[0].packages == {"tools": "tools/v0.9.0"}
+        assert dl_cmds[0].directory == "deps"
 
     @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
     @patch("uv_release_monorepo.shared.planner._planner.build_context")
@@ -407,8 +404,6 @@ class TestBuildCommandStages:
         for runner_key in [("ubuntu-latest",), ("macos-14",)]:
             stages = plan.build_commands[runner_key]
             setup = stages[0].setup
-            fetch_cmds = [
-                cmd for cmd in setup if isinstance(cmd, FetchGithubReleaseCommand)
-            ]
-            assert len(fetch_cmds) == 1, f"Missing fetch for {runner_key}"
-            assert fetch_cmds[0].tag == "lib/v0.9.0"
+            dl_cmds = [cmd for cmd in setup if isinstance(cmd, DownloadWheelsCommand)]
+            assert len(dl_cmds) == 1, f"Missing fetch for {runner_key}"
+            assert dl_cmds[0].packages == {"lib": "lib/v0.9.0"}
