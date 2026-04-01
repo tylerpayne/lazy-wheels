@@ -34,6 +34,7 @@ def _read_internal_deps(wheel_path: Path, known_packages: set[str]) -> list[str]
                         canonicalize_name(req.name)
                         for req in (meta.requires_dist or [])
                         if canonicalize_name(req.name) in known_packages
+                        and not (req.marker and "extra" in str(req.marker))
                     ]
     except Exception:
         pass
