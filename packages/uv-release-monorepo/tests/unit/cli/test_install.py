@@ -77,6 +77,10 @@ def _make_fake_run(
 class TestCmdInstall:
     """Tests for cmd_install()."""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
     def test_installs_package_and_deps(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -133,6 +137,10 @@ class TestCmdInstall:
 
 class TestCmdInstallRemote:
     """Tests for cmd_install() with remote org/repo/package specs."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     def test_remote_install_passes_repo_to_gh(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

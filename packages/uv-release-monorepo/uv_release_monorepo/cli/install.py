@@ -123,6 +123,20 @@ def cmd_install(args: argparse.Namespace) -> None:
 
         dist_name = canon.replace("-", "_")
 
+        # Check cache first — skip fetch if we already have a wheel
+        cached = sorted(cache_dir.glob(f"{dist_name}-*.whl"))
+        if cached:
+            whl = cached[-1]
+            wheels.append(str(whl))
+            print(f"  {whl.name} (cached)")
+            for dep in _read_internal_deps(whl, repo_packages):
+                if dep not in fetched:
+                    to_fetch.append(dep)
+            continue
+
+        fetched_ok = False
+
+        # Try run artifacts first (if --run-id), then fall back to release
         if run_id:
             fetch = FetchRunArtifactsCommand(
                 run_id=run_id,
@@ -131,30 +145,28 @@ def cmd_install(args: argparse.Namespace) -> None:
                 directory=cache,
                 label=f"Fetch {pkg} from run {run_id}",
             )
-        else:
+            result = fetch.execute()
+            fetched_ok = result.returncode == 0
+
+        if not fetched_ok:
+            # Fall back to latest GitHub release
             if pkg == package and version:
                 tag = f"{pkg}/v{version}"
             else:
                 tag = find_latest_remote_release_tag(pkg, gh_repo=gh_repo)
-            if not tag:
-                print(
-                    f"  WARNING: No release found for '{pkg}', skipping.",
-                    file=sys.stderr,
+            if tag:
+                fetch = FetchGithubReleaseCommand(
+                    tag=tag,
+                    dist_name=dist_name,
+                    directory=cache,
+                    label=f"Fetch {pkg} from {tag}",
                 )
-                continue
+                result = fetch.execute()
+                fetched_ok = result.returncode == 0
 
-            fetch = FetchGithubReleaseCommand(
-                tag=tag,
-                dist_name=dist_name,
-                directory=cache,
-                label=f"Fetch {pkg}",
-            )
-
-        result = fetch.execute()
-        if result.returncode != 0:
-            source = f"run {run_id}" if run_id else f"release {tag}"
+        if not fetched_ok:
             print(
-                f"  WARNING: No compatible wheel for '{pkg}' in {source}.",
+                f"  WARNING: Could not fetch '{pkg}', skipping.",
                 file=sys.stderr,
             )
             continue

@@ -321,11 +321,6 @@ Run 'uvr <command> --help' for details on a specific command.
         default=None,
         help="Install from a GitHub Actions run's artifacts instead of a release.",
     )
-    install_parser.add_argument(
-        "pip_args",
-        nargs=argparse.REMAINDER,
-        help="Extra arguments passed through to uv pip install (after --).",
-    )
     install_parser.set_defaults(func=cmd_install)
 
     # download
@@ -529,5 +524,18 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     bump_job_parser.set_defaults(func=cmd_job_bump)
 
-    args = parser.parse_args()
+    # Split on "--" so extra args (e.g. for uv pip install) don't confuse argparse
+    import sys as _sys
+
+    argv = _sys.argv[1:]
+    if "--" in argv:
+        split = argv.index("--")
+        main_argv = argv[:split]
+        extra_argv = argv[split + 1 :]
+    else:
+        main_argv = argv
+        extra_argv = []
+
+    args = parser.parse_args(main_argv)
+    args.pip_args = extra_argv
     args.func(args)
