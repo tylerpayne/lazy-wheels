@@ -80,7 +80,7 @@ def cmd_install(args: argparse.Namespace) -> None:
     """Install a package from GitHub releases or CI run artifacts."""
     import subprocess
 
-    from ..shared.models import FetchGithubReleaseCommand, FetchRunArtifactsCommand
+    from ..shared.models import FetchGithubReleaseCommand
 
     spec_repo, package, version = parse_install_spec(args.package)
     run_id: str | None = getattr(args, "run_id", None)
@@ -93,6 +93,21 @@ def cmd_install(args: argparse.Namespace) -> None:
         gh_repo = getattr(args, "repo", None) or spec_repo or infer_gh_repo() or ""
     else:
         gh_repo = resolve_gh_repo(getattr(args, "repo", None), spec_repo)
+
+    # If --run-id, download all wheels from the run upfront into cache
+    if run_id:
+        from ..shared.models import FetchRunArtifactsCommand
+
+        print(f"Downloading artifacts from run {run_id}...")
+        fetch = FetchRunArtifactsCommand(
+            run_id=run_id,
+            dist_name="",  # all wheels
+            gh_repo=gh_repo,
+            directory=cache,
+        )
+        result = fetch.execute()
+        if result.returncode != 0:
+            fatal(f"Failed to download artifacts from run {run_id}.")
 
     # Discover which packages exist in this repo (for transitive resolution)
     print(f"Discovering packages in {gh_repo}...")
@@ -123,38 +138,24 @@ def cmd_install(args: argparse.Namespace) -> None:
                     to_fetch.append(dep)
             continue
 
-        fetched_ok = False
+        # Not in cache — fetch from GitHub release
+        if pkg == package and version:
+            tag = f"{pkg}/v{version}"
+        else:
+            tag = find_latest_remote_release_tag(pkg, gh_repo=gh_repo)
+        if not tag:
+            print(f"  {pkg}: no release found, skipping", file=sys.stderr)
+            continue
 
-        # Try run artifacts first (if --run-id)
-        if run_id:
-            print(f"  {pkg}: downloading from run {run_id}...")
-            fetch = FetchRunArtifactsCommand(
-                run_id=run_id,
-                dist_name=dist_name,
-                gh_repo=gh_repo,
-                directory=cache,
-            )
-            result = fetch.execute()
-            fetched_ok = result.returncode == 0
-
-        # Fall back to latest GitHub release
-        if not fetched_ok:
-            if pkg == package and version:
-                tag = f"{pkg}/v{version}"
-            else:
-                tag = find_latest_remote_release_tag(pkg, gh_repo=gh_repo)
-            if tag:
-                print(f"  {pkg}: downloading release {tag}...")
-                fetch = FetchGithubReleaseCommand(
-                    tag=tag,
-                    dist_name=dist_name,
-                    directory=cache,
-                )
-                result = fetch.execute()
-                fetched_ok = result.returncode == 0
-
-        if not fetched_ok:
-            print(f"  {pkg}: not found, skipping", file=sys.stderr)
+        print(f"  {pkg}: downloading release {tag}...")
+        fetch = FetchGithubReleaseCommand(
+            tag=tag,
+            dist_name=dist_name,
+            directory=cache,
+        )
+        result = fetch.execute()
+        if result.returncode != 0:
+            print(f"  {pkg}: download failed, skipping", file=sys.stderr)
             continue
 
         found = sorted(cache_dir.glob(f"{dist_name}-*.whl"))
