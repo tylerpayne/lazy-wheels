@@ -28,9 +28,14 @@ def cmd_wheels(args: argparse.Namespace) -> None:
             package = None
             dist_name = ""  # empty prefix matches all wheels
 
+        from ..shared.utils.cli import infer_gh_repo
+
+        gh_repo = getattr(args, "repo", None) or infer_gh_repo() or ""
+
         cmd = FetchRunArtifactsCommand(
             run_id=args.run_id,
             dist_name=dist_name,
+            gh_repo=gh_repo,
             directory=output_dir,
             label=f"Fetch wheels from run {args.run_id}",
         )

@@ -277,6 +277,7 @@ class FetchRunArtifactsCommand(BaseModel):
     run_id: str
     dist_name: str
     directory: str = "dist"
+    gh_repo: str = ""
     label: str = ""
     check: bool = True
 
@@ -290,18 +291,19 @@ class FetchRunArtifactsCommand(BaseModel):
 
         # 1. Download artifacts into a temp dir (gh extracts into subdirs)
         with tempfile.TemporaryDirectory() as tmp:
-            result = subprocess.run(
-                [
-                    "gh",
-                    "run",
-                    "download",
-                    self.run_id,
-                    "--pattern",
-                    "wheels-*",
-                    "--dir",
-                    tmp,
-                ],
-            )
+            dl_cmd = [
+                "gh",
+                "run",
+                "download",
+                self.run_id,
+                "--pattern",
+                "wheels-*",
+                "--dir",
+                tmp,
+            ]
+            if self.gh_repo:
+                dl_cmd.extend(["--repo", self.gh_repo])
+            result = subprocess.run(dl_cmd)
             if result.returncode != 0:
                 return result
 
