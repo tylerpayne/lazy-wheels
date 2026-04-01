@@ -13,9 +13,14 @@ _MOD = "uv_release_monorepo.shared.utils.changes"
 
 
 def _mock_repo() -> MagicMock:
-    """Create a mock repo with a HEAD commit."""
+    """Create a mock repo with a HEAD commit.
+
+    references.get returns None by default so that release-tag lookups
+    in detect_changes don't falsely match.
+    """
     repo = MagicMock()
     repo.revparse_single.return_value = MagicMock()  # HEAD commit
+    repo.references.get.return_value = None
     return repo
 
 

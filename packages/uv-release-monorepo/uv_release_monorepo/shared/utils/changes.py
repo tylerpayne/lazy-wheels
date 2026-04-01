@@ -10,7 +10,7 @@ import pygit2
 from ..models import PackageInfo
 from .git import _resolve_tag, path_changed
 from .shell import print_step
-from .versions import detect_release_type_for_version
+from .versions import detect_release_type_for_version, is_dev
 
 from ..planner._graph import build_graph_maps
 
@@ -78,13 +78,25 @@ def detect_changes(
         head = repo.revparse_single("HEAD")
 
         for name, info, baseline in to_check:
-            if baseline not in commit_cache:
-                commit_cache[baseline] = _resolve_tag(repo, baseline)
+            # If the version is clean (no .dev suffix) and its release
+            # tag exists, use the release tag as the baseline instead.
+            # This handles post-release branches where the dev baseline
+            # tag is on a different branch.
+            effective_baseline = baseline
+            if not is_dev(info.version):
+                release_tag = f"{name}/v{info.version}"
+                if repo.references.get(f"refs/tags/{release_tag}") is not None:
+                    effective_baseline = release_tag
 
-            base_commit = commit_cache[baseline]
+            if effective_baseline not in commit_cache:
+                commit_cache[effective_baseline] = _resolve_tag(
+                    repo, effective_baseline
+                )
+
+            base_commit = commit_cache[effective_baseline]
             if base_commit is None:
                 dirty.add(name)
-                print(f"  {name}: baseline tag missing ({baseline})")
+                print(f"  {name}: baseline tag missing ({effective_baseline})")
                 continue
 
             if path_changed(repo, base_commit, head, info.path):  # type: ignore[arg-type]
