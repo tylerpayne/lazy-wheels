@@ -315,23 +315,30 @@ class FetchRunArtifactsCommand(BaseModel):
             if not all_wheels:
                 return subprocess.CompletedProcess(args=[], returncode=1)
 
-            # 3. Prefer universal wheels (platform == "any")
-            universal = [
-                whl
-                for whl in all_wheels
-                if any(t.platform == "any" for t in parse_wheel_filename(whl.name)[3])
-            ]
+            # 3. For each dist, prefer universal wheels; fall back to
+            #    platform-compatible.  Evaluate per-dist so a mix of
+            #    universal and platform-specific packages works.
+            compatible = set(sys_tags())
+            to_copy: list[Path] = []
+            by_dist: dict[str, list[Path]] = {}
+            for whl in all_wheels:
+                dist = whl.name.split("-")[0]
+                by_dist.setdefault(dist, []).append(whl)
 
-            if universal:
-                to_copy = universal
-            else:
-                # 4. Filter for platform-compatible wheels
-                compatible = set(sys_tags())
-                to_copy = [
-                    whl
-                    for whl in all_wheels
-                    if parse_wheel_filename(whl.name)[3] & compatible
+            for dist, dist_wheels in by_dist.items():
+                uni = [
+                    w
+                    for w in dist_wheels
+                    if any(t.platform == "any" for t in parse_wheel_filename(w.name)[3])
                 ]
+                if uni:
+                    to_copy.extend(uni)
+                else:
+                    to_copy.extend(
+                        w
+                        for w in dist_wheels
+                        if parse_wheel_filename(w.name)[3] & compatible
+                    )
 
             if not to_copy:
                 return subprocess.CompletedProcess(args=[], returncode=1)
