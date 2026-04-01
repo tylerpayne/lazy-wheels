@@ -11,20 +11,10 @@ def cmd_clean(args: argparse.Namespace) -> None:
     """Remove uvr caches and ephemeral files."""
     removed: list[str] = []
 
-    # ~/.uvr/cache (download cache)
-    home_cache = Path.home() / ".uvr" / "cache"
-    if home_cache.is_dir():
-        shutil.rmtree(home_cache)
-        removed.append(str(home_cache))
-
-    # .uvr/ in the current project (release notes, bases, etc.)
-    local_uvr = Path.cwd() / ".uvr"
-    if local_uvr.is_dir():
-        for subdir in ("cache", "release-notes"):
-            target = local_uvr / subdir
-            if target.is_dir():
-                shutil.rmtree(target)
-                removed.append(str(target))
+    for cache in (Path.home() / ".uvr" / "cache", Path.cwd() / ".uvr" / "cache"):
+        if cache.is_dir():
+            shutil.rmtree(cache)
+            removed.append(str(cache))
 
     if removed:
         for p in removed:
