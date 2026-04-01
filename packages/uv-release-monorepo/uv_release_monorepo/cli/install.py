@@ -95,19 +95,25 @@ def cmd_install(args: argparse.Namespace) -> None:
         gh_repo = resolve_gh_repo(getattr(args, "repo", None), spec_repo)
 
     # If --run-id, download all wheels from the run upfront into cache
+    # (skip if the target wheel is already cached)
     if run_id:
-        from ..shared.models import FetchRunArtifactsCommand
+        target_dist = canonicalize_name(package).replace("-", "_")
+        already_cached = list(cache_dir.glob(f"{target_dist}-*.whl"))
+        if already_cached:
+            print(f"Using cached artifacts for {package}.")
+        else:
+            from ..shared.models import FetchRunArtifactsCommand
 
-        print(f"Downloading artifacts from run {run_id}...")
-        fetch = FetchRunArtifactsCommand(
-            run_id=run_id,
-            dist_name="",  # all wheels
-            gh_repo=gh_repo,
-            directory=cache,
-        )
-        result = fetch.execute()
-        if result.returncode != 0:
-            fatal(f"Failed to download artifacts from run {run_id}.")
+            print(f"Downloading artifacts from run {run_id}...")
+            fetch = FetchRunArtifactsCommand(
+                run_id=run_id,
+                dist_name="",  # all wheels
+                gh_repo=gh_repo,
+                directory=cache,
+            )
+            result = fetch.execute()
+            if result.returncode != 0:
+                fatal(f"Failed to download artifacts from run {run_id}.")
 
     # Discover which packages exist in this repo (for transitive resolution)
     print(f"Discovering packages in {gh_repo}...")
@@ -151,6 +157,7 @@ def cmd_install(args: argparse.Namespace) -> None:
         fetch = FetchGithubReleaseCommand(
             tag=tag,
             dist_name=dist_name,
+            gh_repo=gh_repo,
             directory=cache,
         )
         result = fetch.execute()

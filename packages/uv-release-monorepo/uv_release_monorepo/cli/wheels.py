@@ -58,6 +58,7 @@ def cmd_wheels(args: argparse.Namespace) -> None:
         cmd = FetchGithubReleaseCommand(
             tag=tag,
             dist_name=dist_name,
+            gh_repo=gh_repo,
             directory=output_dir,
             label=f"Fetch {package} from {tag}",
         )

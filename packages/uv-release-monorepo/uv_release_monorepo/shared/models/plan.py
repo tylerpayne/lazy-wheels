@@ -178,6 +178,7 @@ class FetchGithubReleaseCommand(BaseModel):
     tag: str
     dist_name: str
     directory: str = "deps"
+    gh_repo: str = ""
     label: str = ""
     check: bool = True
 
@@ -187,11 +188,10 @@ class FetchGithubReleaseCommand(BaseModel):
         from packaging.utils import parse_wheel_filename
 
         # 1. List release assets
-        result = subprocess.run(
-            ["gh", "release", "view", self.tag, "--json", "assets"],
-            capture_output=True,
-            text=True,
-        )
+        view_cmd = ["gh", "release", "view", self.tag, "--json", "assets"]
+        if self.gh_repo:
+            view_cmd.extend(["--repo", self.gh_repo])
+        result = subprocess.run(view_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(
                 f"ERROR: Could not find release {self.tag}: {result.stderr.strip()}",
@@ -242,7 +242,7 @@ class FetchGithubReleaseCommand(BaseModel):
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         # 4. Download with exact filenames as patterns
-        args = [
+        dl_cmd = [
             "gh",
             "release",
             "download",
@@ -251,10 +251,12 @@ class FetchGithubReleaseCommand(BaseModel):
             self.directory,
             "--clobber",
         ]
+        if self.gh_repo:
+            dl_cmd.extend(["--repo", self.gh_repo])
         for name in to_download:
-            args.extend(["--pattern", name])
+            dl_cmd.extend(["--pattern", name])
 
-        return subprocess.run(args)
+        return subprocess.run(dl_cmd)
 
 
 class FetchRunArtifactsCommand(BaseModel):
