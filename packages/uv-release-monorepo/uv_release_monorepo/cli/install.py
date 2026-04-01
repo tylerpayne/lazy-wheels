@@ -78,4 +78,7 @@ def cmd_install(args: argparse.Namespace) -> None:
                 print(f"  {found[0].name}")
 
         print(f"\nInstalling {len(wheels)} wheel(s)...")
-        subprocess.run(["uv", "pip", "install", "--no-project", *wheels], check=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--no-project", "--find-links", tmp, *wheels],
+            check=True,
+        )
