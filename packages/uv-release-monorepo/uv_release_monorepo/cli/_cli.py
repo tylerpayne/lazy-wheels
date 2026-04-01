@@ -321,6 +321,11 @@ Run 'uvr <command> --help' for details on a specific command.
         default=None,
         help="Install from a GitHub Actions run's artifacts instead of a release.",
     )
+    install_parser.add_argument(
+        "pip_args",
+        nargs=argparse.REMAINDER,
+        help="Extra arguments passed through to uv pip install (after --).",
+    )
     install_parser.set_defaults(func=cmd_install)
 
     # download

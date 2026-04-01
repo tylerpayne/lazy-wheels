@@ -78,8 +78,13 @@ def cmd_install(args: argparse.Namespace) -> None:
             wheels.append(str(found[0]))
             print(f"  {found[0].name}")
 
+    extra = getattr(args, "pip_args", [])
+    # Strip leading "--" separator if present
+    if extra and extra[0] == "--":
+        extra = extra[1:]
+
     print(f"\nInstalling {len(wheels)} wheel(s)...")
     subprocess.run(
-        ["uv", "pip", "install", "--find-links", cache, *wheels],
+        ["uv", "pip", "install", "--find-links", cache, *wheels, *extra],
         check=True,
     )
