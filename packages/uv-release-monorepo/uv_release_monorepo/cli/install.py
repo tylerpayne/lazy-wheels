@@ -134,8 +134,13 @@ def cmd_install(args: argparse.Namespace) -> None:
 
         dist_name = canon.replace("-", "_")
 
-        # Check cache first
-        cached = sorted(cache_dir.glob(f"{dist_name}-*.whl"))
+        # Check cache — use version-specific glob for the root package
+        # when a version is pinned, version-agnostic for transitive deps.
+        if pkg == package and version:
+            cache_pattern = f"{dist_name}-{version}-*.whl"
+        else:
+            cache_pattern = f"{dist_name}-*.whl"
+        cached = sorted(cache_dir.glob(cache_pattern))
         if cached:
             whl = cached[-1]
             wheels.append(str(whl))
