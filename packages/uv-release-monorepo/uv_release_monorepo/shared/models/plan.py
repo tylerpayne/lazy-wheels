@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json as _json
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Protocol, Union
 
@@ -177,6 +178,7 @@ class FetchGithubReleaseCommand(BaseModel):
     tag: str
     dist_name: str
     directory: str = "deps"
+    gh_repo: str = ""
     label: str = ""
     check: bool = True
 
@@ -186,12 +188,15 @@ class FetchGithubReleaseCommand(BaseModel):
         from packaging.utils import parse_wheel_filename
 
         # 1. List release assets
-        result = subprocess.run(
-            ["gh", "release", "view", self.tag, "--json", "assets"],
-            capture_output=True,
-            text=True,
-        )
+        view_cmd = ["gh", "release", "view", self.tag, "--json", "assets"]
+        if self.gh_repo:
+            view_cmd.extend(["--repo", self.gh_repo])
+        result = subprocess.run(view_cmd, capture_output=True, text=True)
         if result.returncode != 0:
+            print(
+                f"ERROR: Could not find release {self.tag}: {result.stderr.strip()}",
+                file=sys.stderr,
+            )
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         assets = _json.loads(result.stdout).get("assets", [])
@@ -202,6 +207,12 @@ class FetchGithubReleaseCommand(BaseModel):
         ]
 
         if not wheel_names:
+            all_names = [a["name"] for a in assets]
+            print(
+                f"ERROR: Release {self.tag} has no wheels for {self.dist_name}. "
+                f"Assets: {all_names or '(none)'}",
+                file=sys.stderr,
+            )
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         # 2. Prefer universal wheels (platform == "any")
@@ -223,10 +234,15 @@ class FetchGithubReleaseCommand(BaseModel):
             ]
 
         if not to_download:
+            print(
+                f"ERROR: No platform-compatible wheels in {self.tag}. "
+                f"Available: {wheel_names}",
+                file=sys.stderr,
+            )
             return subprocess.CompletedProcess(args=[], returncode=1)
 
         # 4. Download with exact filenames as patterns
-        args = [
+        dl_cmd = [
             "gh",
             "release",
             "download",
@@ -235,10 +251,12 @@ class FetchGithubReleaseCommand(BaseModel):
             self.directory,
             "--clobber",
         ]
+        if self.gh_repo:
+            dl_cmd.extend(["--repo", self.gh_repo])
         for name in to_download:
-            args.extend(["--pattern", name])
+            dl_cmd.extend(["--pattern", name])
 
-        return subprocess.run(args)
+        return subprocess.run(dl_cmd)
 
 
 class FetchRunArtifactsCommand(BaseModel):
@@ -261,6 +279,8 @@ class FetchRunArtifactsCommand(BaseModel):
     run_id: str
     dist_name: str
     directory: str = "dist"
+    gh_repo: str = ""
+    all_platforms: bool = False
     label: str = ""
     check: bool = True
 
@@ -274,45 +294,58 @@ class FetchRunArtifactsCommand(BaseModel):
 
         # 1. Download artifacts into a temp dir (gh extracts into subdirs)
         with tempfile.TemporaryDirectory() as tmp:
-            result = subprocess.run(
-                [
-                    "gh",
-                    "run",
-                    "download",
-                    self.run_id,
-                    "--pattern",
-                    "wheels-*",
-                    "--dir",
-                    tmp,
-                ],
-            )
+            dl_cmd = [
+                "gh",
+                "run",
+                "download",
+                self.run_id,
+                "--pattern",
+                "wheels-*",
+                "--dir",
+                tmp,
+            ]
+            if self.gh_repo:
+                dl_cmd.extend(["--repo", self.gh_repo])
+            result = subprocess.run(dl_cmd)
             if result.returncode != 0:
                 return result
 
             # 2. Glob all matching wheels from artifact subdirs
             from pathlib import Path
 
-            all_wheels = list(Path(tmp).rglob(f"{self.dist_name}-*.whl"))
+            pattern = f"{self.dist_name}-*.whl" if self.dist_name else "*.whl"
+            all_wheels = list(Path(tmp).rglob(pattern))
             if not all_wheels:
                 return subprocess.CompletedProcess(args=[], returncode=1)
 
-            # 3. Prefer universal wheels (platform == "any")
-            universal = [
-                whl
-                for whl in all_wheels
-                if any(t.platform == "any" for t in parse_wheel_filename(whl.name)[3])
-            ]
-
-            if universal:
-                to_copy = universal
+            if self.all_platforms:
+                # Release job: keep all wheels for all platforms
+                to_copy = all_wheels
             else:
-                # 4. Filter for platform-compatible wheels
+                # Build/install: filter to current platform
                 compatible = set(sys_tags())
-                to_copy = [
-                    whl
-                    for whl in all_wheels
-                    if parse_wheel_filename(whl.name)[3] & compatible
-                ]
+                to_copy: list[Path] = []
+                by_dist: dict[str, list[Path]] = {}
+                for whl in all_wheels:
+                    dist = whl.name.split("-")[0]
+                    by_dist.setdefault(dist, []).append(whl)
+
+                for dist, dist_wheels in by_dist.items():
+                    uni = [
+                        w
+                        for w in dist_wheels
+                        if any(
+                            t.platform == "any" for t in parse_wheel_filename(w.name)[3]
+                        )
+                    ]
+                    if uni:
+                        to_copy.extend(uni)
+                    else:
+                        to_copy.extend(
+                            w
+                            for w in dist_wheels
+                            if parse_wheel_filename(w.name)[3] & compatible
+                        )
 
             if not to_copy:
                 return subprocess.CompletedProcess(args=[], returncode=1)
@@ -366,6 +399,13 @@ class PublishGithubReleaseCommand(BaseModel):
         target = sha_result.stdout.strip() if sha_result.returncode == 0 else "HEAD"
 
         files = sorted(glob_fn(self.dist_pattern))
+        if not files:
+            print(
+                f"ERROR: No files matching {self.dist_pattern!r} — "
+                f"cannot create release {self.tag} without assets.",
+                file=sys.stderr,
+            )
+            return subprocess.CompletedProcess(args=[], returncode=1)
         args = [
             "gh",
             "release",
@@ -384,8 +424,135 @@ class PublishGithubReleaseCommand(BaseModel):
         return subprocess.run(args)
 
 
+class DownloadWheelsCommand(BaseModel):
+    """Smart wheel fetcher: run artifacts → release fallback, with transitive deps.
+
+    At execution time, for each package in ``packages``:
+
+    1. Check ``directory`` for a cached wheel (skip if found).
+    2. If ``run_id`` is set, download all run artifacts into ``directory``.
+    3. Fall back to the latest GitHub release for the package.
+    4. Parse the wheel's ``METADATA`` for internal deps and fetch those too.
+
+    Packages in ``exclude`` are skipped (they'll be built, not fetched).
+
+    Attributes:
+        type: Discriminator for the command union.
+        packages: Map of package name → release tag (e.g. ``{"pkg": "pkg/v1.0"}``)
+            for fallback. Tag may be empty if no release exists.
+        exclude: Package names to skip (changed packages that will be built).
+        gh_repo: GitHub ``ORG/REPO`` for API calls.
+        run_id: If set, try downloading from this CI run first.
+        directory: Local directory to save wheels into.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["download_wheels"] = "download_wheels"
+    packages: dict[str, str]  # name → release tag
+    exclude: list[str] = Field(default_factory=list)
+    gh_repo: str = ""
+    run_id: str = ""
+    all_platforms: bool = False
+    directory: str = "deps"
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Fetch wheels with run-id → release fallback and transitive resolution."""
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        from packaging.metadata import Metadata
+        from packaging.utils import canonicalize_name
+
+        out = Path(self.directory)
+        out.mkdir(parents=True, exist_ok=True)
+        exclude = {canonicalize_name(n) for n in self.exclude}
+
+        # Known packages (for transitive dep detection)
+        known = {canonicalize_name(n) for n in self.packages}
+
+        # If run_id, download all artifacts upfront
+        if self.run_id:
+            print(f"  Downloading artifacts from run {self.run_id}...")
+            fetch = FetchRunArtifactsCommand(
+                run_id=self.run_id,
+                dist_name="",  # all wheels
+                gh_repo=self.gh_repo,
+                all_platforms=self.all_platforms,
+                directory=str(out),
+            )
+            fetch.execute()  # best-effort; missing packages fall back to releases
+
+        # BFS fetch
+        to_fetch = list(self.packages.keys())
+        fetched: set[str] = set()
+
+        while to_fetch:
+            pkg = to_fetch.pop(0)
+            canon = canonicalize_name(pkg)
+            if canon in fetched or canon in exclude:
+                continue
+            fetched.add(canon)
+
+            dist_name = canon.replace("-", "_")
+
+            # Check if already in output dir (from run artifacts or prior fetch)
+            cached = sorted(out.glob(f"{dist_name}-*.whl"))
+            if cached:
+                whl = cached[-1]
+                print(f"  {pkg}: {whl.name} (cached)")
+            else:
+                # Fall back to GitHub release
+                tag = self.packages.get(pkg, "")
+                if not tag:
+                    print(f"  {pkg}: no release tag, skipping", file=sys.stderr)
+                    continue
+
+                release_fetch = FetchGithubReleaseCommand(
+                    tag=tag,
+                    dist_name=dist_name,
+                    gh_repo=self.gh_repo,
+                    directory=str(out),
+                )
+                result = release_fetch.execute()
+                if result.returncode != 0:
+                    print(f"  {pkg}: download failed, skipping", file=sys.stderr)
+                    continue
+
+                found = sorted(out.glob(f"{dist_name}-*.whl"))
+                if not found:
+                    continue
+                whl = found[-1]
+                print(f"  {pkg}: {whl.name}")
+
+            # Resolve transitive deps from wheel metadata
+            try:
+                with ZipFile(whl) as zf:
+                    for entry in zf.namelist():
+                        if entry.endswith(".dist-info/METADATA"):
+                            meta = Metadata.from_email(zf.read(entry))
+                            for req in meta.requires_dist or []:
+                                if req.marker and "extra" in str(req.marker):
+                                    continue
+                                dep = canonicalize_name(req.name)
+                                if dep in known and dep not in fetched:
+                                    to_fetch.append(dep)
+                            break
+            except Exception:
+                pass
+
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+
 StageCommand = Annotated[
-    Union[ShellCommand, FetchGithubReleaseCommand, FetchRunArtifactsCommand],
+    Union[
+        ShellCommand,
+        FetchGithubReleaseCommand,
+        FetchRunArtifactsCommand,
+        DownloadWheelsCommand,
+    ],
     Field(discriminator="type"),
 ]
 """Union of command types that can appear in a build stage's setup list."""

@@ -112,7 +112,12 @@ def find_latest_remote_release_tag(
         return None
     try:
         releases = json.loads(result.stdout)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        import sys
+
+        print(
+            f"WARNING: Could not parse gh release list output: {exc}", file=sys.stderr
+        )
         return None
 
     prefix = f"{package}/v"

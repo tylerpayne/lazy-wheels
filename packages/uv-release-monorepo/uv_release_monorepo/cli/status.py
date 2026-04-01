@@ -42,10 +42,10 @@ def cmd_status(args: argparse.Namespace) -> None:
         sys.stdout = old_stdout
 
     # Collect rows: (status, name, version, previous, changes, commits)
-    rows: list[tuple[str, str, str, str, str, str]] = []
+    rows: list[tuple[str, ...]] = []
     for name, pkg in sorted(plan.changed.items()):
         baseline = f"{name}/v{pkg.current_version}-base"
-        changes, commits = diff_stat(
+        changes, commits, diff_tag = diff_stat(
             baseline, pkg.path, fallback_tag=pkg.last_release_tag
         )
         rows.append(
@@ -54,6 +54,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                 name,
                 pkg.current_version,
                 pkg.last_release_tag.split("/v", 1)[1] if pkg.last_release_tag else "-",
+                diff_tag,
                 changes,
                 commits,
             )
@@ -67,6 +68,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                 "-",
                 "-",
                 "-",
+                "-",
             )
         )
 
@@ -74,7 +76,15 @@ def cmd_status(args: argparse.Namespace) -> None:
         print("No packages found.")
         return
 
-    headers = ("STATUS", "PACKAGE", "VERSION", "PREVIOUS", "CHANGES", "COMMITS")
+    headers = (
+        "STATUS",
+        "PACKAGE",
+        "VERSION",
+        "PREVIOUS",
+        "DIFF FROM",
+        "CHANGES",
+        "COMMITS",
+    )
     widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
 
     def _row(cols: tuple[str, ...]) -> str:

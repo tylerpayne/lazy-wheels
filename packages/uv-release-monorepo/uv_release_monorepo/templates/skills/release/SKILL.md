@@ -50,10 +50,10 @@ For each changed package, verify its public API against its docs:
 
 For each changed package, write release notes to `.uvr/release-notes/<pkg>/<version>.md`. This directory is gitignored — notes are ephemeral and consumed at release time.
 
-For each package, review the commits since the last release:
+For each package, review the commits since the baseline. Use the **DIFF FROM** column from the `uvr release --dry-run` output — this is the actual tag the planner diffs against, which may differ from the PREVIOUS version (e.g. a `-base` tag for dev cycles vs a release tag):
 
 ```bash
-git log --oneline <pkg>/v<last-version>..HEAD -- packages/<pkg>
+git log --oneline <DIFF_FROM_TAG>..HEAD -- packages/<pkg>
 ```
 
 Then draft user-facing release notes. Do not dump commit messages — write prose that helps users understand what's new, changed, or fixed. Use markdown.

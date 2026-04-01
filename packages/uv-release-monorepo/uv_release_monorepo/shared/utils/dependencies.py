@@ -12,7 +12,6 @@ from pathlib import Path
 import tomlkit
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
-from tomlkit.items import Table
 
 from .toml import read_pyproject, write_pyproject
 
@@ -83,11 +82,20 @@ def set_version(pyproject_path: Path, new_version: str) -> None:
     Args:
         pyproject_path: Path to the pyproject.toml file.
         new_version: New version string to set.
+
+    Raises:
+        RuntimeError: If version cannot be set (missing [project] table or
+            version is declared as dynamic).
     """
     doc = read_pyproject(pyproject_path)
     project = doc.get("project")
-    if not isinstance(project, Table):
-        return
+    if project is None:
+        msg = f"{pyproject_path}: no [project] table"
+        raise RuntimeError(msg)
+    dynamic = project.get("dynamic", [])
+    if "version" in dynamic:
+        msg = f"{pyproject_path}: version is dynamic — cannot set statically"
+        raise RuntimeError(msg)
     project["version"] = new_version
     write_pyproject(pyproject_path, doc)
 

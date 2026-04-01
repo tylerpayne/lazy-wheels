@@ -108,7 +108,7 @@ class Job(BaseModel):
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    runs_on: str = Field(default="ubuntu-latest", alias="runs-on")
+    runs_on: str | list[str] = Field(default="ubuntu-latest", alias="runs-on")
     if_condition: str | None = Field(default=None, alias="if")
     needs: list[str] | None = None
     environment: str | None = None
@@ -143,7 +143,9 @@ class ValidatePlanJob(Job):
 class BuildJob(Job):
     """The build job."""
 
-    runs_on: Annotated[str, Frozen] = Field(default="ubuntu-latest", alias="runs-on")
+    runs_on: Annotated[str | list[str], Frozen] = Field(
+        default="ubuntu-latest", alias="runs-on"
+    )
     if_condition: Annotated[str | None, Frozen] = Field(alias="if")
     strategy: Annotated[dict, Frozen] = Field(default_factory=dict)
     steps: Annotated[list[dict], Frozen]

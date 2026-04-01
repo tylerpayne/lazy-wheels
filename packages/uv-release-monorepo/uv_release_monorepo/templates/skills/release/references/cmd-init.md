@@ -6,7 +6,7 @@ Scaffold the GitHub Actions release workflow into your repo.
 uvr workflow init
 ```
 
-Creates `.github/workflows/release.yml` with three core jobs: **build**, **publish**, and **bump**. Run this once when setting up a new repo.
+Creates `.github/workflows/release.yml` with three core jobs: **build**, **release**, and **bump**. Run this once when setting up a new repo.
 
 The generated workflow contains only the core pipeline. You can add custom jobs (tests, linting, PyPI publish, etc.) by editing the YAML directly — see `pipeline.md`.
 

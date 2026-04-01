@@ -13,7 +13,7 @@ from .install import cmd_install
 from .bump import cmd_bump
 from .release import cmd_release
 from .runners import cmd_runners
-from .wheels import cmd_wheels
+from .download import cmd_download
 
 __all__ = [
     "MISSING",
@@ -33,5 +33,5 @@ __all__ = [
     "cmd_runners",
     "cmd_upgrade",
     "cmd_validate",
-    "cmd_wheels",
+    "cmd_download",
 ]

@@ -25,14 +25,15 @@ def diff_stat(
     baseline_tag: str | None,
     pkg_path: str,
     fallback_tag: str | None = None,
-) -> tuple[str, str]:
-    """Return (changes_str, commits_str) for a package since its baseline.
+) -> tuple[str, str, str]:
+    """Return (changes_str, commits_str, diff_tag) for a package since its baseline.
 
     If baseline_tag doesn't resolve, falls back to fallback_tag.
+    The third element is the tag actually used for the diff.
     """
     tag = baseline_tag or fallback_tag
     if not tag:
-        return ("-", "-")
+        return ("-", "-", "-")
 
     # Check if the tag exists
     check = subprocess.run(
@@ -42,7 +43,7 @@ def diff_stat(
     if check.returncode != 0:
         tag = fallback_tag
         if not tag:
-            return ("-", "-")
+            return ("-", "-", "-")
 
     result = subprocess.run(
         ["git", "diff", "--shortstat", f"{tag}..HEAD", "--", pkg_path],
@@ -66,7 +67,7 @@ def diff_stat(
     )
     commits = result.stdout.strip() if result.returncode == 0 else "-"
 
-    return changes, commits
+    return changes, commits, tag or "-"
 
 
 def read_matrix(root: Path) -> dict[str, list[list[str]]]:
@@ -89,18 +90,20 @@ def resolve_plan_json(raw: str | None) -> str:
     """Resolve plan JSON from a --plan arg, @file path, or UVR_PLAN env var."""
     import os
 
-    value = raw or os.environ.get("UVR_PLAN", "")
-    if value.startswith("@"):
-        value = Path(value[1:]).read_text()
+    value = raw or os.environ.get("UVR_PLAN")
     if not value:
         fatal("No plan provided. Pass --plan JSON, --plan @file, or set UVR_PLAN.")
+    if value.startswith("@"):
+        value = Path(value[1:]).read_text()
     return value
 
 
-def parse_install_spec(spec: str) -> tuple[str, str, str | None]:
+def parse_install_spec(spec: str) -> tuple[str | None, str, str | None]:
     """Parse an install spec into (gh_repo, package, version).
 
-    Required form: ``org/repo/package[@version]``
+    Accepted forms:
+    - ``package[@version]`` — repo inferred from cwd or ``--repo``
+    - ``org/repo/package[@version]`` — legacy form, still supported
     """
     version: str | None = None
     if "@" in spec:
@@ -110,12 +113,56 @@ def parse_install_spec(spec: str) -> tuple[str, str, str | None]:
     if len(parts) == 3:
         org, repo, package = parts
         return f"{org}/{repo}", package, version
-    else:
+    if len(parts) == 1:
+        return None, spec, version
+    fatal(
+        f"Invalid install spec '{spec}'. "
+        "Expected 'package[@version]' or 'org/repo/package[@version]'.\n"
+        "  Use --repo ORG/REPO to specify the repository."
+    )
+
+
+def infer_gh_repo() -> str | None:
+    """Infer the GitHub ORG/REPO from the git remote origin URL.
+
+    Returns None if not in a git repo or the remote can't be parsed.
+    """
+    import subprocess as _sp
+
+    result = _sp.run(
+        ["git", "remote", "get-url", "origin"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    import re
+
+    url = result.stdout.strip()
+    m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
+    return m.group(1) if m else None
+
+
+def resolve_gh_repo(cli_repo: str | None, spec_repo: str | None) -> str:
+    """Resolve the GitHub repo from CLI --repo, install spec, or git remote.
+
+    Args:
+        cli_repo: Value of --repo flag (highest priority).
+        spec_repo: Repo parsed from org/repo/pkg install spec.
+
+    Returns:
+        The resolved ORG/REPO string.
+
+    Raises:
+        SystemExit: If no repo can be determined.
+    """
+    repo = cli_repo or spec_repo or infer_gh_repo()
+    if not repo:
         fatal(
-            f"Invalid install spec '{spec}'. "
-            "Expected 'org/repo/package', optionally with '@version'.\n"
-            "  Example: uvr install myorg/myrepo/my-pkg@1.0.0"
+            "Cannot determine GitHub repository. Use --repo ORG/REPO "
+            "or run from inside a git repo with a GitHub origin."
         )
+    return repo
 
 
 def discover_packages(root: Path | None = None) -> dict[str, tuple[str, list[str]]]:
@@ -180,7 +227,11 @@ def discover_packages(root: Path | None = None) -> dict[str, tuple[str, list[str
         for dep_str in dep_strs:
             try:
                 dep_name = canonicalize_name(Requirement(dep_str).name)
-            except Exception:
+            except Exception as exc:
+                print(
+                    f"WARNING: Skipping malformed dependency {dep_str!r}: {exc}",
+                    file=sys.stderr,
+                )
                 continue
             if dep_name in workspace_names and dep_name != name:
                 packages[name][1].append(dep_name)

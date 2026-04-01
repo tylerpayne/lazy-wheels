@@ -6,13 +6,14 @@ import argparse
 
 from ..shared.utils.cli import __version__
 from .bump import cmd_bump
+from .clean import cmd_clean
 from .init import cmd_init_dispatch, cmd_validate
 from .install import cmd_install
 from .release import cmd_release
 from .runners import cmd_runners
 from .skill import cmd_skill_dispatch
 from .status import cmd_status
-from .wheels import cmd_wheels
+from .download import cmd_download
 
 
 def cli() -> None:
@@ -28,6 +29,7 @@ Commands:
   bump             Bump package versions in the workspace
   install          Install a package from GitHub releases (org/repo/pkg)
   download         Download wheels from GitHub releases or CI artifacts
+  clean            Remove uvr caches and ephemeral files
   workflow init    Scaffold the GitHub Actions workflow
   workflow validate  Validate an existing release.yml
   workflow runners Manage per-package build runners
@@ -309,7 +311,17 @@ Run 'uvr <command> --help' for details on a specific command.
     install_parser = subparsers.add_parser("install", help=_H)
     install_parser.add_argument(
         "package",
-        help="Install spec: ORG/REPO/PKG[@VERSION]",
+        help="Package name, optionally with version: PKG[@VERSION]",
+    )
+    install_parser.add_argument(
+        "--repo",
+        default=None,
+        help="GitHub repository (ORG/REPO). Inferred from cwd if omitted.",
+    )
+    install_parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Install from a GitHub Actions run's artifacts instead of a release.",
     )
     install_parser.set_defaults(func=cmd_install)
 
@@ -317,7 +329,14 @@ Run 'uvr <command> --help' for details on a specific command.
     download_parser = subparsers.add_parser("download", help=_H)
     download_parser.add_argument(
         "package",
-        help="Install spec: ORG/REPO/PKG[@VERSION]",
+        nargs="?",
+        default=None,
+        help="Package name, optionally with version: PKG[@VERSION]. Optional with --run-id.",
+    )
+    download_parser.add_argument(
+        "--repo",
+        default=None,
+        help="GitHub repository (ORG/REPO). Inferred from cwd if omitted.",
     )
     download_parser.add_argument(
         "--release-tag",
@@ -335,7 +354,17 @@ Run 'uvr <command> --help' for details on a specific command.
         default="dist",
         help="Directory to save wheels into (default: dist/).",
     )
-    download_parser.set_defaults(func=cmd_wheels)
+    download_parser.add_argument(
+        "--all-platforms",
+        action="store_true",
+        default=False,
+        help="Download wheels for all platforms, not just the current one.",
+    )
+    download_parser.set_defaults(func=cmd_download)
+
+    # clean
+    clean_parser = subparsers.add_parser("clean", help=_H)
+    clean_parser.set_defaults(func=cmd_clean)
 
     # -- workflow (init, validate, runners) ---------------------------------
 
@@ -464,6 +493,7 @@ Run 'uvr <command> --help' for details on a specific command.
     from .jobs import (
         cmd_validate_plan,
         cmd_build,
+        cmd_download as cmd_job_download,
         cmd_release as cmd_job_release,
         cmd_bump as cmd_job_bump,
     )
@@ -487,6 +517,16 @@ Run 'uvr <command> --help' for details on a specific command.
     build_parser.add_argument("--runner", required=True)
     build_parser.set_defaults(func=cmd_build)
 
+    download_job_parser = jobs_sub.add_parser(
+        "download", help="Download wheels for changed packages."
+    )
+    download_job_parser.add_argument(
+        "--plan",
+        default=None,
+        help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
+    )
+    download_job_parser.set_defaults(func=cmd_job_download)
+
     release_job_parser = jobs_sub.add_parser(
         "release", help="Tag, create GitHub releases, and push release tags."
     )
@@ -507,5 +547,18 @@ Run 'uvr <command> --help' for details on a specific command.
     )
     bump_job_parser.set_defaults(func=cmd_job_bump)
 
-    args = parser.parse_args()
+    # Split on "--" so extra args (e.g. for uv pip install) don't confuse argparse
+    import sys as _sys
+
+    argv = _sys.argv[1:]
+    if "--" in argv:
+        split = argv.index("--")
+        main_argv = argv[:split]
+        extra_argv = argv[split + 1 :]
+    else:
+        main_argv = argv
+        extra_argv = []
+
+    args = parser.parse_args(main_argv)
+    args.pip_args = extra_argv
     args.func(args)

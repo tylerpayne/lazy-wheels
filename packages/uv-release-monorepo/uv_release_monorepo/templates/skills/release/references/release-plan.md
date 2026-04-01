@@ -4,7 +4,7 @@ The release plan is a self-contained JSON document passed as the `plan` input to
 
 - Version numbers and build commands for each changed package
 - A runner matrix (one entry per unique runner configuration)
-- A publish matrix (one entry per changed package)
+- A release matrix (one entry per changed package)
 - A skip list (job names to skip)
 - Reuse configuration (prior run ID for artifact reuse)
 
