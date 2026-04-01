@@ -1,4 +1,4 @@
-"""Tests for the wheels command."""
+"""Tests for the download command."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from uv_release_monorepo.cli.wheels import cmd_wheels
+from uv_release_monorepo.cli.download import cmd_download
 
 
-class TestCmdWheels:
-    """Tests for cmd_wheels()."""
+class TestCmdDownload:
+    """Tests for cmd_download()."""
 
     def _fake_run_release(self, tag: str, dist_name: str, wheel_name: str) -> tuple:
         """Return a fake subprocess.run for release-based downloads."""
@@ -57,7 +57,7 @@ class TestCmdWheels:
             run_id=None,
             output=out,
         )
-        cmd_wheels(args)
+        cmd_download(args)
 
         # Should have called gh release view + download
         view_calls = [c for c in calls if "view" in c]
@@ -97,7 +97,7 @@ class TestCmdWheels:
             run_id="12345",
             output=out,
         )
-        cmd_wheels(args)
+        cmd_download(args)
 
         wheels = list(Path(out).glob("*.whl"))
         assert len(wheels) == 1
@@ -119,7 +119,7 @@ class TestCmdWheels:
             run_id=None,
             output=out,
         )
-        cmd_wheels(args)
+        cmd_download(args)
 
         # Should have called gh release list to find latest tag
         list_calls = [c for c in calls if "list" in c]

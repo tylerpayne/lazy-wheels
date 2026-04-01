@@ -13,7 +13,7 @@ from .release import cmd_release
 from .runners import cmd_runners
 from .skill import cmd_skill_dispatch
 from .status import cmd_status
-from .wheels import cmd_wheels
+from .download import cmd_download
 
 
 def cli() -> None:
@@ -354,7 +354,7 @@ Run 'uvr <command> --help' for details on a specific command.
         default="dist",
         help="Directory to save wheels into (default: dist/).",
     )
-    download_parser.set_defaults(func=cmd_wheels)
+    download_parser.set_defaults(func=cmd_download)
 
     # clean
     clean_parser = subparsers.add_parser("clean", help=_H)

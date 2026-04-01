@@ -11,7 +11,7 @@ from ..shared.utils.cli import fatal, parse_install_spec, resolve_gh_repo
 from ..shared.utils.tags import find_latest_remote_release_tag
 
 
-def cmd_wheels(args: argparse.Namespace) -> None:
+def cmd_download(args: argparse.Namespace) -> None:
     """Download platform-compatible wheels from a GitHub release or CI run."""
     from ..shared.models import FetchGithubReleaseCommand, FetchRunArtifactsCommand
 
