@@ -317,7 +317,9 @@ Run 'uvr <command> --help' for details on a specific command.
     download_parser = subparsers.add_parser("download", help=_H)
     download_parser.add_argument(
         "package",
-        help="Install spec: ORG/REPO/PKG[@VERSION]",
+        nargs="?",
+        default=None,
+        help="Install spec: ORG/REPO/PKG[@VERSION]. Optional with --run-id.",
     )
     download_parser.add_argument(
         "--release-tag",

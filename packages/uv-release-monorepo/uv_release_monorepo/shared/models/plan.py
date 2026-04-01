@@ -308,7 +308,8 @@ class FetchRunArtifactsCommand(BaseModel):
             # 2. Glob all matching wheels from artifact subdirs
             from pathlib import Path
 
-            all_wheels = list(Path(tmp).rglob(f"{self.dist_name}-*.whl"))
+            pattern = f"{self.dist_name}-*.whl" if self.dist_name else "*.whl"
+            all_wheels = list(Path(tmp).rglob(pattern))
             if not all_wheels:
                 return subprocess.CompletedProcess(args=[], returncode=1)
 

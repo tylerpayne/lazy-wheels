@@ -15,20 +15,31 @@ def cmd_wheels(args: argparse.Namespace) -> None:
     """Download platform-compatible wheels from a GitHub release or CI run."""
     from ..shared.models import FetchGithubReleaseCommand, FetchRunArtifactsCommand
 
-    gh_repo, package, version = parse_install_spec(args.package)
-    dist_name = canonicalize_name(package).replace("-", "_")
     output_dir: str = args.output
-
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     if args.run_id:
+        # --run-id: download all wheels from the run's artifacts.
+        # package is optional — used to filter if provided.
+        if args.package:
+            _, package, _ = parse_install_spec(args.package)
+            dist_name = canonicalize_name(package).replace("-", "_")
+        else:
+            package = None
+            dist_name = ""  # empty prefix matches all wheels
+
         cmd = FetchRunArtifactsCommand(
             run_id=args.run_id,
             dist_name=dist_name,
             directory=output_dir,
-            label=f"Fetch {package} from run {args.run_id}",
+            label=f"Fetch wheels from run {args.run_id}",
         )
     else:
+        if not args.package:
+            fatal("Package spec required (e.g. ORG/REPO/PKG[@VERSION]).")
+        gh_repo, package, version = parse_install_spec(args.package)
+        dist_name = canonicalize_name(package).replace("-", "_")
+
         if args.release_tag:
             tag = args.release_tag
         elif version:
@@ -47,9 +58,11 @@ def cmd_wheels(args: argparse.Namespace) -> None:
 
     result = cmd.execute()
     if result.returncode != 0:
-        fatal(f"Download failed for '{package}'. See errors above.")
+        label = package or f"run {args.run_id}"
+        fatal(f"Download failed for '{label}'. See errors above.")
 
-    found = list(Path(output_dir).glob(f"{dist_name}-*.whl"))
+    glob_pattern = f"{dist_name}-*.whl" if dist_name else "*.whl"
+    found = list(Path(output_dir).glob(glob_pattern))
     for whl in found:
         print(f"  {whl.name}")
     print(f"\nSaved {len(found)} wheel(s) to {output_dir}/")
