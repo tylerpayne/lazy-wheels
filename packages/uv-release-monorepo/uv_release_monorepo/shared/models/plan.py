@@ -121,6 +121,7 @@ class ChangedPackage(PackageInfo):
         last_release_tag: Most recent GitHub release tag, or None.
         release_notes: Markdown release notes for this package.
         make_latest: Whether this package's release should be marked "Latest".
+            True = force latest, False = force not latest, None = let gh decide.
         runners: Runner label sets for build matrix.
     """
 
@@ -129,7 +130,7 @@ class ChangedPackage(PackageInfo):
     next_version: str = ""
     last_release_tag: str | None = None
     release_notes: str = ""
-    make_latest: bool = False
+    make_latest: bool | None = None
     runners: list[list[str]] = Field(default_factory=lambda: [["ubuntu-latest"]])
 
 
@@ -384,7 +385,7 @@ class PublishGithubReleaseCommand(BaseModel):
     title: str
     notes: str
     dist_pattern: str
-    make_latest: bool = False
+    make_latest: bool | None = None
     label: str = ""
     check: bool = True
 
@@ -420,8 +421,10 @@ class PublishGithubReleaseCommand(BaseModel):
             "--notes",
             self.notes,
         ]
-        if self.make_latest:
+        if self.make_latest is True:
             args.append("--latest")
+        elif self.make_latest is False:
+            args.append("--latest=false")
         args.extend(files)
         return subprocess.run(args)
 
