@@ -59,14 +59,19 @@ def cmd_status(args: argparse.Namespace) -> None:
                 commits,
             )
         )
+    from ..shared.utils.versions import find_previous_release
+
     for name, pkg in sorted(plan.unchanged.items()):
+        baseline = f"{name}/v{pkg.version}-base"
+        _, _, diff_tag = diff_stat(baseline, pkg.path)
+        prev = find_previous_release(pkg.version, name, ctx.repo)
         rows.append(
             (
                 "unchanged",
                 name,
                 pkg.version,
-                "-",
-                "-",
+                prev or "-",
+                diff_tag,
                 "-",
                 "-",
             )
