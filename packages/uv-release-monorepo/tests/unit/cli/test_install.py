@@ -90,7 +90,7 @@ class TestCmdInstall:
         )
         monkeypatch.setattr(subprocess, "run", fake_run)
 
-        args = argparse.Namespace(package="acme/my-repo/pkg-beta")
+        args = argparse.Namespace(packages=["acme/my-repo/pkg-beta"])
         cmd_install(args)
 
         install_calls = [c for c in calls if c[:3] == ["uv", "pip", "install"]]
@@ -102,7 +102,7 @@ class TestCmdInstall:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Exits with error when package spec has no org/repo."""
-        args = argparse.Namespace(package="nonexistent-pkg")
+        args = argparse.Namespace(packages=["nonexistent-pkg"])
 
         with pytest.raises(SystemExit):
             cmd_install(args)
@@ -129,7 +129,7 @@ class TestCmdInstall:
 
         monkeypatch.setattr(subprocess, "run", tracking_run)
 
-        args = argparse.Namespace(package="acme/my-repo/pkg-alpha@0.1.5")
+        args = argparse.Namespace(packages=["acme/my-repo/pkg-alpha@0.1.5"])
         cmd_install(args)
 
         assert "pkg-alpha/v0.1.5" in download_tags
@@ -154,7 +154,7 @@ class TestCmdInstallRemote:
         )
         monkeypatch.setattr(subprocess, "run", fake_run)
 
-        args = argparse.Namespace(package="acme/my-monorepo/pkg-alpha")
+        args = argparse.Namespace(packages=["acme/my-monorepo/pkg-alpha"])
         cmd_install(args)
 
         repo_cmds = [c for c in calls if "--repo" in c]
@@ -173,7 +173,7 @@ class TestCmdInstallRemote:
         fake_run, calls = _make_fake_run(wheel_name_fn=wheel_name)
         monkeypatch.setattr(subprocess, "run", fake_run)
 
-        args = argparse.Namespace(package="acme/my-monorepo/pkg-alpha@0.5.0")
+        args = argparse.Namespace(packages=["acme/my-monorepo/pkg-alpha@0.5.0"])
         cmd_install(args)
 
         # _list_repo_packages always calls gh release list, but the tag lookup

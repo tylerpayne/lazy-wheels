@@ -78,13 +78,29 @@ def _list_repo_packages(gh_repo: str) -> set[str]:
 
 
 def cmd_install(args: argparse.Namespace) -> None:
-    """Install a package from GitHub releases or CI run artifacts."""
+    """Install packages from GitHub releases or CI run artifacts."""
     import subprocess
 
     from ..shared.models import FetchGithubReleaseCommand
 
-    spec_repo, package, version = parse_install_spec(args.package)
+    # Parse all package specs
+    package_specs = getattr(args, "packages", []) or []
+    pinned_versions: dict[str, str] = {}  # canon name → version
+    root_packages: list[str] = []
+    spec_repo: str | None = None
+
+    for spec in package_specs:
+        sr, pkg, ver = parse_install_spec(spec)
+        if sr and not spec_repo:
+            spec_repo = sr
+        root_packages.append(pkg)
+        if ver:
+            pinned_versions[canonicalize_name(pkg)] = ver
+
     run_id: str | None = getattr(args, "run_id", None)
+
+    if not root_packages and not run_id:
+        fatal("Specify at least one package, or use --run-id to install all.")
 
     cache_dir = Path.home() / ".uvr" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -96,12 +112,14 @@ def cmd_install(args: argparse.Namespace) -> None:
         gh_repo = resolve_gh_repo(getattr(args, "repo", None), spec_repo)
 
     # If --run-id, download all wheels from the run upfront into cache
-    # (skip if the target wheel is already cached)
     if run_id:
-        target_dist = canonicalize_name(package).replace("-", "_")
-        already_cached = list(cache_dir.glob(f"{target_dist}-*.whl"))
-        if already_cached:
-            print(f"Using cached artifacts for {package}.")
+        # Skip if all root packages are already cached (or no packages specified)
+        all_cached = root_packages and all(
+            list(cache_dir.glob(f"{canonicalize_name(p).replace('-', '_')}-*.whl"))
+            for p in root_packages
+        )
+        if all_cached:
+            print("Using cached artifacts.")
         else:
             from ..shared.models import FetchRunArtifactsCommand
 
@@ -116,12 +134,31 @@ def cmd_install(args: argparse.Namespace) -> None:
             if result.returncode != 0:
                 fatal(f"Failed to download artifacts from run {run_id}.")
 
+        # If no packages specified, install all wheels from the run
+        if not root_packages:
+            wheels = [str(w) for w in sorted(cache_dir.glob("*.whl"))]
+            if not wheels:
+                fatal("No wheels found in run artifacts.")
+            for w in wheels:
+                print(f"  {Path(w).name}")
+
+            extra = getattr(args, "pip_args", [])
+            if extra and extra[0] == "--":
+                extra = extra[1:]
+
+            print(f"\nInstalling {len(wheels)} wheel(s)...")
+            subprocess.run(
+                ["uv", "pip", "install", "--find-links", cache, *wheels, *extra],
+                check=True,
+            )
+            return
+
     # Discover which packages exist in this repo (for transitive resolution)
     print(f"Discovering packages in {gh_repo}...")
     repo_packages = _list_repo_packages(gh_repo) if gh_repo else set()
 
-    # BFS: fetch the target package, then transitively fetch internal deps
-    to_fetch = [package]
+    # BFS: fetch all requested packages, then transitively fetch internal deps
+    to_fetch = list(root_packages)
     fetched: set[str] = set()
     wheels: list[str] = []
 
@@ -134,10 +171,10 @@ def cmd_install(args: argparse.Namespace) -> None:
 
         dist_name = canon.replace("-", "_")
 
-        # Check cache — use version-specific glob for the root package
-        # when a version is pinned, version-agnostic for transitive deps.
-        if pkg == package and version:
-            cache_pattern = f"{dist_name}-{version}-*.whl"
+        # Check cache — use version-specific glob for pinned packages
+        pinned = pinned_versions.get(canon)
+        if pinned:
+            cache_pattern = f"{dist_name}-{pinned}-*.whl"
         else:
             cache_pattern = f"{dist_name}-*.whl"
         cached = sorted(cache_dir.glob(cache_pattern))
@@ -151,8 +188,8 @@ def cmd_install(args: argparse.Namespace) -> None:
             continue
 
         # Not in cache — fetch from GitHub release
-        if pkg == package and version:
-            tag = f"{pkg}/v{version}"
+        if pinned:
+            tag = f"{pkg}/v{pinned}"
         else:
             tag = find_latest_remote_release_tag(pkg, gh_repo=gh_repo)
         if not tag:
@@ -186,7 +223,8 @@ def cmd_install(args: argparse.Namespace) -> None:
                 to_fetch.append(dep)
 
     if not wheels:
-        fatal(f"No wheels found for '{package}'.")
+        names = ", ".join(root_packages)
+        fatal(f"No wheels found for: {names}")
 
     extra = getattr(args, "pip_args", [])
     if extra and extra[0] == "--":

@@ -310,8 +310,9 @@ Run 'uvr <command> --help' for details on a specific command.
     # install
     install_parser = subparsers.add_parser("install", help=_H)
     install_parser.add_argument(
-        "package",
-        help="Package name, optionally with version: PKG[@VERSION]",
+        "packages",
+        nargs="*",
+        help="Package name(s), optionally with version: PKG[@VERSION]. Omit with --run-id to install all.",
     )
     install_parser.add_argument(
         "--repo",
