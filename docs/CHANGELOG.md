@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.22.0] - 2026-04-02
+
+### Added
+- Add `uvr build` command for building changed workspace packages locally using layered dependency ordering without versioning, tagging, or publishing
+- Add typed pydantic argument models for all CLI commands, replacing untyped `getattr()` access on `argparse.Namespace`
+
+### Changed
+- Reorganize CLI command files into nested subpackages matching the command tree (`workflow/`, `skill/`, `jobs/`)
+- Extract shared upgrade/merge-base helpers into `cli/_upgrade.py`
+
+### Fixed
+- Fix `uvr status` not showing previous release version and diff-from tag for unchanged packages
+
 ## [v0.18.0b0] - 2026-03-29
 
 ### Changed
