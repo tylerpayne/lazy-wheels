@@ -166,7 +166,10 @@ class ReleasePlanner:
             self.progress.update("Generating release notes")
         notes: dict[str, str] = {}
         for name in changed_names:
-            notes[name] = generate_release_notes(name, versioned[name])
+            if name in self.config.release_notes:
+                notes[name] = self.config.release_notes[name]
+            else:
+                notes[name] = generate_release_notes(name, versioned[name])
         if self.progress:
             self.progress.complete(f"Generated {len(notes)} release notes")
 

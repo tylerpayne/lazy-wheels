@@ -9,7 +9,7 @@ from __future__ import annotations
 import json as _json
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, Protocol, Union
 
 from pydantic import (
@@ -79,6 +79,7 @@ class PlanConfig:
         ci_publish: If True (default), plan targets CI execution.
         dev_release: If True, publish .devN versions as-is (``--dev`` mode).
         dry_run: If True, skip local writes (version bumps, dep pins).
+        release_notes: Per-package release notes overrides (name → markdown).
     """
 
     rebuild_all: bool
@@ -88,6 +89,7 @@ class PlanConfig:
     ci_publish: bool = True
     dev_release: bool = False
     dry_run: bool = False
+    release_notes: dict[str, str] = field(default_factory=dict)
 
 
 class PackageInfo(BaseModel):

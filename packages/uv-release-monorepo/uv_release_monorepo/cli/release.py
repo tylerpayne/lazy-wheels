@@ -371,6 +371,17 @@ def cmd_release(args: argparse.Namespace) -> None:
                     set_version(Path(info.path) / "pyproject.toml", new_version)
                 info.version = new_version
 
+        # Parse --release-notes before planning so notes are baked into commands
+        user_notes: dict[str, str] = {}
+        for pkg_name, notes_value in getattr(args, "release_notes", None) or []:
+            if notes_value.startswith("@"):
+                notes_path = Path(notes_value[1:])
+                if not notes_path.exists():
+                    fatal(f"--release-notes: file not found: {notes_path}")
+                user_notes[pkg_name] = notes_path.read_text()
+            else:
+                user_notes[pkg_name] = notes_value
+
         config = _cli.PlanConfig(
             rebuild_all=args.rebuild_all,
             matrix=package_runners,
@@ -379,6 +390,7 @@ def cmd_release(args: argparse.Namespace) -> None:
             ci_publish=(where == "ci"),
             dev_release=getattr(args, "release_type", None) == "dev",
             dry_run=dry_run,
+            release_notes=user_notes,
         )
         if hook:
             config = hook.pre_plan(config)
@@ -440,30 +452,6 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Run post-plan hook if configured
     if hook:
         plan = hook.post_plan(plan)
-
-    # Apply --release-notes overrides
-    for pkg_name, notes_value in getattr(args, "release_notes", None) or []:
-        if pkg_name not in plan.changed:
-            fatal(f"--release-notes: package {pkg_name!r} is not in the release plan.")
-        if notes_value.startswith("@"):
-            from pathlib import Path as _Path
-
-            notes_path = _Path(notes_value[1:])
-            if not notes_path.exists():
-                fatal(f"--release-notes: file not found: {notes_path}")
-            notes_text = notes_path.read_text()
-        else:
-            notes_text = notes_value
-        plan.changed[pkg_name].release_notes = notes_text
-
-        # Also update the pre-computed PublishGithubReleaseCommand
-        from ..shared.models import PublishGithubReleaseCommand
-
-        tag = f"{pkg_name}/v{plan.changed[pkg_name].release_version}"
-        for cmd in plan.release_commands:
-            if isinstance(cmd, PublishGithubReleaseCommand) and cmd.tag == tag:
-                cmd.notes = notes_text
-                break
 
     # --json: print only plan JSON to stdout and exit
     if getattr(args, "json", False):
