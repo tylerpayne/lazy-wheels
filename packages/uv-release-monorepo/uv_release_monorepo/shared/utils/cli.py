@@ -200,10 +200,13 @@ def discover_packages(root: Path | None = None) -> dict[str, tuple[str, list[str
                 name = canonicalize_name(raw_name)
                 ver = pkg_doc.get("project", {}).get("version", "0.0.0")
                 packages[name] = (ver, [])
-                # Only use [project].dependencies for build order — optional
-                # deps and dependency groups are not required for building.
+                # Use [project].dependencies and [build-system].requires for
+                # build order. Optional deps and dependency groups are not required.
                 raw_deps[name] = list(
                     pkg_doc.get("project", {}).get("dependencies", [])
+                )
+                raw_deps[name].extend(
+                    pkg_doc.get("build-system", {}).get("requires", [])
                 )
 
     # Apply include/exclude filters from [tool.uvr.config]

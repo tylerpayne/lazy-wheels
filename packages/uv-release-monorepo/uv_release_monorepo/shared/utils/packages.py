@@ -96,9 +96,10 @@ def find_packages(root: Path | None = None) -> dict[str, PackageInfo]:
             path=str(d.relative_to(root)),
             version=get_path(doc, "project", "version", default="0.0.0"),
         )
-        # Only use [project].dependencies for build order — optional deps
-        # and dependency groups are not required for building.
+        # Use [project].dependencies and [build-system].requires for build
+        # order. Optional deps and dependency groups are not required.
         raw_deps[name] = list(get_path(doc, "project", "dependencies", default=[]))
+        raw_deps[name].extend(get_path(doc, "build-system", "requires", default=[]))
 
     # Apply include/exclude filters from [tool.uvr.config]
     uvr_config = get_config(root_doc)
