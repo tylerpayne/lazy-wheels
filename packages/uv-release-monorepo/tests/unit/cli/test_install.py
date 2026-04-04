@@ -81,6 +81,75 @@ class TestCmdInstall:
     def _isolate_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
+    def test_local_dist_installs_all_wheels(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--dist installs all wheels from a local directory."""
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "pkg_alpha-1.0.0-py3-none-any.whl").write_bytes(b"")
+        (dist / "pkg_beta-2.0.0-py3-none-any.whl").write_bytes(b"")
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        args = argparse.Namespace(
+            packages=[], dist=str(dist), run_id=None, repo=None, pip_args=[]
+        )
+        cmd_install(args)
+
+        install_calls = [c for c in calls if c[:3] == ["uv", "pip", "install"]]
+        assert len(install_calls) == 1
+        assert "--find-links" in install_calls[0]
+        assert any("pkg_alpha" in a for a in install_calls[0])
+        assert any("pkg_beta" in a for a in install_calls[0])
+
+    def test_local_dist_filters_by_package_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--dist with package names only installs those packages."""
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "pkg_alpha-1.0.0-py3-none-any.whl").write_bytes(b"")
+        (dist / "pkg_beta-2.0.0-py3-none-any.whl").write_bytes(b"")
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        args = argparse.Namespace(
+            packages=["pkg-alpha"], dist=str(dist), run_id=None, repo=None, pip_args=[]
+        )
+        cmd_install(args)
+
+        install_calls = [c for c in calls if c[:3] == ["uv", "pip", "install"]]
+        assert len(install_calls) == 1
+        assert any("pkg_alpha" in a for a in install_calls[0])
+        assert not any("pkg_beta" in a for a in install_calls[0])
+
+    def test_local_dist_fails_for_missing_dir(self) -> None:
+        """--dist with nonexistent directory exits with error."""
+        args = argparse.Namespace(
+            packages=[], dist="/nonexistent", run_id=None, repo=None, pip_args=[]
+        )
+        with pytest.raises(SystemExit):
+            cmd_install(args)
+
     def test_installs_package_and_deps(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

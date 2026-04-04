@@ -3,7 +3,7 @@
 How `build_plan()` discovers packages, finds baselines, diffs, and propagates
 dirtiness through the dependency graph.
 
-See [Releasing](../user-guide/02-releasing.md) and [How it works](08-architecture.md) for usage context.
+See [Releasing](../user-guide/05-releasing.md) and [How it works](08-architecture.md) for usage context.
 
 ## Source files
 

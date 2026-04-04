@@ -75,7 +75,7 @@ Fields protected by `_frozen`:
 |-----|-------|------------------|
 | `BuildJob` | `if_condition` | `_BUILD_IF` |
 | `BuildJob` | `strategy` | `_BUILD_STRATEGY` |
-| `BuildJob` | `runs_on` | `_BUILD_RUNS_ON` (`${{ matrix.runner }}`) |
+| `BuildJob` | `runs_on` | `_BUILD_RUNS_ON` (<code v-pre>${{ matrix.runner }}</code>) |
 | `BuildJob` | `steps` | `_BUILD_STEPS` |
 | `ReleaseJob` | `if_condition` | `_RELEASE_IF` |
 | `ReleaseJob` | `strategy` | `_RELEASE_STRATEGY` |

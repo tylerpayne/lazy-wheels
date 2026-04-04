@@ -3,7 +3,7 @@
 How the build matrix is expanded, how packages are grouped by runner and
 topological layer, and how `uvr jobs build` executes builds in CI.
 
-See [Configure build runners](../user-guide/03-runners.md) for usage.
+See [Configure build runners](../user-guide/07-runners.md) for usage.
 
 ## Source files
 
@@ -20,17 +20,18 @@ See [Configure build runners](../user-guide/03-runners.md) for usage.
 
 ## Matrix configuration
 
-Per-package runners are stored in `[tool.uvr.matrix]` in the root `pyproject.toml`.
+Per-package runners are stored in `[tool.uvr.runners]` in the root `pyproject.toml`.
 Each runner is a list of labels (for composite runner selection):
 
 ```toml
-[tool.uvr.matrix]
+[tool.uvr.runners]
 my-pkg = [["ubuntu-latest"], ["macos-latest"]]
 other-pkg = [["ubuntu-latest"]]
 ```
 
 `config.py:get_matrix` parses this into `dict[str, list[list[str]]]`. Packages
-not listed default to `[["ubuntu-latest"]]` during matrix expansion.
+not listed default to `[["ubuntu-latest"]]` during matrix expansion. The legacy
+`[tool.uvr.matrix]` key is also supported for backwards compatibility.
 
 ## Matrix expansion in `ReleasePlanner`
 

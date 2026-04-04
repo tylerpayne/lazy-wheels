@@ -1,5 +1,14 @@
 # Installing & Downloading
 
+## Install from a local build
+
+After running `uvr build`, install wheels directly from `dist/`:
+
+```bash
+uvr install --dist dist                    # install all wheels
+uvr install --dist dist my-package         # install a specific package
+```
+
 ## Install from GitHub releases
 
 uvr can install workspace packages directly from their GitHub releases, resolving internal dependencies automatically.

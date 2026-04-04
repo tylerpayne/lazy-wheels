@@ -35,10 +35,31 @@ class TestCmdRunners:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_runners=["ubuntu-latest"]))
 
         result = read_matrix(tmp_path)
         assert result["pkg-alpha"] == [["ubuntu-latest"]]
+
+    def test_add_multiple_runners(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Adds multiple runners in a single --add invocation."""
+        _write_workspace_repo(tmp_path, ["pkg-alpha"])
+        monkeypatch.chdir(tmp_path)
+
+        cmd_runners(
+            _runners_args(
+                package="pkg-alpha",
+                add_runners=["ubuntu-latest", "macos-14", "windows-latest"],
+            )
+        )
+
+        result = read_matrix(tmp_path)
+        assert result["pkg-alpha"] == [
+            ["ubuntu-latest"],
+            ["macos-14"],
+            ["windows-latest"],
+        ]
 
     def test_add_duplicate_ignored(
         self,
@@ -50,8 +71,8 @@ class TestCmdRunners:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_runners=["ubuntu-latest"]))
+        cmd_runners(_runners_args(package="pkg-alpha", add_runners=["ubuntu-latest"]))
 
         result = read_matrix(tmp_path)
         assert result["pkg-alpha"] == [["ubuntu-latest"]]
@@ -65,9 +86,36 @@ class TestCmdRunners:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="macos-14"))
-        cmd_runners(_runners_args(package="pkg-alpha", remove_value="ubuntu-latest"))
+        cmd_runners(
+            _runners_args(
+                package="pkg-alpha", add_runners=["ubuntu-latest", "macos-14"]
+            )
+        )
+        cmd_runners(
+            _runners_args(package="pkg-alpha", remove_runners=["ubuntu-latest"])
+        )
+
+        result = read_matrix(tmp_path)
+        assert result["pkg-alpha"] == [["macos-14"]]
+
+    def test_remove_multiple_runners(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Removes multiple runners in a single --remove invocation."""
+        _write_workspace_repo(tmp_path, ["pkg-alpha"])
+        monkeypatch.chdir(tmp_path)
+
+        cmd_runners(
+            _runners_args(
+                package="pkg-alpha",
+                add_runners=["ubuntu-latest", "macos-14", "windows-latest"],
+            )
+        )
+        cmd_runners(
+            _runners_args(
+                package="pkg-alpha", remove_runners=["ubuntu-latest", "windows-latest"]
+            )
+        )
 
         result = read_matrix(tmp_path)
         assert result["pkg-alpha"] == [["macos-14"]]
@@ -79,8 +127,10 @@ class TestCmdRunners:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-alpha", remove_value="ubuntu-latest"))
+        cmd_runners(_runners_args(package="pkg-alpha", add_runners=["ubuntu-latest"]))
+        cmd_runners(
+            _runners_args(package="pkg-alpha", remove_runners=["ubuntu-latest"])
+        )
 
         result = read_matrix(tmp_path)
         assert "pkg-alpha" not in result
@@ -90,8 +140,11 @@ class TestCmdRunners:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="macos-14"))
+        cmd_runners(
+            _runners_args(
+                package="pkg-alpha", add_runners=["ubuntu-latest", "macos-14"]
+            )
+        )
         cmd_runners(_runners_args(package="pkg-alpha", clear=True))
 
         result = read_matrix(tmp_path)
@@ -107,8 +160,11 @@ class TestCmdRunners:
         _write_workspace_repo(tmp_path, ["pkg-alpha"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-alpha", add_value="macos-14"))
+        cmd_runners(
+            _runners_args(
+                package="pkg-alpha", add_runners=["ubuntu-latest", "macos-14"]
+            )
+        )
         capsys.readouterr()  # clear add output
 
         cmd_runners(_runners_args(package="pkg-alpha"))
@@ -121,7 +177,7 @@ class TestReadMatrix:
     """Tests for read_matrix()."""
 
     def test_returns_empty_when_no_matrix(self, tmp_path: Path) -> None:
-        """Returns {} for a repo with no [tool.uvr.matrix]."""
+        """Returns {} for a repo with no [tool.uvr.runners]."""
         _write_workspace_repo(tmp_path, [])
         result = read_matrix(tmp_path)
         assert result == {}
@@ -138,9 +194,10 @@ class TestReadMatrix:
         _write_workspace_repo(tmp_path, ["pkg-a", "pkg-b"])
         monkeypatch.chdir(tmp_path)
 
-        cmd_runners(_runners_args(package="pkg-a", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-b", add_value="ubuntu-latest"))
-        cmd_runners(_runners_args(package="pkg-b", add_value="macos-14"))
+        cmd_runners(_runners_args(package="pkg-a", add_runners=["ubuntu-latest"]))
+        cmd_runners(
+            _runners_args(package="pkg-b", add_runners=["ubuntu-latest", "macos-14"])
+        )
 
         result = read_matrix(tmp_path)
         assert result == {

@@ -60,10 +60,10 @@ ${{ fromJSON(inputs.plan).field_name }}
 
 This is used for:
 - **Job `if` conditions**: `!contains(fromJSON(inputs.plan).skip, 'uvr-bump')`
-- **Build matrix**: `strategy.matrix.runner: ${{ fromJSON(inputs.plan).build_matrix }}`
+- **Build matrix**: <code v-pre>strategy.matrix.runner: ${{ fromJSON(inputs.plan).build_matrix }}</code>
 - **Release commands**: release is now handled by `uvr jobs release` via `PublishGithubReleaseCommand`
-- **Python version**: `uv python install ${{ fromJSON(inputs.plan).python_version }}`
-- **uvr install spec**: `uv tool install ${{ fromJSON(inputs.plan).uvr_install }}`
+- **Python version**: <code v-pre>uv python install ${{ fromJSON(inputs.plan).python_version }}</code>
+- **uvr install spec**: <code v-pre>uv tool install ${{ fromJSON(inputs.plan).uvr_install }}</code>
 
 The `_P` constant in `models/workflow.py` (`"fromJSON(inputs.plan)"`) is a shorthand used
 to construct these expressions in Python without repeating the full string.
@@ -97,7 +97,7 @@ Every job that runs uvr commands uses these steps:
 The build step invokes `ReleaseExecutor.build()`, which runs pre-computed
 `BuildStage` lists (see [Build matrix](04-build-matrix.md)).
 
-The artifact name is `wheels-${{ join(matrix.runner, '-') }}`, so each runner
+The artifact name is <code v-pre>wheels-${{ join(matrix.runner, '-') }}</code>, so each runner
 uploads its own artifact. The release job later downloads all of them with
 `pattern: wheels-*` and `merge-multiple: true`.
 

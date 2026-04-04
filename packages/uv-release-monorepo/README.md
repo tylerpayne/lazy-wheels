@@ -5,7 +5,7 @@ The missing CI release orchestrator for [uv](https://github.com/astral-sh/uv) wo
 ## Quick Start
 
 ```bash
-uv tool install uv-release-monorepo
+uv add --dev uv-release-monorepo
 uvr workflow init        # generate .github/workflows/release.yml
 uvr release     # detect changes, show plan, dispatch to CI
 ```
@@ -26,10 +26,11 @@ uvr release --where local
 ### Version bumping
 
 ```bash
-uvr bump --all --minor       # 1.0.1.dev0 → 1.1.0.dev0
-uvr bump --all --alpha       # 1.0.1.dev0 → 1.0.1a0.dev0
-uvr bump --all --rc          # 1.0.1a2.dev0 → 1.0.1rc0.dev0
-uvr bump --package my-pkg --patch  # bump one package
+uvr bump --minor             # bump changed packages to next minor
+uvr bump --all --alpha       # enter alpha cycle for all packages
+uvr bump --all --rc          # promote alpha → rc
+uvr bump --all --stable      # exit pre-release → stable
+uvr bump --packages my-pkg --patch  # bump specific package(s)
 ```
 
 `uvr release` auto-detects from the version — just strip `.devN` and publish:
@@ -51,16 +52,17 @@ uvr release --skip build --reuse-run 12345    # reuse artifacts from run 12345
 ## Managing runners
 
 ```bash
-uvr workflow runners                        # show all package runners
-uvr workflow runners my-pkg --add macos-14  # add a build runner
-uvr workflow runners my-pkg --clear         # reset to default (ubuntu-latest)
+uvr workflow runners                                    # show all package runners
+uvr workflow runners my-pkg --add macos-14 windows-latest  # add build runners
+uvr workflow runners my-pkg --clear                     # reset to default (ubuntu-latest)
 ```
 
-## Installing from releases
+## Installing
 
 ```bash
-uvr install myorg/myrepo/my-pkg           # latest release
-uvr install myorg/myrepo/my-pkg@1.2.3     # specific version
+uvr install --dist dist                    # from local build
+uvr install myorg/myrepo/my-pkg            # from GitHub release
+uvr install myorg/myrepo/my-pkg@1.2.3      # specific version
 ```
 
 ## Downloading wheels
@@ -109,5 +111,5 @@ Hook jobs (pre-build, post-build, pre-release, post-release) are no-ops by defau
 
 ## Documentation
 
-- **[User Guide](../../docs/user-guide/README.md)** — setup, releasing, hooks, PyPI, skip/reuse, package filtering
-- **[Under the Hood](../../docs/under-the-hood/README.md)** — change detection, dependency pinning, build matrix, workflow model
+- **[User Guide](../../docs/user-guide/index.md)** — setup, releasing, hooks, PyPI, skip/reuse, package filtering
+- **[Under the Hood](../../docs/under-the-hood/index.md)** — change detection, dependency pinning, build matrix, workflow model

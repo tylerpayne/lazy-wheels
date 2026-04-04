@@ -269,7 +269,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Fix `on:` key being serialized as `true:` after YAML round-trip (PyYAML boolean coercion)
-- Fix PyYAML corrupting GitHub Actions `${{ }}` expressions with double-quoted single quotes
+- Fix PyYAML corrupting GitHub Actions <code v-pre>${{ }}</code> expressions with double-quoted single quotes
 - Fix PyYAML reordering top-level YAML keys on write
 
 ## [v0.5.0] - 2026-03-25

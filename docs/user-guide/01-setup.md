@@ -10,7 +10,7 @@
 ## Install uvr
 
 ```bash
-uv tool install uv-release-monorepo
+uv add --dev uv-release-monorepo
 ```
 
 ## Generate the workflow
@@ -19,7 +19,7 @@ uv tool install uv-release-monorepo
 uvr workflow init
 ```
 
-This creates `.github/workflows/release.yml` with four core jobs: `uvr-validate`, `uvr-build`, `uvr-release`, and `uvr-bump`. You can add custom jobs (tests, linting, PyPI publish) by editing the YAML directly — see [Custom workflow jobs](05-custom-jobs.md).
+This creates `.github/workflows/release.yml` with four core jobs: `uvr-validate`, `uvr-build`, `uvr-release`, and `uvr-bump`. You can add custom jobs (tests, linting, PyPI publish) by editing the YAML directly — see [Custom workflow jobs](08-custom-jobs.md).
 
 After editing, validate:
 

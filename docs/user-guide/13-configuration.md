@@ -5,7 +5,7 @@ All uvr configuration lives in the workspace root `pyproject.toml`.
 ## Runner matrix
 
 ```toml
-[tool.uvr.matrix]
+[tool.uvr.runners]
 my-native-pkg = ["ubuntu-latest", "macos-14"]
 my-python-pkg = ["ubuntu-latest"]
 ```

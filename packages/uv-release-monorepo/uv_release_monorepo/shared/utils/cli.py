@@ -71,7 +71,7 @@ def diff_stat(
 
 
 def read_matrix(root: Path) -> dict[str, list[list[str]]]:
-    """Read [tool.uvr.matrix] from the workspace pyproject.toml."""
+    """Read [tool.uvr.runners] from the workspace pyproject.toml."""
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
         return {}

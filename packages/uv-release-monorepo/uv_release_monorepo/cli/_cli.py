@@ -239,8 +239,8 @@ Run 'uvr <command> --help' for details on a specific command.
         description="Bump package versions in the workspace.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _bscope = bump_parser.add_argument_group("scope (required)")
-    _bscope_mut = _bscope.add_mutually_exclusive_group(required=True)
+    _bscope = bump_parser.add_argument_group("scope")
+    _bscope_mut = _bscope.add_mutually_exclusive_group()
     _bscope_mut.add_argument(
         "--all",
         action="store_true",
@@ -248,22 +248,17 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Bump all workspace packages.",
     )
     _bscope_mut.add_argument(
-        "--changed",
-        action="store_true",
-        help="Bump only packages with changes since last release.",
-    )
-    _bscope_mut.add_argument(
-        "--package",
-        action="append",
+        "--packages",
+        nargs="+",
         dest="packages",
         metavar="PKG",
-        help="Bump a specific package (repeatable).",
+        help="Bump specific package(s).",
     )
     bump_parser.add_argument(
         "--force",
         action="store_true",
         default=False,
-        help="Skip the changed-package guard when using --package.",
+        help="Skip the changed-package guard when using --packages.",
     )
     _btype = bump_parser.add_argument_group("bump type (required)")
     _btype_mut = _btype.add_mutually_exclusive_group(required=True)
@@ -348,6 +343,12 @@ Run 'uvr <command> --help' for details on a specific command.
         "--run-id",
         default=None,
         help="Install from a GitHub Actions run's artifacts instead of a release.",
+    )
+    install_parser.add_argument(
+        "--dist",
+        default=None,
+        metavar="DIR",
+        help="Install from a local wheel directory (e.g. dist/ after uvr build).",
     )
     install_parser.set_defaults(func=cmd_install)
 
@@ -462,8 +463,8 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Package name (omit to show all).",
     )
     _rmut = wf_runners_parser.add_mutually_exclusive_group()
-    _rmut.add_argument("--add", dest="add_value", metavar="RUNNER")
-    _rmut.add_argument("--remove", dest="remove_value", metavar="RUNNER")
+    _rmut.add_argument("--add", dest="add_runners", nargs="+", metavar="RUNNER")
+    _rmut.add_argument("--remove", dest="remove_runners", nargs="+", metavar="RUNNER")
     _rmut.add_argument("--clear", action="store_true")
     wf_runners_parser.set_defaults(func=cmd_runners)
 

@@ -28,6 +28,13 @@ htmlcov/
 *.swp
 *.swo
 
+# Node
+node_modules/
+
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
 # OS
 .DS_Store
 Thumbs.db

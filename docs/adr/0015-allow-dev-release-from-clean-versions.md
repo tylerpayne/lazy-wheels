@@ -27,4 +27,4 @@
 
 ## Links
 
-* Amends [ADR-0008: Support PEP 440 release types](0008-support-pep-440-release-types.md) — relaxes the dev release precondition
+* Amends [ADR-0008: Support Dev, Pre, and Post Releases](0008-support-dev-pre-and-post-releases-with-base-tags.md) — relaxes the dev release precondition

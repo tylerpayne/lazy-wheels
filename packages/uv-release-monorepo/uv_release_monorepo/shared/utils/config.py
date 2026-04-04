@@ -63,8 +63,14 @@ def get_hooks(doc: tomlkit.TOMLDocument) -> dict[str, str]:
 
 
 def get_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
-    """Extract [tool.uvr.matrix] as {package: [[label, ...], ...]}."""
-    raw = get_path(doc, "tool", "uvr", "matrix", default={})
+    """Extract runner matrix as {package: [[label, ...], ...]}.
+
+    Reads from ``[tool.uvr.runners]``, falling back to the legacy
+    ``[tool.uvr.matrix]`` key for backwards compatibility.
+    """
+    raw = get_path(doc, "tool", "uvr", "runners", default=None)
+    if raw is None:
+        raw = get_path(doc, "tool", "uvr", "matrix", default={})
     result: dict[str, list[list[str]]] = {}
     for k, v in raw.items():
         runners: list[list[str]] = []
@@ -79,7 +85,10 @@ def get_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
 
 
 def set_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]) -> None:
-    """Write {package: [[label, ...], ...]} into [tool.uvr.matrix]."""
+    """Write {package: [[label, ...], ...]} into [tool.uvr.runners].
+
+    Also removes the legacy ``[tool.uvr.matrix]`` key if present.
+    """
     if "tool" not in doc:
         doc["tool"] = tomlkit.table()
     tool = doc["tool"]
@@ -88,6 +97,9 @@ def set_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]) ->
         tool["uvr"] = tomlkit.table()
     uvr = tool["uvr"]
     assert isinstance(uvr, Table)
+    # Remove legacy key
+    if "matrix" in uvr:
+        del uvr["matrix"]
     matrix_table = tomlkit.table()
     for pkg, runners in sorted(matrix.items()):
         arr = tomlkit.array()
@@ -97,4 +109,4 @@ def set_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]) ->
                 inner.append(label)
             arr.append(inner)
         matrix_table[pkg] = arr
-    uvr["matrix"] = matrix_table
+    uvr["runners"] = matrix_table

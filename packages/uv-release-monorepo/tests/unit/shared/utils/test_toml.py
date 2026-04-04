@@ -127,9 +127,9 @@ class TestUvrMatrix:
         assert get_matrix(doc) == {}
 
     def test_get_uvr_matrix_returns_matrix(self) -> None:
-        """Parses a doc that has [tool.uvr.matrix]."""
+        """Parses a doc that has [tool.uvr.runners]."""
         content = """\
-[tool.uvr.matrix]
+[tool.uvr.runners]
 pkg-alpha = ["ubuntu-latest", "macos-14"]
 pkg-beta = ["ubuntu-latest"]
 """
@@ -140,8 +140,20 @@ pkg-beta = ["ubuntu-latest"]
             "pkg-beta": [["ubuntu-latest"]],
         }
 
+    def test_get_uvr_matrix_reads_legacy_key(self) -> None:
+        """Falls back to [tool.uvr.matrix] for backwards compatibility."""
+        content = """\
+[tool.uvr.matrix]
+pkg-alpha = ["ubuntu-latest", "macos-14"]
+"""
+        doc = tomlkit.parse(content)
+        result = get_matrix(doc)
+        assert result == {
+            "pkg-alpha": [["ubuntu-latest"], ["macos-14"]],
+        }
+
     def test_set_uvr_matrix_writes_matrix(self) -> None:
-        """set_uvr_matrix then get_uvr_matrix round-trips the data."""
+        """set_matrix then get_matrix round-trips the data."""
         doc = tomlkit.parse('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
         matrix: dict[str, list[list[str]]] = {
             "pkg-beta": [["ubuntu-latest"], ["macos-14"]],
@@ -153,3 +165,17 @@ pkg-beta = ["ubuntu-latest"]
             "pkg-alpha": [["ubuntu-latest"]],
             "pkg-beta": [["ubuntu-latest"], ["macos-14"]],
         }
+
+    def test_set_uvr_matrix_migrates_legacy_key(self) -> None:
+        """set_matrix removes [tool.uvr.matrix] and writes [tool.uvr.runners]."""
+        content = """\
+[tool.uvr.matrix]
+pkg-alpha = ["ubuntu-latest"]
+"""
+        doc = tomlkit.parse(content)
+        set_matrix(doc, {"pkg-alpha": [["ubuntu-latest"], ["macos-14"]]})
+        dumped = tomlkit.dumps(doc)
+        assert "tool.uvr.matrix" not in dumped
+        assert "tool.uvr.runners" in dumped
+        result = get_matrix(doc)
+        assert result == {"pkg-alpha": [["ubuntu-latest"], ["macos-14"]]}

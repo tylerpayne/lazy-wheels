@@ -68,8 +68,8 @@ def _runners_args(**kwargs: object) -> argparse.Namespace:
     """Build a cmd_runners Namespace with sensible defaults."""
     defaults: dict[str, object] = dict(
         package=None,
-        add_value=None,
-        remove_value=None,
+        add_runners=None,
+        remove_runners=None,
         clear=False,
     )
     defaults.update(kwargs)

@@ -5,14 +5,19 @@ By default every package builds on `ubuntu-latest`. If a package needs native co
 ## Add a runner
 
 ```bash
+uvr workflow runners my-native-pkg --add macos-14 windows-latest
+```
+
+You can also add one at a time:
+
+```bash
 uvr workflow runners my-native-pkg --add macos-14
-uvr workflow runners my-native-pkg --add windows-latest
 ```
 
 ## Remove a runner
 
 ```bash
-uvr workflow runners my-native-pkg --remove windows-latest
+uvr workflow runners my-native-pkg --remove windows-latest macos-14
 ```
 
 ## Clear all runners for a package
@@ -30,10 +35,10 @@ uvr workflow runners my-pkg      # one package
 
 ## Where runners are stored
 
-Runner configuration lives in `[tool.uvr.matrix]` in your workspace root `pyproject.toml`:
+Runner configuration lives in `[tool.uvr.runners]` in your workspace root `pyproject.toml`:
 
 ```toml
-[tool.uvr.matrix]
+[tool.uvr.runners]
 my-native-pkg = ["ubuntu-latest", "macos-14"]
 my-python-pkg = ["ubuntu-latest"]
 ```

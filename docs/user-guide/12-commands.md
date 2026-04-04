@@ -52,15 +52,41 @@ Reports errors for invalid structure, warnings for modified core job fields.
 Manage per-package build runners.
 
 ```
-uvr workflow runners [PKG] [--add RUNNER | --remove RUNNER | --clear]
+uvr workflow runners [PKG] [--add RUNNER [RUNNER ...] | --remove RUNNER [RUNNER ...] | --clear]
 ```
 
 | Argument/Flag | Description |
 |---------------|-------------|
 | `PKG` | Package name (omit to show all) |
-| `--add RUNNER` | Add a runner for the package |
-| `--remove RUNNER` | Remove a runner from the package |
+| `--add RUNNER [RUNNER ...]` | Add one or more runners for the package |
+| `--remove RUNNER [RUNNER ...]` | Remove one or more runners from the package |
 | `--clear` | Remove all runners for the package |
+
+## `uvr status`
+
+Show workspace package status — versions, change detection, and warnings.
+
+```
+uvr status [--rebuild-all]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--rebuild-all` | Show all packages as changed |
+
+## `uvr build`
+
+Build changed packages locally using layered dependency ordering. Skips
+versioning, tagging, and publishing — outputs wheels to `dist/`.
+
+```
+uvr build [--rebuild-all] [--python VER]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--rebuild-all` | -- | Build all packages, not just changed ones |
+| `--python` | `3.12` | Python version for build isolation |
 
 ## `uvr bump`
 
@@ -68,18 +94,18 @@ Bump package versions in the workspace. Use `uvr bump` to prepare the version
 before releasing — the release type is determined by the version in pyproject.toml.
 
 ```
-uvr bump <--all | --changed | --package PKG>
+uvr bump [--all | --packages PKG [PKG ...]]
          <--major | --minor | --patch | --alpha | --beta | --rc | --post | --dev | --stable>
          [--force]
 ```
 
-**Scope** (required, mutually exclusive):
+**Scope** (optional, defaults to changed packages):
 
 | Flag | Description |
 |------|-------------|
+| *(default)* | Bump only packages with changes since last release |
 | `--all` | Bump all workspace packages |
-| `--changed` | Bump only packages with changes since last release |
-| `--package PKG` | Bump a specific package (repeatable). Fails if other packages also have unreleased changes — use `--force` to skip this check. |
+| `--packages PKG [PKG ...]` | Bump specific package(s). Fails if other packages also have unreleased changes — use `--force` to skip this check. |
 
 **Bump type** (required, mutually exclusive):
 
@@ -159,14 +185,20 @@ uvr release [--where {ci,local}] [--dry-run] [--dev] [--plan JSON]
 
 ## `uvr install`
 
-Install a workspace package and its internal dependencies from GitHub releases.
+Install workspace packages from GitHub releases, CI artifacts, or local wheels.
 
 ```
-uvr install ORG/REPO/PKG[@VERSION]
+uvr install [PKG[@VERSION] ...] [--dist DIR] [--repo ORG/REPO] [--run-id ID]
 ```
 
-The install spec requires the three-part `org/repo/package` form. Append
-`@VERSION` to pin a specific release; otherwise the latest release is used.
+| Flag | Description |
+|------|-------------|
+| `--dist DIR` | Install from a local wheel directory (e.g. `dist/` after `uvr build`) |
+| `--repo ORG/REPO` | GitHub repository (inferred from cwd if omitted) |
+| `--run-id ID` | Install from a GitHub Actions run's artifacts |
+
+Package specs use the `org/repo/package` form for remote installs. With `--dist`,
+bare package names are matched against wheel filenames in the directory.
 
 ## `uvr download`
 

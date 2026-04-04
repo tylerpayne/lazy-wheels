@@ -17,13 +17,13 @@ class RunnersArgs(CommandArgs):
     """Typed arguments for ``uvr workflow runners``."""
 
     package: str | None = None
-    add_value: str | None = None
-    remove_value: str | None = None
+    add_runners: list[str] | None = None
+    remove_runners: list[str] | None = None
     clear: bool = False
 
 
 def cmd_runners(args: argparse.Namespace) -> None:
-    """Manage per-package build runners in [tool.uvr.matrix]."""
+    """Manage per-package build runners in [tool.uvr.runners]."""
     parsed = RunnersArgs.from_namespace(args)
     root = Path.cwd()
     pyproject = root / "pyproject.toml"
@@ -34,8 +34,8 @@ def cmd_runners(args: argparse.Namespace) -> None:
     matrix = get_matrix(doc)
 
     pkg = parsed.package
-    add_val = parsed.add_value
-    remove_val = parsed.remove_value
+    add_runners = parsed.add_runners
+    remove_runners = parsed.remove_runners
     clear = parsed.clear
 
     # No package -> show all (fill in defaults for unconfigured packages)
@@ -56,34 +56,41 @@ def cmd_runners(args: argparse.Namespace) -> None:
             print(f"'{pkg}' has no runners configured.")
         return
 
-    # --add (comma-separated labels become a single runner)
-    if add_val is not None:
-        labels = [s.strip() for s in add_val.split(",")]
+    # --add RUNNER [RUNNER ...] (each argument is a separate runner)
+    if add_runners is not None:
         runners = matrix.get(pkg, [])
-        if labels in runners:
-            print(f"'{add_val}' already in runners for '{pkg}'.")
-            return
-        runners.append(labels)
-        matrix[pkg] = runners
-        set_matrix(doc, matrix)
-        write_pyproject(pyproject, doc)
-        print(f"Added [{', '.join(labels)}] to '{pkg}' runners.")
+        added: list[str] = []
+        for runner in add_runners:
+            labels = [s.strip() for s in runner.split(",")]
+            if labels in runners:
+                print(f"'{runner}' already in runners for '{pkg}'.")
+                continue
+            runners.append(labels)
+            added.append(f"[{', '.join(labels)}]")
+        if added:
+            matrix[pkg] = runners
+            set_matrix(doc, matrix)
+            write_pyproject(pyproject, doc)
+            print(f"Added {', '.join(added)} to '{pkg}' runners.")
         return
 
-    # --remove
-    if remove_val is not None:
-        labels = [s.strip() for s in remove_val.split(",")]
+    # --remove RUNNER [RUNNER ...] (each argument is a separate runner)
+    if remove_runners is not None:
         runners = matrix.get(pkg, [])
-        if labels not in runners:
-            fatal(f"[{', '.join(labels)}] not in runners for '{pkg}'")
-        runners.remove(labels)
+        removed: list[str] = []
+        for runner in remove_runners:
+            labels = [s.strip() for s in runner.split(",")]
+            if labels not in runners:
+                fatal(f"[{', '.join(labels)}] not in runners for '{pkg}'")
+            runners.remove(labels)
+            removed.append(f"[{', '.join(labels)}]")
         if runners:
             matrix[pkg] = runners
         else:
             del matrix[pkg]
         set_matrix(doc, matrix)
         write_pyproject(pyproject, doc)
-        print(f"Removed [{', '.join(labels)}] from '{pkg}' runners.")
+        print(f"Removed {', '.join(removed)} from '{pkg}' runners.")
         return
 
     # Read

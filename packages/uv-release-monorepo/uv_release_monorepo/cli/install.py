@@ -26,6 +26,7 @@ class InstallArgs(CommandArgs):
     packages: list[str] | None = None
     run_id: str | None = None
     repo: str | None = None
+    dist: str | None = None
     pip_args: list[str] = []
 
 
@@ -88,12 +89,49 @@ def _list_repo_packages(gh_repo: str) -> set[str]:
 
 
 def cmd_install(args: argparse.Namespace) -> None:
-    """Install packages from GitHub releases or CI run artifacts."""
+    """Install packages from GitHub releases, CI run artifacts, or local wheels."""
     import subprocess
 
     from ..shared.models import FetchGithubReleaseCommand
 
     parsed = InstallArgs.from_namespace(args)
+
+    # --dist: install from a local wheel directory
+    if parsed.dist is not None:
+        dist_dir = Path(parsed.dist)
+        if not dist_dir.is_dir():
+            fatal(f"Directory not found: {dist_dir}")
+
+        package_specs = parsed.packages or []
+        if package_specs:
+            # Filter to requested packages
+            wheels: list[str] = []
+            for spec in package_specs:
+                name = spec.split("@")[0]
+                dist_name = canonicalize_name(name).replace("-", "_")
+                found = sorted(dist_dir.glob(f"{dist_name}-*.whl"))
+                if not found:
+                    fatal(f"No wheel found for '{name}' in {dist_dir}")
+                wheels.append(str(found[-1]))
+                print(f"  {name}: {found[-1].name}")
+        else:
+            # Install all wheels in the directory
+            wheels = [str(w) for w in sorted(dist_dir.glob("*.whl"))]
+            if not wheels:
+                fatal(f"No wheels found in {dist_dir}")
+            for w in wheels:
+                print(f"  {Path(w).name}")
+
+        extra = list(parsed.pip_args)
+        if extra and extra[0] == "--":
+            extra = extra[1:]
+
+        print(f"\nInstalling {len(wheels)} wheel(s) from {dist_dir}...")
+        subprocess.run(
+            ["uv", "pip", "install", "--find-links", str(dist_dir), *wheels, *extra],
+            check=True,
+        )
+        return
 
     # Parse all package specs
     package_specs = parsed.packages or []

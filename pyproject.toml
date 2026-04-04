@@ -34,3 +34,6 @@ check = ["lint", "typecheck"]
 fix = ["lintfix", "format"]
 test = "pytest packages/uv-release-monorepo/tests/ -v"
 all = ["fix", "check", "test"]
+"docs:dev" = "npx vitepress dev docs"
+"docs:build" = "npx vitepress build docs"
+"docs:preview" = "npx vitepress preview docs"

@@ -62,7 +62,7 @@ notify:
 
 ## Access the plan in custom jobs
 
-The full release plan JSON is available as `${{ inputs.plan }}`. Use `fromJSON(inputs.plan)` in expressions:
+The full release plan JSON is available as <code v-pre>${{ inputs.plan }}</code>. Use `fromJSON(inputs.plan)` in expressions:
 
 ```yaml
 if: fromJSON(inputs.plan).changed['my-package'] != null
@@ -72,7 +72,7 @@ env:
 
 ## Tips
 
-- **Use the skip mechanism.** Add `if: ${{ !contains(fromJSON(inputs.plan).skip, '<job-name>') }}` so the job can be skipped with `uvr release --skip <job-name>`.
+- **Use the skip mechanism.** Add <code v-pre>if: ${{ !contains(fromJSON(inputs.plan).skip, '&lt;job-name&gt;') }}</code> so the job can be skipped with `uvr release --skip <job-name>`.
 - **Gate core jobs via `needs`.** Add your job to a core job's `needs` list to block it.
 - **Validate after editing:** `uvr workflow validate`
 - **Use `always() && !failure() && !cancelled()`** for jobs that follow skippable upstream jobs.

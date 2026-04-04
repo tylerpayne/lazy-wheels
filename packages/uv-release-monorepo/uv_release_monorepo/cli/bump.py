@@ -31,7 +31,6 @@ class BumpArgs(CommandArgs):
     """Typed arguments for ``uvr bump``."""
 
     bump_all: bool = False
-    changed: bool = False
     packages: list[str] | None = None
     force: bool = False
     bump_type: str | None = None
@@ -135,10 +134,9 @@ def cmd_bump(args: argparse.Namespace) -> None:
             if name not in packages:
                 fatal(f"Unknown package: {name!r}")
             targets[name] = packages[name]
-    elif parsed.changed:
-        targets = _resolve_changed(packages)
     else:
-        fatal("Specify --all, --changed, or --package PKG.")
+        # Default: bump only changed packages
+        targets = _resolve_changed(packages)
 
     if not targets:
         print("No packages to bump.")
@@ -153,7 +151,7 @@ def cmd_bump(args: argparse.Namespace) -> None:
             names = ", ".join(missed)
             fatal(
                 f"Other packages also have unreleased changes: {names}\n"
-                f"  Include them with --package or use --force to skip this check."
+                f"  Include them with --packages or use --force to skip this check."
             )
 
     # Determine bump type

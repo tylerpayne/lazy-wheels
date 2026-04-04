@@ -55,18 +55,6 @@ git add -A && git commit -m "chore: update dependency pins" && git push
 uvr release
 ```
 
-## Version bumping
-
-Use `uvr bump` to prepare the next version. CI controls patch bumps after each release — you own major, minor, and pre-release transitions:
-
-```bash
-uvr bump --all --minor           # prepare a minor release
-uvr bump --all --major           # prepare a major release
-uvr bump --package my-pkg --alpha  # enter alpha cycle for one package
-```
-
-The release type is auto-detected from the version — `uvr release` just strips `.devN` and publishes whatever is underneath.
-
 ## Print raw plan JSON
 
 ```bash
@@ -74,6 +62,7 @@ uvr release --json
 ```
 
 Useful for debugging or piping to other tools.
+
 ---
 
-**Under the hood:** [Change detection internals](../under-the-hood/02-change-detection.md)
+**Under the hood:** [CI execution internals](../under-the-hood/07-ci-execution.md)

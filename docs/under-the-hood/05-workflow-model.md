@@ -2,7 +2,7 @@
 
 The Pydantic model hierarchy that represents `.github/workflows/release.yml`.
 
-See [Add CI hooks](../user-guide/05-custom-jobs.md) and [How it works](08-architecture.md) for usage.
+See [Add CI hooks](../user-guide/08-custom-jobs.md) and [How it works](08-architecture.md) for usage.
 
 ## Source files
 
@@ -107,7 +107,7 @@ back. This preserves the linear pipeline without breaking user customizations.
 ### `_frozen` fields
 
 Core jobs (`BuildJob`, `ReleaseJob`, `BumpJob`) use `_frozen` to protect
-fields that contain `${{ fromJSON(inputs.plan) }}` expressions. These are
+fields that contain <code v-pre>${{ fromJSON(inputs.plan) }}</code> expressions. These are
 annotated with `Annotated[type, _frozen(default)]`:
 
 ```python

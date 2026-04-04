@@ -3,7 +3,7 @@
 The `ReleasePlan` model is the single artifact passed from the local CLI to CI.
 It encodes everything the executor needs with zero git access.
 
-See [How it works](08-architecture.md) and [Skip jobs and reuse artifacts](../user-guide/08-troubleshooting.md) for usage.
+See [How it works](08-architecture.md) and [Skip jobs and reuse artifacts](../user-guide/11-troubleshooting.md) for usage.
 
 ## Source files
 
@@ -160,4 +160,4 @@ converts older plans (e.g., the legacy `release_type` string field is mapped to
 The plan is serialized as JSON via `plan.model_dump_json()` and passed as the
 `plan` input to `gh workflow run release.yml -f plan=<json>`. In CI, it is
 deserialized with `ReleasePlan.model_validate_json(plan_json)`. GitHub Actions
-expressions access it via `${{ fromJSON(inputs.plan).field }}`.
+expressions access it via <code v-pre>${{ fromJSON(inputs.plan).field }}</code>.
