@@ -47,9 +47,9 @@ uvr release --dev        # publish 1.0.1.dev0 as-is
 ### Skipping and reusing
 
 ```bash
-uvr release --skip build                      # skip the build job
-uvr release --skip-to release                 # skip everything before release
-uvr release --skip build --reuse-run 12345    # reuse artifacts from run 12345
+uvr release --skip uvr-build                       # skip the build job
+uvr release --skip-to uvr-release                  # skip everything before release
+uvr release --skip uvr-build --reuse-run 12345     # reuse artifacts from run 12345
 ```
 
 ## Managing runners

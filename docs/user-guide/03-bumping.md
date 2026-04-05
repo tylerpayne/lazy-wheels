@@ -26,6 +26,14 @@ uvr bump --packages my-pkg other-pkg --minor
 
 Fails if other packages also have unreleased changes — use `--force` to skip this check.
 
+## Skip dependency pinning
+
+By default, bumping a package also updates `>=` pins in downstream consumers. Use `--no-pin` to bump the version without touching dependents:
+
+```bash
+uvr bump --packages my-pkg --minor --no-pin
+```
+
 ## Pre-release cycles
 
 ```bash

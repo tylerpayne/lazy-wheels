@@ -156,7 +156,7 @@ Run 'uvr <command> --help' for details on a specific command.
     _dispatch.add_argument(
         "--skip-to",
         metavar="JOB",
-        help="Skip all CI jobs before JOB.",
+        help="Skip all CI jobs before JOB (reads job order from release.yml).",
     )
     _dispatch.add_argument(
         "--reuse-run",
@@ -259,6 +259,13 @@ Run 'uvr <command> --help' for details on a specific command.
         action="store_true",
         default=False,
         help="Skip the changed-package guard when using --packages.",
+    )
+    bump_parser.add_argument(
+        "--no-pin",
+        action="store_true",
+        default=False,
+        dest="no_pin",
+        help="Skip updating dependency pins in downstream packages.",
     )
     _btype = bump_parser.add_argument_group("bump type (required)")
     _btype_mut = _btype.add_mutually_exclusive_group(required=True)

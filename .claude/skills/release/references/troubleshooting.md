@@ -59,17 +59,17 @@ uvr release
 Reuse the build artifacts so you don't rebuild:
 
 ```bash
-uvr release --skip-to release --reuse-run <RUN_ID>
+uvr release --skip-to uvr-release --reuse-run <RUN_ID>
 ```
 
-`--skip-to release` skips the build job. `--reuse-run` downloads artifacts from the prior run.
+`--skip-to uvr-release` skips the build job. `--reuse-run` downloads artifacts from the prior run.
 
 ### Release succeeded, bump failed
 
 GitHub releases already exist, so tell uvr to skip both build and release:
 
 ```bash
-uvr release --skip-to bump --reuse-release
+uvr release --skip-to uvr-bump --reuse-release
 ```
 
 `--reuse-release` means "don't try to create releases that already exist."
@@ -92,8 +92,8 @@ Custom jobs must check the plan's skip list in their `if` condition for this to 
 
 ### Constraints
 
-- `--reuse-run` requires build to be skipped (via `--skip build` or `--skip-to release`/`--skip-to bump`)
-- `--reuse-release` requires both build and release to be skipped (via `--skip-to bump`)
+- `--reuse-run` requires build to be skipped (via `--skip uvr-build` or `--skip-to uvr-release`/`--skip-to uvr-bump`)
+- `--reuse-release` requires both build and release to be skipped (via `--skip-to uvr-bump`)
 - `--reuse-run` and `--reuse-release` are mutually exclusive
 
 ## Main moved ahead of the release branch

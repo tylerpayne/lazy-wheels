@@ -33,6 +33,7 @@ class BumpArgs(CommandArgs):
     bump_all: bool = False
     packages: list[str] | None = None
     force: bool = False
+    no_pin: bool = False
     bump_type: str | None = None
 
 
@@ -187,7 +188,7 @@ def cmd_bump(args: argparse.Namespace) -> None:
 
     # Pin internal deps — skip for post bumps (post releases only affect the
     # target package, dependents keep their existing pins).
-    if bump_type != "post":
+    if bump_type != "post" and not parsed.no_pin:
         for name, info in packages.items():
             dep_versions = {
                 dep: bumped_versions[dep] for dep in info.deps if dep in bumped_versions

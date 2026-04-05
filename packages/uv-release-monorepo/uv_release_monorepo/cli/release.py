@@ -38,21 +38,33 @@ class ReleaseArgs(CommandArgs):
     pip_args: list[str] = []
 
 
-# Executor pipeline phases — the order ReleaseExecutor.run() executes them.
-# These are skip-condition names (what appears in plan.skip) and YAML job keys.
-_PIPELINE = ("uvr-build", "uvr-release", "uvr-bump")
+_CORE_JOBS = {"uvr-validate", "uvr-build", "uvr-release", "uvr-bump"}
+_FALLBACK_JOBS = ["uvr-validate", "uvr-build", "uvr-release", "uvr-bump"]
 
 
-def _compute_skipped(parsed: ReleaseArgs) -> set[str]:
+def _compute_skipped(parsed: ReleaseArgs, workflow_jobs: list[str]) -> set[str]:
     """Merge --skip and --skip-to into a single set of job names to skip."""
     skipped: set[str] = set(parsed.skip or [])
 
     skip_to = parsed.skip_to
     if skip_to:
-        if skip_to not in _PIPELINE:
-            fatal(f"--skip-to requires a pipeline phase: {', '.join(_PIPELINE)}")
-        idx = _PIPELINE.index(skip_to)
-        skipped |= set(_PIPELINE[:idx])
+        if skip_to not in workflow_jobs:
+            fatal(
+                f"Unknown job {skip_to!r} for --skip-to.\n"
+                f"  Available jobs: {', '.join(workflow_jobs)}"
+            )
+        idx = workflow_jobs.index(skip_to)
+        skipped |= {j for j in workflow_jobs[:idx] if j != "uvr-validate"}
+
+    unknown = skipped - set(workflow_jobs)
+    if unknown:
+        fatal(
+            f"Unknown job(s) for --skip: {', '.join(sorted(unknown))}.\n"
+            f"  Available jobs: {', '.join(workflow_jobs)}"
+        )
+
+    if "uvr-validate" in skipped:
+        fatal("uvr-validate cannot be skipped.")
 
     return skipped
 
@@ -92,15 +104,15 @@ def _load_workflow_jobs() -> list[str]:
 
     workflow = Path.cwd() / ".github" / "workflows" / "release.yml"
     if not workflow.exists():
-        return []
+        return list(_FALLBACK_JOBS)
     try:
         from ..shared.utils.yaml import load_yaml
 
         doc = load_yaml(workflow)
-        return list(doc.get("jobs", {}).keys())
+        return list(doc.get("jobs", {}).keys()) or list(_FALLBACK_JOBS)
     except Exception as exc:
         print(f"WARNING: Could not load workflow: {exc}", file=sys.stderr)
-        return []
+        return list(_FALLBACK_JOBS)
 
 
 def _print_packages(plan: ReleasePlan) -> None:
@@ -169,9 +181,40 @@ def _print_packages(plan: ReleasePlan) -> None:
         print(f"  {_row(row)}")
 
 
+def _warn_missing_skip_guards(
+    skipped: set[str],
+    workflow_path: Path,
+) -> None:
+    """Warn if custom jobs being skipped don't check the plan's skip list."""
+    from ..shared.utils.yaml import load_yaml
+
+    custom_skipped = skipped - _CORE_JOBS
+    if not custom_skipped:
+        return
+
+    try:
+        doc = load_yaml(workflow_path)
+    except Exception:
+        return
+
+    jobs = doc.get("jobs", {})
+    for job_name in sorted(custom_skipped):
+        job = jobs.get(job_name, {})
+        if_cond = job.get("if", "")
+        if f"contains(fromJSON(inputs.plan).skip, '{job_name}')" not in if_cond:
+            print(
+                f"WARNING: {job_name!r} is being skipped but its `if` condition "
+                f"does not check the plan's skip list.\n"
+                f"  Add: if: ${{{{ !contains(fromJSON(inputs.plan).skip, "
+                f"'{job_name}') }}}}",
+                file=sys.stderr,
+            )
+
+
 def _print_plan(
     plan: ReleasePlan,
     skipped: set[str],
+    workflow_jobs: list[str],
 ) -> None:
     """Print a human-readable summary of the release plan."""
 
@@ -182,11 +225,6 @@ def _print_plan(
     _sw = 6  # width of "STATUS"
     _D = " " * 14  # detail indent under phase
     print(f"  {'STATUS'.ljust(_sw)}  JOB")
-
-    workflow_jobs = _load_workflow_jobs()
-    # Ensure core jobs appear even if workflow can't be loaded
-    if not workflow_jobs:
-        workflow_jobs = ["uvr-validate", "uvr-build", "uvr-release", "uvr-bump"]
 
     for job in workflow_jobs:
         if job in skipped:
@@ -287,6 +325,7 @@ def cmd_release(args: argparse.Namespace) -> None:
     root = Path.cwd()
     json_only = parsed.json_output
     allow_dirty = parsed.allow_dirty
+    workflow_path = root / parsed.workflow_dir / "release.yml"
     if where == "ci" and not json_only:
         result = subprocess.run(
             ["git", "status", "--porcelain"], capture_output=True, text=True
@@ -331,15 +370,21 @@ def cmd_release(args: argparse.Namespace) -> None:
                     "  Use --allow-dirty to proceed anyway."
                 )
 
-        workflow_path = root / parsed.workflow_dir / "release.yml"
         if not workflow_path.exists():
             fatal("No release workflow found. Run `uvr workflow init` first.")
 
+    # Load workflow jobs for validation and display
+    workflow_jobs = _load_workflow_jobs()
+
     # Compute and validate skip/reuse
-    skipped = _compute_skipped(parsed)
+    skipped = _compute_skipped(parsed, workflow_jobs)
     reuse_run = parsed.reuse_run
     reuse_release = parsed.reuse_release
     _validate_skip_reuse(skipped, reuse_run, reuse_release)
+
+    # Warn if custom jobs being skipped lack the skip guard
+    if workflow_path.exists():
+        _warn_missing_skip_guards(skipped, workflow_path)
 
     # Read stored matrix from pyproject.toml
     package_runners = read_matrix(root)
@@ -487,11 +532,11 @@ def cmd_release(args: argparse.Namespace) -> None:
 
     # Dry run: print summary and exit
     if parsed.dry_run:
-        _print_plan(plan, skipped)
+        _print_plan(plan, skipped, workflow_jobs)
         return
 
     # Print human-readable summary
-    _print_plan(plan, skipped)
+    _print_plan(plan, skipped, workflow_jobs)
 
     # Commit release versions and pinned deps (planner wrote them locally)
     subprocess.run(

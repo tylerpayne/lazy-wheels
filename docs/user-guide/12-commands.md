@@ -96,7 +96,7 @@ before releasing — the release type is determined by the version in pyproject.
 ```
 uvr bump [--all | --packages PKG [PKG ...]]
          <--major | --minor | --patch | --alpha | --beta | --rc | --post | --dev | --stable>
-         [--force]
+         [--force] [--no-pin]
 ```
 
 **Scope** (optional, defaults to changed packages):
@@ -125,7 +125,8 @@ uvr bump [--all | --packages PKG [PKG ...]]
 
 | Flag | Description |
 |------|-------------|
-| `--force` | Skip the changed-package guard when using `--package` |
+| `--force` | Skip the changed-package guard when using `--packages` |
+| `--no-pin` | Skip updating dependency pins in downstream packages |
 
 ## `uvr release`
 
@@ -165,8 +166,8 @@ uvr release [--where {ci,local}] [--dry-run] [--dev] [--plan JSON]
 | Flag | Description |
 |------|-------------|
 | `-y`, `--yes` | Skip confirmation prompt and dispatch immediately |
-| `--skip JOB` | Skip a CI job (repeatable; choices: `uvr-build`, `uvr-release`, `uvr-bump`) |
-| `--skip-to JOB` | Skip all CI jobs before JOB (choices: `uvr-release`, `uvr-bump`) |
+| `--skip JOB` | Skip a CI job (repeatable). Validated against jobs in `release.yml`. |
+| `--skip-to JOB` | Skip all CI jobs before JOB (reads job order from `release.yml`). |
 | `--reuse-run RUN_ID` | Reuse artifacts from a prior workflow run |
 | `--reuse-release` | Assume GitHub releases already exist |
 
