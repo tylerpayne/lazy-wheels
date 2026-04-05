@@ -46,7 +46,16 @@ Each inner list is a set of runner labels for a single matrix entry. Use multipl
 
 ## Publishing
 
-<code class="brand-code">uvr</code> can publish wheels to package indexes after creating GitHub releases.
+<code class="brand-code">uvr</code> can publish wheels to package indexes after creating GitHub releases. Publishing requires a named index in your `pyproject.toml` with a `publish-url`.
+
+```toml
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+publish-url = "https://upload.pypi.org/legacy/"
+```
+
+Then configure <code class="brand-code">uvr</code> to use it.
 
 ```bash
 uvr workflow publish --index pypi --environment pypi-publish
@@ -58,7 +67,7 @@ Stored in `pyproject.toml`.
 
 ```toml
 [tool.uvr.publish]
-index = "pypi"                        # named index from [[tool.uv.index]]
+index = "pypi"                        # must match a [[tool.uv.index]] name
 environment = "pypi-publish"          # GitHub Actions environment
 trusted-publishing = "automatic"      # "automatic", "always", or "never"
 exclude = ["pkg-debug"]

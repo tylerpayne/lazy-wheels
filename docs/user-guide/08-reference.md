@@ -128,8 +128,13 @@ editor = "code"                      # editor for conflict resolution
 [tool.uvr.runners]
 pkg-alpha = [["ubuntu-latest"], ["macos-latest"]]
 
+[[tool.uv.index]]
+name = "pypi"                        # required for publishing
+url = "https://pypi.org/simple/"
+publish-url = "https://upload.pypi.org/legacy/"
+
 [tool.uvr.publish]
-index = "pypi"                       # named index from [[tool.uv.index]]
+index = "pypi"                       # must match a [[tool.uv.index]] name
 environment = "pypi-publish"         # GitHub Actions environment
 trusted-publishing = "automatic"     # "automatic", "always", or "never"
 include = ["pkg-alpha"]              # only publish these
