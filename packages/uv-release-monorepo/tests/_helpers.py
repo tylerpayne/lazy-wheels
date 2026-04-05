@@ -76,6 +76,21 @@ def _runners_args(**kwargs: object) -> argparse.Namespace:
     return argparse.Namespace(**defaults)
 
 
+def _publish_args(**kwargs: object) -> argparse.Namespace:
+    """Build a cmd_publish_config Namespace with sensible defaults."""
+    defaults: dict[str, object] = dict(
+        index=None,
+        environment=None,
+        trusted_publishing=None,
+        include_packages=None,
+        exclude_packages=None,
+        remove_packages=None,
+        clear=False,
+    )
+    defaults.update(kwargs)
+    return argparse.Namespace(**defaults)
+
+
 def _make_ctx(
     packages: dict[str, PackageInfo],
     release_tags: dict[str, str | None] | None = None,

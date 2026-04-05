@@ -7,7 +7,7 @@ from pathlib import Path
 
 from packaging.utils import canonicalize_name
 
-from ..utils.config import get_config
+from ..utils.config import get_config, get_publish_config
 from ..context import ReleaseContext, RepositoryContext, build_context
 from ..utils.shell import Progress
 from ..models import (
@@ -18,6 +18,7 @@ from ..models import (
     PinDepsCommand,
     PlanConfig,
     PublishGithubReleaseCommand,
+    PublishToIndexCommand,
     ReleasePlan,
     StageCommand,
     ShellCommand,
@@ -197,6 +198,8 @@ class ReleasePlanner:
         # Generate command sequences
         build_commands = self._generate_build_commands(changed, unchanged, release_tags)
         release_commands = self._generate_release_commands(changed)
+        publish_config = get_publish_config(root_doc)
+        publish_commands = self._generate_publish_commands(changed, publish_config)
         bump_commands = self._generate_bump_commands(changed, published_versions)
 
         # Validate tag conflicts: always abort on conflict
@@ -212,6 +215,8 @@ class ReleasePlanner:
             unchanged=unchanged,
             build_commands=build_commands,
             release_commands=release_commands,
+            publish_commands=publish_commands,
+            publish_environment=publish_config.get("environment", ""),
             bump_commands=bump_commands,
         )
 
@@ -417,6 +422,39 @@ class ReleasePlanner:
             ShellCommand(args=["git", "push", "--tags"], label="Push release tags")
         )
 
+        return cmds
+
+    def _generate_publish_commands(
+        self,
+        changed: dict[str, ChangedPackage],
+        publish_config: dict,
+    ) -> list[ShellCommand | PublishToIndexCommand]:
+        """Generate publish commands for packages configured in [tool.uvr.publish]."""
+        include = publish_config.get("include", [])
+        exclude = publish_config.get("exclude", [])
+        index = publish_config.get("index", "")
+        trusted_publishing = publish_config.get("trusted_publishing", "automatic")
+
+        # Determine which changed packages should be published
+        publishable = set(changed.keys())
+        if include:
+            publishable &= set(include)
+        publishable -= set(exclude)
+
+        if not publishable:
+            return []
+
+        cmds: list[ShellCommand | PublishToIndexCommand] = []
+        for name in sorted(publishable):
+            pkg = changed[name]
+            cmds.append(
+                PublishToIndexCommand(
+                    dist_pattern=f"dist/{_dist_name(name)}-{pkg.release_version}-*.whl",
+                    index=index,
+                    trusted_publishing=trusted_publishing,
+                    label=f"Publish {name} {pkg.release_version} to index",
+                )
+            )
         return cmds
 
     def _generate_bump_commands(

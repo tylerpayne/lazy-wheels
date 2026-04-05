@@ -65,6 +65,12 @@ class ReleaseExecutor:
         self._run_commands_or_exit(self.plan.release_commands)
         self.hook.post_release(self.plan)
 
+    def publish_to_index(self) -> None:
+        """Run index publishing commands (upload wheels to package indexes)."""
+        self.hook.pre_publish(self.plan)
+        self._run_commands_or_exit(self.plan.publish_commands)
+        self.hook.post_publish(self.plan)
+
     def bump(self) -> None:
         """Run bump commands (version bumps, baseline tags, push)."""
         self.hook.pre_bump(self.plan)
@@ -72,9 +78,10 @@ class ReleaseExecutor:
         self.hook.post_bump(self.plan)
 
     def run(self) -> None:
-        """Execute all phases: build -> publish -> bump."""
+        """Execute all phases: build -> publish -> publish_to_index -> bump."""
         self.build()
         self.publish()
+        self.publish_to_index()
         self.bump()
 
     def _run_packages(self, stage: BuildStage) -> None:

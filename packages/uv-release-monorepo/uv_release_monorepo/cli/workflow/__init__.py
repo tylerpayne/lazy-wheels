@@ -1,10 +1,11 @@
-"""Workflow management subcommands (init, upgrade, validate, runners)."""
+"""Workflow management subcommands (init, upgrade, validate, runners, publish)."""
 
 from __future__ import annotations
 
 import argparse
 
 from .init import cmd_init, cmd_upgrade
+from .publish import cmd_publish_config
 from .runners import cmd_runners
 from .validate import cmd_validate
 
@@ -20,6 +21,7 @@ def cmd_init_dispatch(args: argparse.Namespace) -> None:
 __all__ = [
     "cmd_init",
     "cmd_init_dispatch",
+    "cmd_publish_config",
     "cmd_runners",
     "cmd_upgrade",
     "cmd_validate",

@@ -84,6 +84,64 @@ def get_matrix(doc: tomlkit.TOMLDocument) -> dict[str, list[list[str]]]:
     return result
 
 
+def get_publish_config(doc: tomlkit.TOMLDocument) -> dict:
+    """Extract [tool.uvr.publish] as a dict.
+
+    Supported keys:
+        index: Named index from ``[[tool.uv.index]]`` to publish to.
+        environment: GitHub Actions environment for trusted publishing.
+        trusted_publishing: OIDC mode (``"automatic"``, ``"always"``, ``"never"``).
+        include: List of package names to publish (empty = all changed packages).
+        exclude: List of package names to skip publishing.
+
+    If ``include`` is set, only listed packages are published.
+    ``exclude`` is applied after ``include``.
+    """
+    raw = get_path(doc, "tool", "uvr", "publish", default={})
+    return {
+        "index": raw.get("index", ""),
+        "environment": raw.get("environment", ""),
+        "trusted_publishing": raw.get("trusted-publishing", "automatic"),
+        "include": list(raw.get("include", [])),
+        "exclude": list(raw.get("exclude", [])),
+    }
+
+
+def set_publish_config(doc: tomlkit.TOMLDocument, config: dict) -> None:
+    """Write publish configuration into [tool.uvr.publish].
+
+    Accepts the same dict shape returned by :func:`get_publish_config`.
+    """
+    if "tool" not in doc:
+        doc["tool"] = tomlkit.table()
+    tool = doc["tool"]
+    assert isinstance(tool, (Table, OutOfOrderTableProxy))
+    if "uvr" not in tool:
+        tool["uvr"] = tomlkit.table()
+    uvr = tool["uvr"]
+    assert isinstance(uvr, Table)
+
+    publish = tomlkit.table()
+    if config.get("index"):
+        publish["index"] = config["index"]
+    if config.get("environment"):
+        publish["environment"] = config["environment"]
+    tp = config.get("trusted_publishing", "automatic")
+    if tp != "automatic":
+        publish["trusted-publishing"] = tp
+    if config.get("include"):
+        inc = tomlkit.array()
+        for item in config["include"]:
+            inc.append(item)
+        publish["include"] = inc
+    if config.get("exclude"):
+        exc = tomlkit.array()
+        for item in config["exclude"]:
+            exc.append(item)
+        publish["exclude"] = exc
+    uvr["publish"] = publish
+
+
 def set_matrix(doc: tomlkit.TOMLDocument, matrix: dict[str, list[list[str]]]) -> None:
     """Write {package: [[label, ...], ...]} into [tool.uvr.runners].
 

@@ -263,6 +263,44 @@ def print_matrix_status(package_runners: dict[str, list[list[str]]]) -> None:
             print(f"    {pkg}")
 
 
+def print_publish_status(config: dict, all_packages: list[str]) -> None:
+    """Print the publish configuration and which packages will be published."""
+    index = config.get("index", "")
+    environment = config.get("environment", "")
+    trusted_publishing = config.get("trusted_publishing", "automatic")
+    include = config.get("include", [])
+    exclude = config.get("exclude", [])
+
+    if not index and not environment and not include and not exclude:
+        print("\nPublish config: not configured")
+        print("  Run 'uvr workflow publish --index <name>' to set up publishing.")
+        return
+
+    print()
+    print("Publish config:")
+    print(f"  index:              {index or '(not set)'}")
+    print(f"  environment:        {environment or '(not set)'}")
+    print(f"  trusted-publishing: {trusted_publishing}")
+
+    # Determine which packages will be published
+    publishable = set(all_packages)
+    if include:
+        publishable &= set(include)
+    publishable -= set(exclude)
+
+    if publishable:
+        print("  packages:")
+        for pkg in sorted(publishable):
+            print(f"    {pkg}")
+    else:
+        print("  packages: (none)")
+
+    excluded = set(exclude) & set(all_packages)
+    if excluded:
+        names = ", ".join(sorted(excluded))
+        print(f"  ({len(excluded)} excluded: {names})")
+
+
 def print_dependencies(
     packages: dict[str, tuple[str, list[str]]],
     *,

@@ -600,6 +600,57 @@ ReleaseCommand = Annotated[
 """Union of command types that can appear in the release commands list."""
 
 
+class PublishToIndexCommand(BaseModel):
+    """Publish wheel files to a package index using ``uv publish``.
+
+    At execution time, resolves ``dist_pattern`` via ``glob.glob()`` to find
+    built wheels, then uploads them with ``uv publish``.
+
+    Attributes:
+        type: Discriminator for the command union.
+        dist_pattern: Glob pattern for wheel files (e.g. ``"dist/pkg_alpha-1.0.0-*.whl"``).
+        index: Named index from ``[[tool.uv.index]]`` (``--index`` flag).
+        trusted_publishing: OIDC mode: ``"automatic"``, ``"always"``, or ``"never"``.
+        label: Human-readable description printed before execution.
+        check: If True, abort on non-zero exit code.
+    """
+
+    type: Literal["publish_to_index"] = "publish_to_index"
+    dist_pattern: str
+    index: str = ""
+    trusted_publishing: str = "automatic"
+    label: str = ""
+    check: bool = True
+
+    def execute(self) -> subprocess.CompletedProcess[bytes]:
+        """Upload matching files with ``uv publish``."""
+        from glob import glob as glob_fn
+
+        files = sorted(glob_fn(self.dist_pattern))
+        if not files:
+            print(
+                f"ERROR: No files matching {self.dist_pattern!r} — "
+                f"cannot publish to index.",
+                file=sys.stderr,
+            )
+            return subprocess.CompletedProcess(args=[], returncode=1)
+
+        args = ["uv", "publish"]
+        if self.index:
+            args.extend(["--index", self.index])
+        if self.trusted_publishing:
+            args.extend(["--trusted-publishing", self.trusted_publishing])
+        args.extend(files)
+        return subprocess.run(args)
+
+
+PublishCommand = Annotated[
+    Union[ShellCommand, PublishToIndexCommand],
+    Field(discriminator="type"),
+]
+"""Union of command types that can appear in the publish commands list."""
+
+
 BumpCommand = Annotated[
     Union[ShellCommand, PinDepsCommand],
     Field(discriminator="type"),
@@ -655,7 +706,7 @@ class ReleasePlan(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    schema_version: int = 11
+    schema_version: int = 12
     uvr_version: str
     uvr_install: str = "uv-release-monorepo"
     python_version: str = "3.12"
@@ -670,6 +721,8 @@ class ReleasePlan(BaseModel):
     # Pre-computed command sequences for the executor
     build_commands: dict[RunnerKey, list[BuildStage]] = Field(default_factory=dict)
     release_commands: list[ReleaseCommand] = Field(default_factory=list)
+    publish_commands: list[PublishCommand] = Field(default_factory=list)
+    publish_environment: str = ""
     bump_commands: list[BumpCommand] = Field(default_factory=list)
 
     @model_validator(mode="before")

@@ -13,7 +13,7 @@ from .install import cmd_install
 from .release import cmd_release
 from .skill import cmd_skill_dispatch
 from .status import cmd_status
-from .workflow import cmd_init_dispatch, cmd_runners, cmd_validate
+from .workflow import cmd_init_dispatch, cmd_publish_config, cmd_runners, cmd_validate
 
 
 def cli() -> None:
@@ -475,6 +475,47 @@ Run 'uvr <command> --help' for details on a specific command.
     _rmut.add_argument("--clear", action="store_true")
     wf_runners_parser.set_defaults(func=cmd_runners)
 
+    wf_publish_parser = workflow_sub.add_parser(
+        "publish", help="Manage index publishing config."
+    )
+    wf_publish_parser.add_argument(
+        "--index", metavar="NAME", help="Set the default publish index."
+    )
+    wf_publish_parser.add_argument(
+        "--environment", metavar="ENV", help="Set GitHub Actions environment."
+    )
+    wf_publish_parser.add_argument(
+        "--trusted-publishing",
+        choices=["automatic", "always", "never"],
+        help="Set trusted publishing mode.",
+    )
+    _pmut = wf_publish_parser.add_mutually_exclusive_group()
+    _pmut.add_argument(
+        "--include",
+        dest="include_packages",
+        nargs="+",
+        metavar="PKG",
+        help="Add packages to the include list.",
+    )
+    _pmut.add_argument(
+        "--exclude",
+        dest="exclude_packages",
+        nargs="+",
+        metavar="PKG",
+        help="Add packages to the exclude list.",
+    )
+    _pmut.add_argument(
+        "--clear", action="store_true", help="Remove entire publish config."
+    )
+    wf_publish_parser.add_argument(
+        "--remove",
+        dest="remove_packages",
+        nargs="+",
+        metavar="PKG",
+        help="Remove packages from include/exclude lists (combinable with --include/--exclude).",
+    )
+    wf_publish_parser.set_defaults(func=cmd_publish_config)
+
     # skill
     skill_parser = subparsers.add_parser(
         "skill",
@@ -528,6 +569,7 @@ Run 'uvr <command> --help' for details on a specific command.
         cmd_build as cmd_job_build,
         cmd_bump as cmd_job_bump,
         cmd_download as cmd_job_download,
+        cmd_publish_to_index as cmd_job_publish,
         cmd_release as cmd_job_release,
         cmd_validate_plan,
     )
@@ -570,6 +612,16 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
     )
     release_job_parser.set_defaults(func=cmd_job_release)
+
+    publish_job_parser = jobs_sub.add_parser(
+        "publish", help="Publish wheels to package indexes."
+    )
+    publish_job_parser.add_argument(
+        "--plan",
+        default=None,
+        help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
+    )
+    publish_job_parser.set_defaults(func=cmd_job_publish)
 
     bump_job_parser = jobs_sub.add_parser(
         "bump", help="Bump versions, commit, baseline tags, and push."
