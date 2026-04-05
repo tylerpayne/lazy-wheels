@@ -1,6 +1,7 @@
 # uv-release-monorepo
 
 [![Docs](https://github.com/tylerpayne/uv-release-monorepo/actions/workflows/docs.yml/badge.svg)](https://github.com/tylerpayne/uv-release-monorepo/actions/workflows/docs.yml)
+[![PyPI](https://img.shields.io/pypi/v/uv-release-monorepo)](https://pypi.org/project/uv-release-monorepo/)
 
 Release management for [uv](https://github.com/astral-sh/uv) workspaces. Bump, build, and release only what changed. You manage major/minor versions, uvr manages the rest.
 
