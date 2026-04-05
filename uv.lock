@@ -265,12 +265,12 @@ wheels = [
 
 [[package]]
 name = "pkg-alpha"
-version = "0.1.9a2"
+version = "0.1.9a2.dev0"
 source = { editable = "packages/pkg-alpha" }
 
 [[package]]
 name = "pkg-beta"
-version = "0.1.9a2"
+version = "0.1.9a2.dev0"
 source = { editable = "packages/pkg-beta" }
 dependencies = [
     { name = "pkg-alpha" },
@@ -281,7 +281,7 @@ requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
 
 [[package]]
 name = "pkg-delta"
-version = "0.2.8a2"
+version = "0.2.8a2.dev0"
 source = { editable = "packages/pkg-delta" }
 dependencies = [
     { name = "pkg-alpha" },
@@ -292,7 +292,7 @@ requires-dist = [{ name = "pkg-alpha", editable = "packages/pkg-alpha" }]
 
 [[package]]
 name = "pkg-gamma"
-version = "0.1.21a2"
+version = "0.1.21a2.dev0"
 source = { editable = "packages/pkg-gamma" }
 dependencies = [
     { name = "pkg-beta" },
