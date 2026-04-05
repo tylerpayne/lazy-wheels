@@ -9,10 +9,10 @@ See [How it works](08-architecture.md) for the high-level flow.
 
 | Module | Key symbols |
 |--------|-------------|
-| `executor.py` | `ReleaseExecutor` (`build`, `release`, `bump`, `run`, `_run_stage`, `_run_commands`) |
+| `executor.py` | `ReleaseExecutor` (`build`, `publish`, `publish_to_index`, `bump`, `run`, `_run_stage`, `_run_commands`) |
 | `models/plan.py` | `BuildStage`, `PlanCommand` |
 | `models/workflow.py` | `_BUILD_STEPS`, `_RELEASE_STEPS`, `_BUMP_STEPS`, `_CHECKOUT_STEP`, `_SETUP_UV_STEP`, `_SETUP_PYTHON_STEP`, `_EXPORT_PLAN_STEP` |
-| `planner/_planner.py` | `ReleasePlanner` (`_generate_build_commands`, `_generate_release_commands`, `_generate_bump_commands`) |
+| `planner/_planner.py` | `ReleasePlanner` (`_generate_build_commands`, `_generate_release_commands`, `_generate_publish_commands`, `_generate_bump_commands`) |
 | `cli/__init__.py` | `_cmd_build`, `_cmd_bump` (CLI wiring) |
 
 ## The `uvr` CLI entry point
@@ -219,7 +219,8 @@ See [Build matrix](04-build-matrix.md) for the full algorithm. Key points:
 ```python
 def run(self) -> None:
     self.build()
-    self.release()
+    self.publish()          # GitHub releases
+    self.publish_to_index() # PyPI / index publishing
     self.bump()
 ```
 

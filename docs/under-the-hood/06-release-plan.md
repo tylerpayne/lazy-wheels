@@ -30,6 +30,8 @@ See [How it works](08-architecture.md) and [Skip jobs and reuse artifacts](../us
 | `reuse_run_id` | `str` | If non-empty, download artifacts from this workflow run instead of building. |
 | `build_commands` | `dict[RunnerKey, list[BuildStage]]` | Pre-computed build command stages keyed by runner (JSON-serialized runner list). See below. |
 | `release_commands` | `list[PlanCommand]` | Pre-computed release commands (local execution only; empty for CI). |
+| `publish_commands` | `list[PublishCommand]` | Pre-computed index publishing commands (`uv publish`). Empty when `[tool.uvr.publish]` is not configured. |
+| `publish_environment` | `str` | GitHub Actions environment name for trusted publishing. Empty when not configured. |
 | `bump_commands` | `list[PlanCommand]` | Pre-computed bump commands (tag, bump, commit, push). |
 | `build_matrix` | `list[list[str]]` | **Computed field.** Unique runner label sets across all changed packages. Drives the workflow's `strategy.matrix.runner`. |
 
