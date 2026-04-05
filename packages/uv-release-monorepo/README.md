@@ -1,6 +1,6 @@
 # uv-release-monorepo
 
-The missing CI release orchestrator for [uv](https://github.com/astral-sh/uv) workspaces. Rebuilds only what changed, creates one GitHub release per package, handles version bumping.
+Release management for [uv](https://github.com/astral-sh/uv) workspaces. Bump, build, and release only what changed. You manage major/minor versions, uvr manages the rest.
 
 ## Quick Start
 
