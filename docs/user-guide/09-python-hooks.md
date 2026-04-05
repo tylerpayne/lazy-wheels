@@ -41,6 +41,7 @@ file = "scripts/my_hooks.py:MyHook"
 | `pre_build_stage` / `post_build_stage` | Before/after each topo layer | Layer-level logging |
 | `pre_build_package` / `post_build_package` | Before/after each package build (parallel) | Per-package metrics |
 | `pre_release` / `post_release` | Before/after GitHub release creation | Custom publishing |
+| `pre_publish` / `post_publish` | Before/after index publishing (`uv publish`) | Custom index auth, notifications |
 | `pre_bump` / `post_bump` | Before/after version bumps | Custom post-release actions |
 
 ## Example: inject custom data into the plan

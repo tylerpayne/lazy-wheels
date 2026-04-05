@@ -162,12 +162,20 @@ class ReleaseJob(Job):
     _validate_needs = _needs_validator("uvr-build")
 
 
+class PublishJob(Job):
+    """The index publishing job (upload wheels to PyPI/registries)."""
+
+    if_condition: Annotated[str | None, Frozen] = Field(alias="if")
+    steps: Annotated[list[dict], Frozen]
+    _validate_needs = _needs_validator("uvr-release")
+
+
 class BumpJob(Job):
     """The bump job (post-release version bumps + baseline tags)."""
 
     if_condition: Annotated[str | None, Frozen] = Field(alias="if")
     steps: Annotated[list[dict], Frozen]
-    _validate_needs = _needs_validator("uvr-release")
+    _validate_needs = _needs_validator("uvr-publish")
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +193,7 @@ class WorkflowJobs(BaseModel):
     )
     uvr_build: BuildJob = Field(default_factory=BuildJob, alias="uvr-build")
     uvr_release: ReleaseJob = Field(default_factory=ReleaseJob, alias="uvr-release")
+    uvr_publish: PublishJob = Field(default_factory=PublishJob, alias="uvr-publish")
     uvr_bump: BumpJob = Field(default_factory=BumpJob, alias="uvr-bump")
 
 
@@ -199,7 +208,9 @@ class ReleaseWorkflow(BaseModel):
 
     name: str = "Release Wheels"
     on: WorkflowTrigger = Field(default_factory=WorkflowTrigger)
-    permissions: dict[str, str] = Field(default_factory=lambda: {"contents": "write"})
+    permissions: dict[str, str] = Field(
+        default_factory=lambda: {"contents": "write", "id-token": "write"}
+    )
     jobs: WorkflowJobs = Field(default_factory=WorkflowJobs)
 
     @model_validator(mode="before")

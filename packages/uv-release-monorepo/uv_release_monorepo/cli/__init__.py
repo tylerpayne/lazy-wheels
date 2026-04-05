@@ -12,7 +12,13 @@ from .bump import cmd_bump
 from .download import cmd_download
 from .install import cmd_install
 from .release import cmd_release
-from .workflow import cmd_init, cmd_runners, cmd_upgrade, cmd_validate
+from .workflow import (
+    cmd_init,
+    cmd_publish_config,
+    cmd_runners,
+    cmd_upgrade,
+    cmd_validate,
+)
 
 __all__ = [
     "MISSING",
@@ -28,6 +34,7 @@ __all__ = [
     "cli",
     "cmd_init",
     "cmd_install",
+    "cmd_publish_config",
     "cmd_release",
     "cmd_runners",
     "cmd_upgrade",

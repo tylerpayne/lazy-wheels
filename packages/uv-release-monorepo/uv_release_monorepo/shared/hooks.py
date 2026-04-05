@@ -82,6 +82,12 @@ class ReleaseHook:
     def post_release(self, plan: ReleasePlan) -> None:
         """Called after the publish/release phase."""
 
+    def pre_publish(self, plan: ReleasePlan) -> None:
+        """Called before the index publishing phase."""
+
+    def post_publish(self, plan: ReleasePlan) -> None:
+        """Called after the index publishing phase."""
+
     def pre_bump(self, plan: ReleasePlan) -> None:
         """Called before the bump phase."""
 

@@ -8,6 +8,7 @@ on:
         required: true
 permissions:
   contents: write
+  id-token: write
 jobs:
   uvr-validate:
     runs-on: ubuntu-latest
@@ -77,11 +78,37 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
       run: uv run uvr jobs release
+  uvr-publish:
+    runs-on: ubuntu-latest
+    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-publish') && fromJSON(inputs.plan).publish_commands[0] != null }}
+    needs:
+    - uvr-release
+    environment: ${{ fromJSON(inputs.plan).publish_environment || null }}
+    steps:
+    - id: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - id: setup-uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        python-version: ${{ fromJSON(inputs.plan).python_version }}
+    - id: download
+      name: Download wheels
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UVR_PLAN: ${{ inputs.plan }}
+      run: uv run uvr jobs download
+    - id: publish
+      name: Publish to package index
+      env:
+        UVR_PLAN: ${{ inputs.plan }}
+      run: uv run uvr jobs publish
   uvr-bump:
     runs-on: ubuntu-latest
     if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-bump') }}
     needs:
-    - uvr-release
+    - uvr-publish
     steps:
     - id: checkout
       uses: actions/checkout@v4

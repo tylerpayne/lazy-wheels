@@ -41,12 +41,13 @@ def test_template_job_needs_chain() -> None:
     jobs = doc["jobs"]
     assert "uvr-validate" in jobs["uvr-build"]["needs"]
     assert "uvr-build" in jobs["uvr-release"]["needs"]
-    assert "uvr-release" in jobs["uvr-bump"]["needs"]
+    assert "uvr-release" in jobs["uvr-publish"]["needs"]
+    assert "uvr-publish" in jobs["uvr-bump"]["needs"]
 
 
 def test_template_default_permissions() -> None:
     doc = _template_workflow()
-    assert doc["permissions"] == {"contents": "write"}
+    assert doc["permissions"] == {"contents": "write", "id-token": "write"}
 
 
 def test_template_core_jobs_have_executor_steps() -> None:

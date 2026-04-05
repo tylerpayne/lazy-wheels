@@ -38,8 +38,8 @@ class ReleaseArgs(CommandArgs):
     pip_args: list[str] = []
 
 
-_CORE_JOBS = {"uvr-validate", "uvr-build", "uvr-release", "uvr-bump"}
-_FALLBACK_JOBS = ["uvr-validate", "uvr-build", "uvr-release", "uvr-bump"]
+_CORE_JOBS = {"uvr-validate", "uvr-build", "uvr-release", "uvr-publish", "uvr-bump"}
+_FALLBACK_JOBS = ["uvr-validate", "uvr-build", "uvr-release", "uvr-publish", "uvr-bump"]
 
 
 def _compute_skipped(parsed: ReleaseArgs, workflow_jobs: list[str]) -> set[str]:
@@ -278,6 +278,16 @@ def _print_plan(
         elif job == "uvr-release" and plan.changed:
             for name, pkg in sorted(plan.changed.items()):
                 print(f"{_D}{name}/v{pkg.release_version}")
+
+        # Publish details
+        elif job == "uvr-publish" and plan.publish_commands:
+            env = plan.publish_environment
+            if env:
+                print(f"{_D}environment: {env}")
+            for cmd in plan.publish_commands:
+                if hasattr(cmd, "index") and hasattr(cmd, "dist_pattern"):
+                    idx = cmd.index or "(default)"
+                    print(f"{_D}{cmd.dist_pattern}  -> {idx}")
 
         # Finalize details
         elif job == "uvr-bump":
