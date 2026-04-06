@@ -1,5 +1,5 @@
 [project]
-name = "uv-release-monorepo"
+name = "uv-release"
 version = "0.27.0"
 description = "Lazy monorepo wheel builder — only rebuilds what changed."
 readme = "README.md"

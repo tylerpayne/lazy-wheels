@@ -6,10 +6,10 @@ pkg-alpha = { workspace = true }
 pkg-beta = { workspace = true }
 pkg-gamma = { workspace = true }
 pkg-delta = { workspace = true }
-uv-release-monorepo = { workspace = true }
+uv-release = { workspace = true }
 
 [tool.uvr.config]
-latest = "uv-release-monorepo"
+latest = "uv-release"
 init_version = "0.18.0"
 skill_version = "0.21.8.dev0"
 workflow_version = "0.18.2.dev0"
@@ -25,7 +25,7 @@ environment = "pypi"
 exclude = ["pkg-delta", "pkg-alpha", "pkg-beta", "pkg-gamma"]
 [dependency-groups]
 dev = [
-    "uv-release-monorepo",
+    "uv-release",
     "ruff>=0.9",
     "ty>=0.0.1a6",
     "poethepoet>=0.32",

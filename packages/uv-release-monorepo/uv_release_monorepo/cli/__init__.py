@@ -1,4 +1,4 @@
-"""CLI entry point for uv-release-monorepo."""
+"""CLI entry point for uv-release."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Plan and package models for uv-release-monorepo.
+"""Plan and package models for uv-release.
 
 These Pydantic models represent the core data structures used throughout
 the release pipeline.
@@ -708,7 +708,7 @@ class ReleasePlan(BaseModel):
 
     schema_version: int = 12
     uvr_version: str
-    uvr_install: str = "uv-release-monorepo"
+    uvr_install: str = "uv-release"
     python_version: str = "3.12"
     dev_release: bool = False
     rebuild_all: bool

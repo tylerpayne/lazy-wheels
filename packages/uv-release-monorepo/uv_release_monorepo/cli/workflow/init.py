@@ -208,7 +208,9 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
                 default="",
             )
         if stored_version:
-            uvx_cmd = f"uvx --from uv-release-monorepo=={stored_version} uvr workflow init --base-only"
+            uvx_cmd = (
+                f"uvx --from uv-release=={stored_version} uvr workflow init --base-only"
+            )
             print(
                 f"No merge base found. For a cleaner upgrade, recover the base first:\n"
                 f"  {uvx_cmd}\n"
