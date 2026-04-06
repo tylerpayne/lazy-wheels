@@ -44,7 +44,7 @@ jobs:
           uv run poe test
   
   uvr-build:
-    needs: [uvr-validate]
+    needs: [uvr-validate, check]
     if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
     runs-on: ${{ matrix.runner }}
     strategy:
