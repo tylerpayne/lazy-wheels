@@ -1,14 +1,14 @@
-# uv-release-monorepo
+# uvr
 
-[![Docs](https://github.com/tylerpayne/uv-release-monorepo/actions/workflows/docs.yml/badge.svg)](https://tylerpayne.github.io/uv-release-monorepo/)
-[![PyPI](https://img.shields.io/pypi/v/uv-release-monorepo)](https://pypi.org/project/uv-release-monorepo/)
+[![Docs](https://github.com/tylerpayne/uvr/actions/workflows/docs.yml/badge.svg)](https://tylerpayne.github.io/uvr/)
+[![PyPI](https://img.shields.io/pypi/v/uv-release)](https://pypi.org/project/uv-release/)
 
 Footgun-free release management for [uv](https://github.com/astral-sh/uv) workspaces.
 
 ## Quick Start
 
 ```bash
-uv add --dev uv-release-monorepo
+pip install uv-release
 uvr workflow init        # generate .github/workflows/release.yml
 uvr release     # detect changes, show plan, dispatch to CI
 ```
@@ -123,7 +123,7 @@ You debug locally with `--dry-run`. CI stays stable across repo changes. Plans a
 
 ```
 packages/
-  uv-release-monorepo/   # the CLI tool (published to PyPI as uvr)
+  uv-release/            # the CLI tool (pip install uv-release)
   pkg-alpha/             # test packages for the release pipeline
   pkg-beta/
   pkg-delta/

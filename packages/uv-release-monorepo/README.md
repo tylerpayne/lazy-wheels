@@ -1,11 +1,11 @@
-# uv-release-monorepo
+# uvr
 
 Footgun-free release management for [uv](https://github.com/astral-sh/uv) workspaces.
 
 ## Quick Start
 
 ```bash
-uv add --dev uv-release-monorepo
+pip install uv-release
 uvr workflow init        # generate .github/workflows/release.yml
 uvr release     # detect changes, show plan, dispatch to CI
 ```
@@ -113,5 +113,5 @@ You debug locally with `--dry-run`. CI stays stable across repo changes. Plans a
 
 ## Documentation
 
-- **[User Guide](https://tylerpayne.github.io/uv-release-monorepo/user-guide/01-setup).** Setup, releasing, hooks, PyPI, skip/reuse, package filtering.
-- **[Under the Hood](https://tylerpayne.github.io/uv-release-monorepo/under-the-hood/architecture).** The plan+execute model, dependency pinning, layered builds, workflow design.
+- **[User Guide](https://tylerpayne.github.io/uvr/user-guide/01-getting-started).** Setup, releasing, hooks, PyPI, skip/reuse, package filtering.
+- **[Under the Hood](https://tylerpayne.github.io/uvr/under-the-hood/architecture).** The plan+execute model, dependency pinning, layered builds, workflow design.

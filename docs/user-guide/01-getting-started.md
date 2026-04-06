@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-uv add --dev uv-release-monorepo
+pip install uv-release
 ```
 
 ## Prerequisites

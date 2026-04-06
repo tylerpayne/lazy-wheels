@@ -32,7 +32,7 @@ features:
 Install uv-release and scaffold your first workflow:
 
 ```bash
-uv add --dev uv-release-monorepo
+pip install uv-release
 uvr workflow init
 ```
 
