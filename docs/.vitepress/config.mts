@@ -5,9 +5,9 @@ export default withMermaid(
   defineConfig({
     title: 'uvr',
     description: 'Release management for uv workspaces',
-    base: '/uv-release-monorepo/',
+    base: '/uvr/',
     srcExclude: ['adr/**'],
-    head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/uv-release-monorepo/favicon.svg' }]],
+    head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/uvr/favicon.svg' }]],
 
     themeConfig: {
       nav: [
@@ -70,7 +70,7 @@ export default withMermaid(
       },
 
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/tylerpayne/lazy-wheels' },
+        { icon: 'github', link: 'https://github.com/tylerpayne/uvr' },
       ],
 
       search: {
@@ -78,7 +78,7 @@ export default withMermaid(
       },
 
       editLink: {
-        pattern: 'https://github.com/tylerpayne/lazy-wheels/edit/main/docs/:path',
+        pattern: 'https://github.com/tylerpayne/uvr/edit/main/docs/:path',
       },
     },
 

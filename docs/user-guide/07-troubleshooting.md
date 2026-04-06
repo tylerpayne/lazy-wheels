@@ -68,7 +68,7 @@ uvr download pkg-alpha --all-platforms
 ## Upgrade <code class="brand-code">uvr</code>
 
 ```bash
-uv add --dev --upgrade-package uv-release-monorepo
+pip install --upgrade uv-release
 uvr workflow init --upgrade      # merge template changes
 uvr skill init --upgrade         # merge skill changes
 ```

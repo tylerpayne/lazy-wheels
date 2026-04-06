@@ -1,4 +1,4 @@
-"""Data models for uv-release-monorepo."""
+"""Data models for uv-release."""
 
 from .plan import (
     BuildStage,

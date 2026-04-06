@@ -587,9 +587,9 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Precompute the install spec for CI
     if ".dev" in plan.uvr_version:
         plan.uvr_version = ""
-        plan.uvr_install = "uv-release-monorepo"
+        plan.uvr_install = "uv-release"
     else:
-        plan.uvr_install = f"uv-release-monorepo=={plan.uvr_version}"
+        plan.uvr_install = f"uv-release=={plan.uvr_version}"
 
     import time
 

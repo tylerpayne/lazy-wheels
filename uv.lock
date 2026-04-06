@@ -8,7 +8,7 @@ members = [
     "pkg-beta",
     "pkg-delta",
     "pkg-gamma",
-    "uv-release-monorepo",
+    "uv-release",
 ]
 
 [manifest.dependency-groups]
@@ -18,7 +18,7 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.9" },
     { name = "ty", specifier = ">=0.0.1a6" },
-    { name = "uv-release-monorepo", editable = "packages/uv-release-monorepo" },
+    { name = "uv-release", editable = "packages/uv-release-monorepo" },
 ]
 
 [[package]]
@@ -692,8 +692,8 @@ wheels = [
 ]
 
 [[package]]
-name = "uv-release-monorepo"
-version = "0.26.3.dev0"
+name = "uv-release"
+version = "0.27.1.dev0"
 source = { editable = "packages/uv-release-monorepo" }
 dependencies = [
     { name = "httpx" },

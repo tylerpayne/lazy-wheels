@@ -68,7 +68,9 @@ def cmd_skill_upgrade(args: argparse.Namespace) -> None:
                 default="",
             )
         if stored_version:
-            uvx_cmd = f"uvx --from uv-release-monorepo=={stored_version} uvr skill init --base-only"
+            uvx_cmd = (
+                f"uvx --from uv-release=={stored_version} uvr skill init --base-only"
+            )
             print(
                 f"No merge bases found for skills. For a cleaner upgrade, recover them first:\n"
                 f"  {uvx_cmd}\n"
