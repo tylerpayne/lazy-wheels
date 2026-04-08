@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from uv_release_monorepo.shared.models import PackageInfo
-from uv_release_monorepo.shared.utils.tags import find_baseline_tags, find_release_tags
+from uv_release_monorepo.shared.utils.tags import find_release_tags
 
 
 class TestFindReleaseTags:
@@ -73,58 +73,3 @@ class TestFindReleaseTags:
 
         # v1.0.1 is >= current base 1.0.1, so only v1.0.0 matches
         assert result == {"pkg-a": "pkg-a/v1.0.0"}
-
-
-class TestGetBaselineTags:
-    """Tests for find_baseline_tags()."""
-
-    @pytest.fixture
-    def sample_packages(self) -> dict[str, PackageInfo]:
-        """Create sample packages for testing."""
-        return {
-            "pkg-a": PackageInfo(path="packages/a", version="1.0.1", deps=[]),
-            "pkg-b": PackageInfo(path="packages/b", version="1.0.1", deps=[]),
-        }
-
-    @patch("uv_release_monorepo.shared.utils.tags.print_step")
-    def test_returns_base_tags(
-        self,
-        _mock_step: MagicMock,
-        sample_packages: dict[str, PackageInfo],
-    ) -> None:
-        """Returns the -base tag derived from pyproject.toml version."""
-        all_tags = {"pkg-a/v1.0.1-base", "pkg-b/v1.0.1-base"}
-
-        result = find_baseline_tags(sample_packages, all_tags=all_tags)
-
-        assert result == {
-            "pkg-a": "pkg-a/v1.0.1-base",
-            "pkg-b": "pkg-b/v1.0.1-base",
-        }
-
-    @patch("uv_release_monorepo.shared.utils.tags.print_step")
-    def test_returns_none_when_no_base_tag(
-        self,
-        _mock_step: MagicMock,
-        sample_packages: dict[str, PackageInfo],
-    ) -> None:
-        """Returns None when no -base tag exists for a package."""
-        all_tags = {"pkg-b/v1.0.1-base"}
-
-        result = find_baseline_tags(sample_packages, all_tags=all_tags)
-
-        assert result == {
-            "pkg-a": None,
-            "pkg-b": "pkg-b/v1.0.1-base",
-        }
-
-    @patch("uv_release_monorepo.shared.utils.tags.print_step")
-    def test_returns_none_for_new_packages(
-        self,
-        _mock_step: MagicMock,
-        sample_packages: dict[str, PackageInfo],
-    ) -> None:
-        """Returns None for packages with no tags at all."""
-        result = find_baseline_tags(sample_packages, all_tags=set())
-
-        assert result == {"pkg-a": None, "pkg-b": None}

@@ -13,7 +13,11 @@ from ..shared.utils.cli import __version__, diff_stat, read_matrix
 from ..shared.models import PlanConfig
 from ..shared.planner import ReleasePlanner
 from ..shared.context import build_context
-from ..shared.utils.versions import find_version_conflicts
+from ..shared.utils.versions import (
+    detect_release_type_for_version,
+    find_version_conflicts,
+    resolve_baseline,
+)
 
 
 class StatusArgs(CommandArgs):
@@ -52,10 +56,10 @@ def cmd_status(args: argparse.Namespace) -> None:
     finally:
         sys.stdout = old_stdout
 
-    # Collect rows: (status, name, version, previous, changes, commits)
+    # Collect rows: (status, name, version, previous, diff_from, changes, commits)
     rows: list[tuple[str, ...]] = []
     for name, pkg in sorted(plan.changed.items()):
-        baseline = f"{name}/v{pkg.current_version}-base"
+        baseline = pkg.baseline_tag
         changes, commits, diff_tag = diff_stat(
             baseline, pkg.path, fallback_tag=pkg.last_release_tag
         )
@@ -73,7 +77,8 @@ def cmd_status(args: argparse.Namespace) -> None:
     from ..shared.utils.versions import find_previous_release
 
     for name, pkg in sorted(plan.unchanged.items()):
-        baseline = f"{name}/v{pkg.version}-base"
+        rt = detect_release_type_for_version(pkg.version)
+        baseline = resolve_baseline(pkg.version, rt, name, ctx.repo)
         _, _, diff_tag = diff_stat(baseline, pkg.path)
         prev = find_previous_release(pkg.version, name, ctx.repo)
         rows.append(
