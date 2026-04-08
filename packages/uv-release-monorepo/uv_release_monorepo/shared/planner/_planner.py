@@ -408,8 +408,13 @@ class ReleasePlanner:
             tag = f"{name}/v{pkg.release_version}"
             cmds.append(ShellCommand(args=["git", "tag", tag], label=f"Tag {tag}"))
 
-        # Create GitHub releases with wheels
-        for name, pkg in sorted(changed.items()):
+        # Create GitHub releases with wheels.
+        # The --latest package is created last so GitHub doesn't auto-promote
+        # a later release over it.
+        release_order = sorted(
+            changed.items(), key=lambda item: (item[1].make_latest is True, item[0])
+        )
+        for name, pkg in release_order:
             tag = f"{name}/v{pkg.release_version}"
             cmds.append(
                 PublishGithubReleaseCommand(
