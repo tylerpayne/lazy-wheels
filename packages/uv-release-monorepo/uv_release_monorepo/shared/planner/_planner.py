@@ -194,6 +194,7 @@ class ReleasePlanner:
                 release_version=release_versions[name],
                 next_version=next_versions[name],
                 last_release_tag=release_tags.get(name),
+                baseline_tag=baselines.get(name),
                 release_notes=notes.get(name, ""),
                 make_latest=(name == latest_pkg) if latest_pkg else False,
                 runners=self.config.matrix.get(name, [["ubuntu-latest"]]),

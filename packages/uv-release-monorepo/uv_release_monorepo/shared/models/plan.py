@@ -131,6 +131,7 @@ class ChangedPackage(PackageInfo):
     release_version: str
     next_version: str = ""
     last_release_tag: str | None = None
+    baseline_tag: str | None = None
     release_notes: str = ""
     make_latest: bool | None = None
     runners: list[list[str]] = Field(default_factory=lambda: [["ubuntu-latest"]])

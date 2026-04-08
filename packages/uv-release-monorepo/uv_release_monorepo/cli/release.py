@@ -129,7 +129,7 @@ def _print_packages(plan: ReleasePlan) -> None:
     for name in all_names:
         if name in plan.changed:
             pkg = plan.changed[name]
-            baseline = f"{name}/v{pkg.current_version}-base"
+            baseline = pkg.baseline_tag or f"{name}/v{pkg.current_version}-base"
             changes, commits, diff_tag = diff_stat(
                 baseline, pkg.path, fallback_tag=pkg.last_release_tag
             )
