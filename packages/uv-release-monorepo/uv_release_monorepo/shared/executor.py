@@ -40,12 +40,28 @@ class ReleaseExecutor:
             runner_list = list(key)
             stages = self.plan.build_commands.get(key, [])
         else:
+            # Local mode: merge stages across runners, deduplicating packages
+            # that appear in multiple runner entries.
             runner_list = []
-            stages = [
-                stage
-                for key in self.plan.build_commands
-                for stage in self.plan.build_commands[key]
-            ]
+            seen_packages: set[str] = set()
+            stages = []
+            for key in self.plan.build_commands:
+                for stage in self.plan.build_commands[key]:
+                    deduped_pkgs = {
+                        pkg: cmds
+                        for pkg, cmds in stage.packages.items()
+                        if pkg not in seen_packages
+                    }
+                    # Always include setup/cleanup from first runner only
+                    if deduped_pkgs or (not seen_packages and stage.setup):
+                        seen_packages.update(deduped_pkgs)
+                        stages.append(
+                            BuildStage(
+                                setup=stage.setup if not stages else [],
+                                packages=deduped_pkgs,
+                                cleanup=stage.cleanup if not stages else [],
+                            )
+                        )
 
         self.hook.pre_build(self.plan, runner=runner_list or None)
 
