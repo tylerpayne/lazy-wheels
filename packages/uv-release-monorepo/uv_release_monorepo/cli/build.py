@@ -73,14 +73,18 @@ def cmd_build(args: argparse.Namespace) -> None:
         pkg = plan.changed[name]
         print(f"  {name.ljust(nw)}  {pkg.current_version}")
 
-    # Show build layers
+    # Show build layers (deduplicate across runners for local builds)
     if plan.build_commands:
+        shown: set[str] = set()
         for runner_key, stages in plan.build_commands.items():
             layer = 0
             for stage in stages:
                 if stage.packages:
                     pkgs = ", ".join(sorted(stage.packages))
-                    print(f"  layer {layer}: {pkgs}")
+                    key = f"{layer}:{pkgs}"
+                    if key not in shown:
+                        print(f"  layer {layer}: {pkgs}")
+                        shown.add(key)
                     layer += 1
 
     print()
