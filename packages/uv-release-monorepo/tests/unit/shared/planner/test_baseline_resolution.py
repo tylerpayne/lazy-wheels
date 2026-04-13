@@ -49,7 +49,7 @@ class TestCleanFinal:
     """Current version is a clean final (e.g. 1.0.1).
 
     User set version manually. All types valid with conflict check.
-    Baseline is always find_previous_release(X.X.X).
+    Baseline is always find_release_tags_below(X.X.X).
     """
 
     @pytest.fixture
@@ -142,7 +142,7 @@ class TestCleanPreRelease:
     """Current version is a clean pre-release (e.g. 1.0.1a3, 1.0.1b1, 1.0.1rc2).
 
     User set version manually. All types valid with conflict check.
-    Baseline is always find_previous_release(X.X.X) — start of pre-release cycle.
+    Baseline is always find_release_tags_below(X.X.X) — start of pre-release cycle.
     """
 
     @pytest.fixture
@@ -274,7 +274,7 @@ class TestCleanPostRelease:
     """Current version is a clean post-release (e.g. 1.0.1.post2).
 
     User set version manually. All types valid with conflict check.
-    Baseline is find_previous_release(X.X.X.postN).
+    Baseline is find_release_tags_below(X.X.X.postN).
     """
 
     @pytest.fixture

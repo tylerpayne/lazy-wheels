@@ -566,7 +566,7 @@ flowchart TD
 
     start(["resolve_baseline(version, release_type)"]):::decision
     hasdev{"Has .dev suffix?"}:::decision
-    cleanpath["find_previous_release()"]:::result
+    cleanpath["find_release_tags_below()"]:::result
 
     haspost_sp{"has_post AND<br/>release_type in<br/>(stable, pre)?"}:::decision
     err1["ERROR: cannot stable/pre<br/>from post-release dev"]:::error
@@ -586,7 +586,7 @@ flowchart TD
     prebase["current version -base tag<br/>(with stable fallback)"]:::result
 
     pre_stable{"has_pre AND<br/>release_type == stable?"}:::decision
-    cumulative["find_previous_release(base_version)"]:::result
+    cumulative["find_release_tags_below(base_version)"]:::result
 
     post_post{"has_post AND<br/>release_type == post?"}:::decision
     devgt0_post{"devN > 0?"}:::decision
@@ -998,10 +998,10 @@ sequenceDiagram
 
 | Tag Type | Created By | Consumed By | Purpose |
 |---|---|---|---|
-| `{name}/v{version}` (release) | uvr-release phase | `find_previous_release()`, effective baseline override, GitHub release identifier | Marks published version |
+| `{name}/v{version}` (release) | uvr-release phase | `find_release_tags_below()`, effective baseline override, GitHub release identifier | Marks published version |
 | `{name}/v{version}-base` (baseline) | uvr-bump phase | `resolve_baseline()` during next release cycle's change detection | Diff anchor for next release |
 
-Release tags are long-lived. They are referenced by `find_previous_release()` to
+Release tags are long-lived. They are referenced by `find_release_tags_below()` to
 locate the baseline for clean versions. They also serve as the source for downloading
 unchanged dependency wheels via `FetchGithubReleaseCommand`.
 

@@ -60,7 +60,7 @@ Or re-dispatch via the GitHub Actions UI with the original plan JSON.
 
 ```bash
 uvr build                        # build changed packages to dist/
-uvr build --rebuild pkg-alpha    # force rebuild specific packages
+uvr build --packages pkg-alpha   # build specific packages and their deps
 uvr build --rebuild-all          # build everything
 uvr install --dist dist/         # install from local build
 ```
