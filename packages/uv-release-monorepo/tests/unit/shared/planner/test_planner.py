@@ -407,3 +407,84 @@ class TestBuildCommandStages:
             dl_cmds = [cmd for cmd in setup if isinstance(cmd, DownloadWheelsCommand)]
             assert len(dl_cmds) == 1, f"Missing fetch for {runner_key}"
             assert dl_cmds[0].packages == {"lib": "lib/v0.9.0"}
+
+
+class TestRestrictPackages:
+    """Tests for PlanConfig.restrict_packages scope filtering."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_planner_io(self) -> None:  # type: ignore[return]
+        """Mock generate_release_notes used by the planner."""
+        with patch(
+            "uv_release_monorepo.shared.planner._planner.generate_release_notes",
+            return_value="",
+        ):
+            yield
+
+    @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
+    @patch("uv_release_monorepo.shared.planner._planner.build_context")
+    def test_restrict_packages_filters_unrelated(
+        self,
+        mock_build_ctx: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """restrict_packages keeps only the target and its transitive deps."""
+        packages = {
+            "base": PackageInfo(path="packages/base", version="1.0.0", deps=[]),
+            "lib": PackageInfo(path="packages/lib", version="1.0.0", deps=["base"]),
+            "target": PackageInfo(
+                path="packages/target", version="1.0.0", deps=["lib"]
+            ),
+            "unrelated": PackageInfo(
+                path="packages/unrelated", version="1.0.0", deps=["base"]
+            ),
+        }
+        mock_build_ctx.return_value = _make_ctx(packages)
+        mock_detect.return_value = list(packages)  # all detected as changed
+
+        plan = build_plan(
+            PlanConfig(
+                rebuild_all=False,
+                matrix={},
+                uvr_version="0.3.0",
+                dry_run=True,
+                rebuild=["target"],
+                restrict_packages=["target"],
+            )
+        )
+
+        assert set(plan.changed) == {"target", "lib", "base"}
+        assert "unrelated" in plan.unchanged
+
+    @patch("uv_release_monorepo.shared.planner._planner.detect_changes")
+    @patch("uv_release_monorepo.shared.planner._planner.build_context")
+    def test_restrict_packages_empty_builds_all(
+        self,
+        mock_build_ctx: MagicMock,
+        mock_detect: MagicMock,
+    ) -> None:
+        """Empty restrict_packages does not filter anything."""
+        packages = {
+            "base": PackageInfo(path="packages/base", version="1.0.0", deps=[]),
+            "lib": PackageInfo(path="packages/lib", version="1.0.0", deps=["base"]),
+            "target": PackageInfo(
+                path="packages/target", version="1.0.0", deps=["lib"]
+            ),
+            "unrelated": PackageInfo(
+                path="packages/unrelated", version="1.0.0", deps=["base"]
+            ),
+        }
+        mock_build_ctx.return_value = _make_ctx(packages)
+        mock_detect.return_value = list(packages)
+
+        plan = build_plan(
+            PlanConfig(
+                rebuild_all=False,
+                matrix={},
+                uvr_version="0.3.0",
+                dry_run=True,
+                restrict_packages=[],
+            )
+        )
+
+        assert set(plan.changed) == {"base", "lib", "target", "unrelated"}

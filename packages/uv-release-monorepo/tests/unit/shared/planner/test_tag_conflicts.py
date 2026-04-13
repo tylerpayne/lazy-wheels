@@ -1,117 +1,72 @@
-"""Tests for tag conflict checking with skip awareness."""
+"""Tests for tag conflict checking via the resolution state machine.
+
+These tests verify that resolve_release() correctly detects tag conflicts
+and respects the skip set. They replace the old tests that called the
+planner's private _find_tag_conflicts / _check_tag_conflicts methods.
+"""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
-from uv_release_monorepo.shared.models import ChangedPackage, PackageInfo, PlanConfig
-from uv_release_monorepo.shared.planner import ReleasePlanner
-
-from tests._helpers import _make_ctx
-
-
-def _changed_pkg(name: str, version: str = "1.0.0") -> ChangedPackage:
-    return ChangedPackage(
-        path=f"packages/{name}",
-        version=version,
-        deps=[],
-        current_version=f"{version}.dev0",
-        release_version=version,
-        next_version=f"{version[:-1]}{int(version[-1]) + 1}.dev0",
-        runners=[["ubuntu-latest"]],
-    )
+from uv_release_monorepo.shared.resolution import (
+    ReleaseConflictError,
+    resolve_release,
+)
 
 
-def _config(**overrides: object) -> PlanConfig:
-    defaults = dict(
-        rebuild_all=True,
-        matrix={},
-        uvr_version="0.1.0",
-        dry_run=True,
-    )
-    defaults.update(overrides)  # type: ignore[arg-type]
-    return PlanConfig(**defaults)  # type: ignore[arg-type]
+PKG = "pkg-a"
+
+
+class _FakeRepo:
+    """Minimal repo mock that responds to reference lookups."""
+
+    def __init__(self, tags: set[str]) -> None:
+        self._tags = tags
+        self.references = self
+        self._refs = [f"refs/tags/{t}" for t in tags]
+
+    def get(self, ref: str) -> object | None:
+        return object() if ref in {f"refs/tags/{t}" for t in self._tags} else None
+
+    def listall_references(self) -> list[str]:
+        return self._refs
+
+
+def _repo(*tags: str) -> _FakeRepo:
+    return _FakeRepo(set(tags))
 
 
 class TestTagConflicts:
-    """Tests for _find_tag_conflicts and _check_tag_conflicts."""
+    """Tests for tag conflict detection in resolve_release()."""
 
     def test_no_conflicts_when_tags_missing(self) -> None:
-        """No conflicts when no tags exist."""
-        packages = {"pkg-a": PackageInfo(path="a", version="1.0.0.dev0", deps=[])}
-        ctx = _make_ctx(packages)
-        planner = ReleasePlanner(_config(), ctx)
-        changed = {"pkg-a": _changed_pkg("pkg-a")}
-
-        conflicts = planner._find_tag_conflicts(changed)
-        assert conflicts == []
+        r = resolve_release("1.0.0.dev0", PKG, _repo())
+        assert r.release_version == "1.0.0"
 
     def test_release_tag_conflict_detected(self) -> None:
-        """Detects conflict when release tag already exists."""
-        packages = {"pkg-a": PackageInfo(path="a", version="1.0.0.dev0", deps=[])}
-        ctx = _make_ctx(packages)
-        # Make release tag exist
-        ctx.repo.references.get.side_effect = lambda ref: (  # type: ignore[union-attr]
-            MagicMock() if ref == "refs/tags/pkg-a/v1.0.0" else None
-        )
-        planner = ReleasePlanner(_config(), ctx)
-        changed = {"pkg-a": _changed_pkg("pkg-a")}
-
-        conflicts = planner._find_tag_conflicts(changed)
-        assert "pkg-a/v1.0.0" in conflicts
+        with pytest.raises(ReleaseConflictError, match="already released"):
+            resolve_release("1.0.0.dev0", PKG, _repo(f"{PKG}/v1.0.0"))
 
     def test_release_tag_conflict_skipped_when_release_skipped(self) -> None:
-        """No release tag conflict when uvr-release is in skip set."""
-        packages = {"pkg-a": PackageInfo(path="a", version="1.0.0.dev0", deps=[])}
-        ctx = _make_ctx(packages)
-        # Make release tag exist
-        ctx.repo.references.get.side_effect = lambda ref: (  # type: ignore[union-attr]
-            MagicMock() if ref == "refs/tags/pkg-a/v1.0.0" else None
+        """Clean version + skip={uvr-release} allows existing release tag."""
+        r = resolve_release(
+            "1.0.0",
+            PKG,
+            _repo(f"{PKG}/v0.9.0", f"{PKG}/v1.0.0"),
+            skip=frozenset({"uvr-release"}),
         )
-        planner = ReleasePlanner(_config(skip={"uvr-release"}), ctx)
-        changed = {"pkg-a": _changed_pkg("pkg-a")}
-
-        conflicts = planner._find_tag_conflicts(changed)
-        assert conflicts == []
+        assert r.release_version == "1.0.0"
 
     def test_baseline_tag_conflict_always_checked(self) -> None:
-        """Baseline tag conflicts are always checked, even with release skipped."""
-        packages = {"pkg-a": PackageInfo(path="a", version="1.0.0.dev0", deps=[])}
-        ctx = _make_ctx(packages)
-        changed = {"pkg-a": _changed_pkg("pkg-a")}
-        base_tag = f"pkg-a/v{changed['pkg-a'].next_version}-base"
-        ctx.repo.references.get.side_effect = lambda ref: (  # type: ignore[union-attr]
-            MagicMock() if ref == f"refs/tags/{base_tag}" else None
-        )
-        planner = ReleasePlanner(_config(skip={"uvr-release"}), ctx)
+        with pytest.raises(ReleaseConflictError, match="Tag"):
+            resolve_release("1.0.0.dev0", PKG, _repo(f"{PKG}/v1.0.1.dev0-base"))
 
-        conflicts = planner._find_tag_conflicts(changed)
-        assert base_tag in conflicts
-
-    def test_check_tag_conflicts_aborts_on_conflict(self) -> None:
-        """_check_tag_conflicts calls exit_fatal when conflicts exist."""
-        packages = {"pkg-a": PackageInfo(path="a", version="1.0.0.dev0", deps=[])}
-        ctx = _make_ctx(packages)
-        ctx.repo.references.get.side_effect = lambda ref: (  # type: ignore[union-attr]
-            MagicMock() if ref == "refs/tags/pkg-a/v1.0.0" else None
-        )
-        planner = ReleasePlanner(_config(), ctx)
-        changed = {"pkg-a": _changed_pkg("pkg-a")}
-
-        with pytest.raises(SystemExit):
-            planner._check_tag_conflicts(changed)
-
-    def test_check_tag_conflicts_passes_when_release_skipped(self) -> None:
-        """_check_tag_conflicts does not abort when uvr-release is skipped."""
-        packages = {"pkg-a": PackageInfo(path="a", version="1.0.0.dev0", deps=[])}
-        ctx = _make_ctx(packages)
-        ctx.repo.references.get.side_effect = lambda ref: (  # type: ignore[union-attr]
-            MagicMock() if ref == "refs/tags/pkg-a/v1.0.0" else None
-        )
-        planner = ReleasePlanner(_config(skip={"uvr-release"}), ctx)
-        changed = {"pkg-a": _changed_pkg("pkg-a")}
-
-        # Should not raise
-        planner._check_tag_conflicts(changed)
+    def test_baseline_tag_conflict_even_with_release_skipped(self) -> None:
+        with pytest.raises(ReleaseConflictError, match="Tag"):
+            resolve_release(
+                "1.0.0",
+                PKG,
+                _repo(f"{PKG}/v0.9.0", f"{PKG}/v1.0.1.dev0-base"),
+                skip=frozenset({"uvr-release"}),
+            )

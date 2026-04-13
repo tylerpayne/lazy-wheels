@@ -219,7 +219,10 @@ Run 'uvr <command> --help' for details on a specific command.
         help="Build all packages, not just changed ones.",
     )
     build_parser.add_argument(
-        "--rebuild", nargs="+", metavar="PKG", help="Force rebuild specific packages."
+        "--packages",
+        nargs="+",
+        metavar="PKG",
+        help="Build specific packages and their dependencies only.",
     )
     build_parser.add_argument(
         "--python",

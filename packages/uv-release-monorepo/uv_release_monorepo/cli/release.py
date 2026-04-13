@@ -425,16 +425,6 @@ def cmd_release(args: argparse.Namespace) -> None:
 
         dry_run = parsed.dry_run or json_only
 
-        # Check for version conflicts (dev version of already-released version)
-        from ..shared.utils.versions import find_version_conflicts
-
-        version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
-        if version_conflicts:
-            lines = "\n".join(
-                f"  {c.warning()}\n    Fix: {c.hint()}" for c in version_conflicts
-            )
-            fatal(f"Version conflicts detected:\n{lines}")
-
         # Apply --bump if provided (bump all packages before planning)
         bump_type = parsed.bump
         if bump_type:

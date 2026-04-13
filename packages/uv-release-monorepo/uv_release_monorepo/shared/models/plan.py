@@ -77,6 +77,9 @@ class PlanConfig:
         uvr_version: The uvr version to embed in the plan.
         python_version: Python version for CI builds.
         ci_publish: If True (default), plan targets CI execution.
+        restrict_packages: Restrict build scope to these packages and their
+            transitive dependencies. Packages outside the closure become
+            unchanged.
         dev_release: If True, publish .devN versions as-is (``--dev`` mode).
         dry_run: If True, skip local writes (version bumps, dep pins).
         release_notes: Per-package release notes overrides (name → markdown).
@@ -87,6 +90,7 @@ class PlanConfig:
     uvr_version: str
     python_version: str = "3.12"
     rebuild: list[str] = field(default_factory=list)
+    restrict_packages: list[str] = field(default_factory=list)
     skip: set[str] = field(default_factory=set)
     ci_publish: bool = True
     dev_release: bool = False

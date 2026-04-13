@@ -278,29 +278,35 @@ def parse_tag_version(tag: str) -> str:
     return tag.split("/v")[-1]
 
 
-def find_previous_release(
-    version_str: str,
+def find_release_tags_below(
+    target: str,
     name: str,
     repo: object,
-) -> str | None:
-    """Find the highest released version below the current version.
+    *,
+    limit: int = 1,
+) -> list[str]:
+    """Find the highest released versions below a target version.
 
-    Discovers all ``{name}/v*`` tags in *repo*, parses them as PEP 440
-    versions, and returns the highest one that sorts below the target
-    (``strip_dev(version_str)``).  Tags with a ``-base`` suffix are
-    ignored (they are development baselines, not releases).
+    Enumerates all ``{name}/v*`` tags in *repo*, parses them as PEP 440
+    versions, filters to those sorting strictly below *target*, and
+    returns up to *limit* results sorted highest-first.
+
+    Tags that are not valid PEP 440 (including ``-base`` suffixes) are
+    silently skipped.
 
     Args:
-        version_str: Current version (with or without .devN suffix).
+        target: PEP 440 version string to compare against (used as-is).
         name: Package name for tag prefix.
         repo: pygit2.Repository for ref lookups.
+        limit: Maximum number of results to return.
 
     Returns:
-        The previous release version string, or None if not found.
+        List of version strings (without tag prefix), highest first.
+        Empty list if no matching tags are found.
     """
     from pathlib import Path
 
-    target = _parse(strip_dev(version_str))
+    parsed_target = _parse(target)
 
     # Collect all release tags for this package
     tag_prefix = f"refs/tags/{name}/v"
@@ -318,7 +324,7 @@ def find_previous_release(
                     v = _parse(ver_str)
                 except InvalidVersion:
                     continue
-                if v < target:
+                if v < parsed_target:
                     candidates.append((v, ver_str))
     except (AttributeError, OSError):
         pass
@@ -333,15 +339,11 @@ def find_previous_release(
                 v = _parse(ver_str)
             except InvalidVersion:
                 continue
-            if v < target:
+            if v < parsed_target:
                 candidates.append((v, ver_str))
 
-    if not candidates:
-        return None
-
-    # Highest version below target
     candidates.sort(reverse=True)
-    return candidates[0][1]
+    return [ver_str for _, ver_str in candidates[:limit]]
 
 
 # ---------------------------------------------------------------------------
@@ -380,10 +382,10 @@ def resolve_baseline(
 
     # --- Clean version (no .dev suffix) ---
     if not has_dev:
-        prev = find_previous_release(current_version, name, repo)
-        if prev is None:
+        tags = find_release_tags_below(current_version, name, repo, limit=1)
+        if not tags:
             return None
-        return f"{name}/v{prev}"
+        return f"{name}/v{tags[0]}"
 
     # --- Dev version ---
 
@@ -430,10 +432,10 @@ def resolve_baseline(
     # Final/minor/major from pre-release dev → cumulative since last final
     if has_pre and release_type in ("stable",):
         base = get_base_version(current_version)
-        prev = find_previous_release(base, name, repo)
-        if prev is None:
+        tags = find_release_tags_below(base, name, repo, limit=1)
+        if not tags:
             return None
-        return f"{name}/v{prev}"
+        return f"{name}/v{tags[0]}"
 
     # Post-release dev + post → use dev0 baseline
     if has_post and release_type == "post":

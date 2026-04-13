@@ -16,7 +16,7 @@ class BuildArgs(CommandArgs):
     """Typed arguments for ``uvr build``."""
 
     rebuild_all: bool = False
-    rebuild: list[str] | None = None
+    packages: list[str] | None = None
     python_version: str = "3.12"
 
 
@@ -46,7 +46,8 @@ def cmd_build(args: argparse.Namespace) -> None:
             matrix=package_runners,
             uvr_version=__version__,
             python_version=parsed.python_version,
-            rebuild=parsed.rebuild or [],
+            rebuild=parsed.packages or [],
+            restrict_packages=parsed.packages or [],
             ci_publish=False,
             dev_release=True,
             dry_run=True,

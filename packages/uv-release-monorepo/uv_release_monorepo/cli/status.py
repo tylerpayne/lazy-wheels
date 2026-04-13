@@ -13,11 +13,7 @@ from ..shared.utils.cli import __version__, diff_stat, read_matrix
 from ..shared.models import PlanConfig
 from ..shared.planner import ReleasePlanner
 from ..shared.context import build_context
-from ..shared.utils.versions import (
-    detect_release_type_for_version,
-    find_version_conflicts,
-    resolve_baseline,
-)
+from ..shared.resolution import ReleaseInvalidError, resolve_release
 
 
 class StatusArgs(CommandArgs):
@@ -74,13 +70,19 @@ def cmd_status(args: argparse.Namespace) -> None:
                 commits,
             )
         )
-    from ..shared.utils.versions import find_previous_release
-
     for name, pkg in sorted(plan.unchanged.items()):
-        rt = detect_release_type_for_version(pkg.version)
-        baseline = resolve_baseline(pkg.version, rt, name, ctx.repo)
+        try:
+            r = resolve_release(pkg.version, name, ctx.repo)
+        except ReleaseInvalidError:
+            r = None
+        baseline = r.baseline_tag if r else None
         _, _, diff_tag = diff_stat(baseline, pkg.path)
-        prev = find_previous_release(pkg.version, name, ctx.repo)
+        from ..shared.utils.versions import find_release_tags_below, strip_dev
+
+        prev_tags = find_release_tags_below(
+            strip_dev(pkg.version), name, ctx.repo, limit=1
+        )
+        prev = prev_tags[0] if prev_tags else None
         rows.append(
             (
                 "unchanged",
@@ -118,13 +120,16 @@ def cmd_status(args: argparse.Namespace) -> None:
     for row in rows:
         print(f"  {_row(row)}")
 
-    # Collect warnings
+    # Collect warnings (version/tag conflicts detected by resolve_release)
     all_warnings: list[str] = []
-
-    # Version conflicts (dev version targets already-released version)
-    version_conflicts = find_version_conflicts(ctx.packages, ctx.repo)
-    for c in version_conflicts:
-        all_warnings.append(f"{c.warning()}\n    Fix: {c.hint()}")
+    for name, pkg in ctx.packages.items():
+        try:
+            resolve_release(pkg.version, name, ctx.repo)
+        except ReleaseInvalidError as e:
+            msg = str(e)
+            if e.conflict.hint:
+                msg += f"\n    Fix: {e.conflict.hint}"
+            all_warnings.append(msg)
 
     if all_warnings:
         print()
