@@ -10,7 +10,7 @@ from uv_release_monorepo.shared.utils.versions import (
     bump_dev,
     bump_patch,
     detect_release_type_for_version,
-    find_previous_release,
+    find_release_tags_below,
     get_base_version,
     is_dev,
     make_dev,
@@ -214,7 +214,7 @@ class TestParseTagVersion:
 
 
 class TestFindPreviousRelease:
-    """Tests for find_previous_release() — inverse version bump."""
+    """Tests for find_release_tags_below() — inverse version bump."""
 
     @staticmethod
     def _repo(existing_tags: set[str]) -> MagicMock:
@@ -229,164 +229,168 @@ class TestFindPreviousRelease:
     # Case 1: dev N > 0 → previous dev
     def test_dev_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1.dev2"})
-        assert find_previous_release("1.0.1.dev3", "pkg", repo) == "1.0.1.dev2"
+        assert find_release_tags_below("1.0.1.dev3", "pkg", repo) == ["1.0.1.dev2"]
 
     def test_dev_1_to_dev_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1.dev0"})
-        assert find_previous_release("1.0.1.dev1", "pkg", repo) == "1.0.1.dev0"
+        assert find_release_tags_below("1.0.1.dev1", "pkg", repo) == ["1.0.1.dev0"]
 
     # Case 2: pre N > 0 → decrement pre
     def test_alpha_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1a0"})
-        assert find_previous_release("1.0.1a1.dev0", "pkg", repo) == "1.0.1a0"
+        assert find_release_tags_below("1.0.1a1.dev0", "pkg", repo) == ["1.0.1a0"]
 
     def test_beta_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1b1"})
-        assert find_previous_release("1.0.1b2.dev0", "pkg", repo) == "1.0.1b1"
+        assert find_release_tags_below("1.0.1b2.dev0", "pkg", repo) == ["1.0.1b1"]
 
     def test_rc_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1rc2"})
-        assert find_previous_release("1.0.1rc3.dev0", "pkg", repo) == "1.0.1rc2"
+        assert find_release_tags_below("1.0.1rc3.dev0", "pkg", repo) == ["1.0.1rc2"]
 
     # Case 3: post N > 0 → decrement post
     def test_post_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1.post0"})
-        assert find_previous_release("1.0.1.post1.dev0", "pkg", repo) == "1.0.1.post0"
+        assert find_release_tags_below("1.0.1.post1.dev0", "pkg", repo) == [
+            "1.0.1.post0"
+        ]
 
     def test_post_2_to_post_1(self) -> None:
         repo = self._repo({"pkg/v1.0.1.post1"})
-        assert find_previous_release("1.0.1.post2.dev0", "pkg", repo) == "1.0.1.post1"
+        assert find_release_tags_below("1.0.1.post2.dev0", "pkg", repo) == [
+            "1.0.1.post1"
+        ]
 
     # Case 4: pre 0 → previous final
     def test_alpha_0_to_previous_patch(self) -> None:
         repo = self._repo({"pkg/v1.0.0"})
-        assert find_previous_release("1.0.1a0.dev0", "pkg", repo) == "1.0.0"
+        assert find_release_tags_below("1.0.1a0.dev0", "pkg", repo) == ["1.0.0"]
 
     def test_rc_0_to_previous_patch(self) -> None:
         repo = self._repo({"pkg/v2.1.3"})
-        assert find_previous_release("2.1.4rc0.dev0", "pkg", repo) == "2.1.3"
+        assert find_release_tags_below("2.1.4rc0.dev0", "pkg", repo) == ["2.1.3"]
 
     def test_alpha_0_minor_bump_globs(self) -> None:
         repo = self._repo({"pkg/v1.0.5"})
-        assert find_previous_release("1.1.0a0.dev0", "pkg", repo) == "1.0.5"
+        assert find_release_tags_below("1.1.0a0.dev0", "pkg", repo) == ["1.0.5"]
 
     # Case 5: post 0 → the final it patches
     def test_post_0_to_final(self) -> None:
         repo = self._repo({"pkg/v1.0.1"})
-        assert find_previous_release("1.0.1.post0.dev0", "pkg", repo) == "1.0.1"
+        assert find_release_tags_below("1.0.1.post0.dev0", "pkg", repo) == ["1.0.1"]
 
     # Case 6: patch > 0 → decrement patch
     def test_patch_decrement(self) -> None:
         repo = self._repo({"pkg/v1.0.0"})
-        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.0"
+        assert find_release_tags_below("1.0.1.dev0", "pkg", repo) == ["1.0.0"]
 
     def test_patch_decrement_higher(self) -> None:
         repo = self._repo({"pkg/v1.0.4"})
-        assert find_previous_release("1.0.5.dev0", "pkg", repo) == "1.0.4"
+        assert find_release_tags_below("1.0.5.dev0", "pkg", repo) == ["1.0.4"]
 
     # Case 7: minor > 0, patch == 0 → glob X.(Y-1).*
     def test_minor_bump_globs(self) -> None:
         repo = self._repo({"pkg/v1.0.3"})
-        assert find_previous_release("1.1.0.dev0", "pkg", repo) == "1.0.3"
+        assert find_release_tags_below("1.1.0.dev0", "pkg", repo) == ["1.0.3"]
 
     def test_minor_bump_picks_highest(self) -> None:
         repo = self._repo({"pkg/v1.0.1", "pkg/v1.0.3", "pkg/v1.0.2"})
-        assert find_previous_release("1.1.0.dev0", "pkg", repo) == "1.0.3"
+        assert find_release_tags_below("1.1.0.dev0", "pkg", repo) == ["1.0.3"]
 
     def test_minor_bump_ignores_base_tags(self) -> None:
         repo = self._repo({"pkg/v1.0.3", "pkg/v1.0.4.dev0-base"})
-        assert find_previous_release("1.1.0.dev0", "pkg", repo) == "1.0.3"
+        assert find_release_tags_below("1.1.0.dev0", "pkg", repo) == ["1.0.3"]
 
     # Case 8: major > 0, minor == 0 → glob (X-1).*
     def test_major_bump_globs(self) -> None:
         repo = self._repo({"pkg/v0.9.5"})
-        assert find_previous_release("1.0.0.dev0", "pkg", repo) == "0.9.5"
+        assert find_release_tags_below("1.0.0.dev0", "pkg", repo) == ["0.9.5"]
 
     def test_major_bump_picks_highest(self) -> None:
         repo = self._repo({"pkg/v0.1.0", "pkg/v0.9.5", "pkg/v0.8.0"})
-        assert find_previous_release("1.0.0.dev0", "pkg", repo) == "0.9.5"
+        assert find_release_tags_below("1.0.0.dev0", "pkg", repo) == ["0.9.5"]
 
     def test_major_2_to_1(self) -> None:
         repo = self._repo({"pkg/v1.5.2"})
-        assert find_previous_release("2.0.0.dev0", "pkg", repo) == "1.5.2"
+        assert find_release_tags_below("2.0.0.dev0", "pkg", repo) == ["1.5.2"]
 
     # Case 9: 0.0.0 → None (no previous possible)
     def test_zero_version_returns_none(self) -> None:
         repo = self._repo(set())
-        assert find_previous_release("0.0.0.dev0", "pkg", repo) is None
+        assert find_release_tags_below("0.0.0.dev0", "pkg", repo) == []
 
     def test_zero_clean_returns_none(self) -> None:
         repo = self._repo(set())
-        assert find_previous_release("0.0.0", "pkg", repo) is None
+        assert find_release_tags_below("0.0.0", "pkg", repo) == []
 
     # -- Ordering: finds highest tag < target by PEP 440 ordering --
 
     # Edge cases
     def test_no_tags_returns_none(self) -> None:
         repo = self._repo(set())
-        assert find_previous_release("1.0.1.dev0", "pkg", repo) is None
+        assert find_release_tags_below("1.0.1.dev0", "pkg", repo) == []
 
     def test_no_matching_tags_returns_none(self) -> None:
         repo = self._repo(set())
-        assert find_previous_release("1.1.0.dev0", "pkg", repo) is None
+        assert find_release_tags_below("1.1.0.dev0", "pkg", repo) == []
 
     # Clean versions (no .devN)
     def test_clean_final(self) -> None:
         repo = self._repo({"pkg/v1.0.0"})
-        assert find_previous_release("1.0.1", "pkg", repo) == "1.0.0"
+        assert find_release_tags_below("1.0.1", "pkg", repo) == ["1.0.0"]
 
     def test_clean_alpha_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1a0"})
-        assert find_previous_release("1.0.1a1", "pkg", repo) == "1.0.1a0"
+        assert find_release_tags_below("1.0.1a1", "pkg", repo) == ["1.0.1a0"]
 
     def test_clean_beta_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1b0"})
-        assert find_previous_release("1.0.1b1", "pkg", repo) == "1.0.1b0"
+        assert find_release_tags_below("1.0.1b1", "pkg", repo) == ["1.0.1b0"]
 
     def test_clean_rc_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1rc1"})
-        assert find_previous_release("1.0.1rc2", "pkg", repo) == "1.0.1rc1"
+        assert find_release_tags_below("1.0.1rc2", "pkg", repo) == ["1.0.1rc1"]
 
     def test_clean_post_n_gt_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1.post0"})
-        assert find_previous_release("1.0.1.post1", "pkg", repo) == "1.0.1.post0"
+        assert find_release_tags_below("1.0.1.post1", "pkg", repo) == ["1.0.1.post0"]
 
     def test_clean_post_0(self) -> None:
         repo = self._repo({"pkg/v1.0.1"})
-        assert find_previous_release("1.0.1.post0", "pkg", repo) == "1.0.1"
+        assert find_release_tags_below("1.0.1.post0", "pkg", repo) == ["1.0.1"]
 
     # Kind chain
     def test_beta_0_finds_highest_alpha(self) -> None:
         repo = self._repo({"pkg/v1.0.1a0", "pkg/v1.0.1a3", "pkg/v1.0.1a1"})
-        assert find_previous_release("1.0.1b0", "pkg", repo) == "1.0.1a3"
+        assert find_release_tags_below("1.0.1b0", "pkg", repo) == ["1.0.1a3"]
 
     def test_rc_0_finds_highest_beta(self) -> None:
         repo = self._repo({"pkg/v1.0.1b0", "pkg/v1.0.1b2"})
-        assert find_previous_release("1.0.1rc0", "pkg", repo) == "1.0.1b2"
+        assert find_release_tags_below("1.0.1rc0", "pkg", repo) == ["1.0.1b2"]
 
     def test_rc_0_skips_beta_finds_alpha(self) -> None:
         """No betas exist, falls to alpha."""
         repo = self._repo({"pkg/v1.0.1a5"})
-        assert find_previous_release("1.0.1rc0", "pkg", repo) == "1.0.1a5"
+        assert find_release_tags_below("1.0.1rc0", "pkg", repo) == ["1.0.1a5"]
 
     def test_alpha_0_finds_previous_final(self) -> None:
         repo = self._repo({"pkg/v1.0.0"})
-        assert find_previous_release("1.0.1a0", "pkg", repo) == "1.0.0"
+        assert find_release_tags_below("1.0.1a0", "pkg", repo) == ["1.0.0"]
 
     def test_beta_0_no_alphas_finds_final(self) -> None:
         """No alphas exist, falls through to previous final."""
         repo = self._repo({"pkg/v1.0.0"})
-        assert find_previous_release("1.0.1b0", "pkg", repo) == "1.0.0"
+        assert find_release_tags_below("1.0.1b0", "pkg", repo) == ["1.0.0"]
 
     def test_kind_chain_dev0(self) -> None:
         """Same kind chain works with .dev0 suffix."""
         repo = self._repo({"pkg/v1.0.1a3"})
-        assert find_previous_release("1.0.1b0.dev0", "pkg", repo) == "1.0.1a3"
+        assert find_release_tags_below("1.0.1b0.dev0", "pkg", repo) == ["1.0.1a3"]
 
     # -- Stable dev after alpha cycle (the bug that prompted this rewrite) --
 
     def test_stable_dev_finds_last_alpha(self) -> None:
-        """0.20.1.dev0 after alpha releases should find the last alpha."""
+        """Caller strips .dev0 to get 0.20.1, which is above all alphas."""
         repo = self._repo(
             {
                 "pkg/v0.20.0",
@@ -395,10 +399,10 @@ class TestFindPreviousRelease:
                 "pkg/v0.20.1a2",
             }
         )
-        assert find_previous_release("0.20.1.dev0", "pkg", repo) == "0.20.1a2"
+        assert find_release_tags_below("0.20.1", "pkg", repo) == ["0.20.1a2"]
 
     def test_stable_dev_finds_last_rc(self) -> None:
-        """Stable dev after rc releases should find the last rc."""
+        """Caller strips .dev0 to get 1.0.1, which is above all pre-releases."""
         repo = self._repo(
             {
                 "pkg/v1.0.0",
@@ -408,17 +412,17 @@ class TestFindPreviousRelease:
                 "pkg/v1.0.1rc1",
             }
         )
-        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.1rc1"
+        assert find_release_tags_below("1.0.1", "pkg", repo) == ["1.0.1rc1"]
 
     def test_stable_dev_no_prereleases_finds_final(self) -> None:
         """Stable dev with no prereleases falls back to previous final."""
         repo = self._repo({"pkg/v1.0.0"})
-        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.0"
+        assert find_release_tags_below("1.0.1.dev0", "pkg", repo) == ["1.0.0"]
 
     # -- Ignores non-release tags --
 
     def test_ignores_base_tags(self) -> None:
-        """Base tags (-base suffix) are not releases."""
+        """Base tags (-base suffix) fail PEP 440 parsing and are skipped."""
         repo = self._repo(
             {
                 "pkg/v1.0.0",
@@ -427,7 +431,7 @@ class TestFindPreviousRelease:
                 "pkg/v1.0.1a1.dev0-base",
             }
         )
-        assert find_previous_release("1.0.1.dev0", "pkg", repo) == "1.0.1a0"
+        assert find_release_tags_below("1.0.1", "pkg", repo) == ["1.0.1a0"]
 
     def test_ignores_dev_tags(self) -> None:
         """Dev release tags (.devN) are not stable releases."""
@@ -438,7 +442,7 @@ class TestFindPreviousRelease:
                 "pkg/v1.0.1.dev1",
             }
         )
-        assert find_previous_release("1.0.1.dev2", "pkg", repo) == "1.0.1.dev1"
+        assert find_release_tags_below("1.0.1.dev2", "pkg", repo) == ["1.0.1.dev1"]
 
     # -- Idempotency: inv_bump(bump(v)) == v --
 
@@ -467,8 +471,8 @@ class TestFindPreviousRelease:
     def test_idempotency(self, release_ver: str, next_ver: str) -> None:
         """inv_bump(bump(v)) == v — the next dev version's inverse is the release."""
         repo = self._repo({f"pkg/v{release_ver}"})
-        result = find_previous_release(next_ver, "pkg", repo)
-        assert result == release_ver, (
+        result = find_release_tags_below(next_ver, "pkg", repo)
+        assert result == [release_ver], (
             f"inv_bump({next_ver!r}) should be {release_ver!r}, got {result!r}"
         )
 

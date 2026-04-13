@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from packaging.utils import canonicalize_name
 
 from ..utils.config import get_config, get_publish_config
 from ..context import ReleaseContext, RepositoryContext, build_context
+from ..resolution import ReleaseResolution, resolve_release
 from ..utils.shell import Progress
 from ..models import (
     BuildStage,
@@ -30,19 +30,8 @@ from ..utils.git import generate_release_notes
 from ..utils.changes import detect_changes
 from ..utils.dependencies import pin_dependencies, set_version
 from ..utils.versions import (
-    bump_dev,
-    bump_patch,
-    detect_release_type_for_version,
-    extract_pre_kind,
-    find_previous_release,
-    is_dev,
-    is_post,
-    is_pre,
-    make_dev,
-    make_post,
-    make_pre,
+    find_release_tags_below,
     parse_tag_version,
-    resolve_baseline,
     strip_dev,
 )
 
@@ -50,26 +39,6 @@ from ..utils.versions import (
 def _dist_name(name: str) -> str:
     """Convert a package name to its wheel/dist filename stem."""
     return canonicalize_name(name).replace("-", "_")
-
-
-def _next_dev_version(release_version: str) -> str:
-    """Compute the next dev version after a release.
-
-    Auto-detects from the release version:
-    - ``1.0.1``       → ``1.0.2.dev0``   (stable → bump patch)
-    - ``1.0.1a2``     → ``1.0.1a3.dev0`` (pre → increment pre number)
-    - ``1.0.1.post0`` → ``1.0.1.post1.dev0`` (post → increment post number)
-    """
-    if is_pre(release_version):
-        kind = extract_pre_kind(release_version)
-        m = re.search(rf"{re.escape(kind)}(\d+)$", release_version)
-        n = int(m.group(1)) + 1 if m else 1
-        return make_dev(make_pre(release_version, kind, n))
-    if is_post(release_version):
-        m = re.search(r"\.post(\d+)$", release_version)
-        n = int(m.group(1)) + 1 if m else 1
-        return make_dev(make_post(release_version, n))
-    return make_dev(bump_patch(release_version))
 
 
 class ReleasePlanner:
@@ -93,26 +62,28 @@ class ReleasePlanner:
     def plan(self) -> ReleasePlan:
         """Detect changes and return a ReleasePlan."""
         packages = self.ctx.packages
+        skip = frozenset(self.config.skip)
 
-        # Step 1: Resolve baselines per release type
+        # Step 1: Resolve baselines, release versions, and next versions
+        # via the state machine. This also validates tag and version conflicts.
         if self.progress:
             self.progress.update("Resolving baselines")
+        resolutions: dict[str, ReleaseResolution] = {}
         if isinstance(self.ctx, ReleaseContext):
             baselines = self.ctx.baselines
         else:
             baselines: dict[str, str | None] = {}
-            for name, info in packages.items():
-                rt = (
-                    "dev"
-                    if self.config.dev_release
-                    else detect_release_type_for_version(info.version)
-                )
-                baselines[name] = resolve_baseline(
-                    info.version,
-                    rt,
-                    name,
-                    self.ctx.repo,
-                )
+        for name, info in packages.items():
+            r = resolve_release(
+                info.version,
+                name,
+                self.ctx.repo,
+                dev_release=self.config.dev_release,
+                skip=skip,
+            )
+            resolutions[name] = r
+            if not isinstance(self.ctx, ReleaseContext):
+                baselines[name] = r.baseline_tag
         if self.progress:
             self.progress.complete(f"Resolved {len(packages)} baselines")
 
@@ -126,6 +97,11 @@ class ReleasePlanner:
             rebuild=self.config.rebuild or None,
             ctx=self.ctx,
         )
+        if self.config.restrict_packages and not self.config.rebuild_all:
+            restrict_closure = self._collect_deps(
+                set(self.config.restrict_packages), packages
+            )
+            changed_names = [n for n in changed_names if n in restrict_closure]
         raw_changed = {name: packages[name] for name in changed_names}
         unchanged = {
             name: info for name, info in packages.items() if name not in changed_names
@@ -135,15 +111,19 @@ class ReleasePlanner:
                 f"Detected {len(changed_names)} changed, {len(unchanged)} unchanged"
             )
 
-        # Step 3: Compute release versions
+        # Step 3: Extract pre-computed versions from resolutions
         if self.progress:
             self.progress.update("Computing versions")
         current_versions = {name: info.version for name, info in raw_changed.items()}
-        release_versions = self._compute_release_versions(raw_changed)
+        release_versions: dict[str, str] = {}
+        next_versions: dict[str, str] = {}
         versioned: dict[str, PackageInfo] = {}
         for name, info in raw_changed.items():
+            r = resolutions[name]
+            release_versions[name] = r.release_version
+            next_versions[name] = r.next_version
             versioned[name] = PackageInfo(
-                path=info.path, version=release_versions[name], deps=info.deps
+                path=info.path, version=r.release_version, deps=info.deps
             )
 
         # Find previous release tags for dep pinning
@@ -152,15 +132,16 @@ class ReleasePlanner:
         else:
             release_tags: dict[str, str | None] = {}
             for name, info in packages.items():
-                prev = find_previous_release(info.version, name, self.ctx.repo)
-                release_tags[name] = f"{name}/v{prev}" if prev else None
+                tags = find_release_tags_below(
+                    strip_dev(info.version), name, self.ctx.repo, limit=1
+                )
+                release_tags[name] = f"{name}/v{tags[0]}" if tags else None
 
         published_versions = self._published_versions(
             versioned, changed_names, packages, release_tags
         )
         if not self.config.dry_run:
             self._apply_versions_and_pins(versioned, published_versions)
-        next_versions = self._compute_next_versions(versioned)
         if self.progress:
             self.progress.complete(
                 f"Computed versions for {len(changed_names)} packages"
@@ -207,9 +188,6 @@ class ReleasePlanner:
         publish_commands = self._generate_publish_commands(changed, publish_config)
         bump_commands = self._generate_bump_commands(changed, published_versions)
 
-        # Validate tag conflicts: always abort on conflict
-        self._check_tag_conflicts(changed)
-
         return ReleasePlan(
             uvr_version=self.config.uvr_version,
             python_version=self.config.python_version,
@@ -241,39 +219,6 @@ class ReleasePlanner:
                 if dep in published_versions
             }
             pin_dependencies(pyproject, dep_versions)
-
-    def _compute_release_versions(
-        self,
-        changed: dict[str, PackageInfo],
-    ) -> dict[str, str]:
-        """Compute the release version string for each changed package."""
-        result: dict[str, str] = {}
-
-        if self.config.dev_release:
-            for name, info in changed.items():
-                # If already dev, publish as-is; otherwise append .dev0
-                result[name] = (
-                    info.version if is_dev(info.version) else make_dev(info.version)
-                )
-        else:
-            # Default: strip .devN, release whatever is underneath
-            for name, info in changed.items():
-                result[name] = strip_dev(info.version)
-
-        return result
-
-    def _compute_next_versions(self, changed: dict[str, PackageInfo]) -> dict[str, str]:
-        """Compute the post-release dev version for each changed package."""
-        result: dict[str, str] = {}
-
-        for name, info in changed.items():
-            if self.config.dev_release:
-                result[name] = bump_dev(info.version)
-            else:
-                # Auto-detect from the release version
-                result[name] = _next_dev_version(info.version)
-
-        return result
 
     # ------------------------------------------------------------------
     # Command generation
@@ -556,74 +501,6 @@ class ReleasePlanner:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _find_tag_conflicts(
-        self,
-        changed: dict[str, ChangedPackage],
-    ) -> list[str]:
-        """Find planned tags that already exist locally.
-
-        Returns a list of conflicting tag names. Does not abort.
-        Skips release tag checks when uvr-release is being skipped
-        (tags already exist from a previous run).
-        """
-        repo = self.ctx.repo
-        check_release_tags = "uvr-release" not in self.config.skip
-        conflicts: list[str] = []
-        for name, pkg in changed.items():
-            # Baseline tags are always checked (created during bump)
-            base_tag = f"{name}/v{pkg.next_version}-base"
-            if repo.references.get(f"refs/tags/{base_tag}") is not None:
-                conflicts.append(base_tag)
-            # Release tags only checked when uvr-release will actually run
-            if check_release_tags:
-                release_tag = f"{name}/v{pkg.release_version}"
-                if repo.references.get(f"refs/tags/{release_tag}") is not None:
-                    conflicts.append(release_tag)
-        return conflicts
-
-    def _check_tag_conflicts(
-        self,
-        changed: dict[str, ChangedPackage],
-    ) -> None:
-        """Verify that no planned tags conflict. Aborts on conflict."""
-        from ..utils.shell import exit_fatal
-
-        conflicts = self._find_tag_conflicts(changed)
-        if not conflicts:
-            return
-
-        lines = "\n".join(f"  {t}" for t in sorted(conflicts))
-        post_hint = "  1. Use --post to publish a post-release\n"
-        bump_cmds = []
-        for t in conflicts:
-            pkg_name = t.split("/v")[0]
-            if pkg_name in changed:
-                ver = parse_tag_version(t)
-                try:
-                    next_ver = make_dev(bump_patch(ver))
-                    bump_cmds.append(
-                        f"     uv version {next_ver} --directory {changed[pkg_name].path}"
-                    )
-                except ValueError:
-                    bump_cmds.append(
-                        f"     uv version <next-version> --directory {changed[pkg_name].path}"
-                    )
-
-        bump_hint = ""
-        if bump_cmds:
-            bump_detail = "\n".join(bump_cmds)
-            bump_hint = f"  2. Bump past the conflict:\n{bump_detail}\n"
-        else:
-            bump_hint = "  2. Bump to a new version: uv version <new-version> --directory <pkg>\n"
-
-        exit_fatal(
-            f"These tags/releases already exist and would conflict:\n"
-            f"{lines}\n\n"
-            f"To resolve, either:\n"
-            f"{post_hint}"
-            f"{bump_hint}"
-        )
 
     @staticmethod
     def _published_versions(

@@ -13,3 +13,4 @@ How <code class="brand-code">uvr</code> works internally. The design decisions, 
 - [Build](03-build.md):Topologically layered builds with per-runner matrices.
 - [Workflow](04-workflow.md):A stable CI template you never debug.
 - [Release](05-release.md):From change detection to published wheels.
+- [Package States](package-states.md):The complete state machine, data model, and failure modes.
