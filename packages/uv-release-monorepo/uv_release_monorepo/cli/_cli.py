@@ -651,7 +651,11 @@ Run 'uvr <command> --help' for details on a specific command.
         default=None,
         help="Plan JSON, @file path, or omit to use UVR_PLAN env var.",
     )
-    build_job_parser.add_argument("--runner", required=True)
+    build_job_parser.add_argument(
+        "--runner",
+        default=None,
+        help="Runner JSON, or omit to use UVR_RUNNER env var.",
+    )
     build_job_parser.set_defaults(func=cmd_job_build)
 
     download_job_parser = jobs_sub.add_parser(

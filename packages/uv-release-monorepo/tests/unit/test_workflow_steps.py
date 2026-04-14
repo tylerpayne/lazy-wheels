@@ -78,10 +78,13 @@ def test_build_runs_commands(mock_run: MagicMock) -> None:
             ],
         },
     )
-    with patch.object(
-        sys,
-        "argv",
-        ["uvr", "jobs", "build", "--plan", plan_json, "--runner", '["ubuntu-latest"]'],
+    with (
+        patch.object(
+            sys,
+            "argv",
+            ["uvr", "jobs", "build", "--plan", plan_json],
+        ),
+        patch.dict("os.environ", {"UVR_RUNNER": '["ubuntu-latest"]'}),
     ):
         cli()
     assert mock_run.call_count == 2
@@ -108,10 +111,13 @@ def test_bump_runs_commands(mock_run: MagicMock) -> None:
 def test_build_no_commands_for_runner(mock_run: MagicMock) -> None:
     """uvr build is a no-op when no commands exist for the runner."""
     plan_json = _make_plan_json(changed=["pkg-a"], unchanged=[])
-    with patch.object(
-        sys,
-        "argv",
-        ["uvr", "jobs", "build", "--plan", plan_json, "--runner", '["macos-latest"]'],
+    with (
+        patch.object(
+            sys,
+            "argv",
+            ["uvr", "jobs", "build", "--plan", plan_json],
+        ),
+        patch.dict("os.environ", {"UVR_RUNNER": '["macos-latest"]'}),
     ):
         cli()
     mock_run.assert_not_called()

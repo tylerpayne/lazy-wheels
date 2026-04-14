@@ -24,27 +24,10 @@ from pydantic import (
 
 
 def _validate_runner_key(v: Any) -> tuple[str, ...]:
-    """Parse a runner key from a JSON string or sequence into a tuple.
-
-    Handles two forms of shell mangling that occur when GitHub Actions
-    expands ``${{ toJSON(matrix.runner) }}`` on Windows PowerShell:
-
-    1. Multiline JSON (newlines between elements).
-    2. Stripped double-quotes (PowerShell removes ``"`` from args),
-       leaving bare words like ``[ self-hosted, windows, arm64 ]``.
-    """
+    """Parse a runner key from a JSON string or sequence into a tuple."""
     if isinstance(v, str):
-        v = " ".join(v.split())  # collapse multiline whitespace
-        try:
-            parsed = _json.loads(v)
-        except _json.JSONDecodeError:
-            # PowerShell strips double-quotes from arguments, leaving
-            # bare words.  Parse as a bracket-delimited, comma-separated
-            # list and strip residual quotes/whitespace from each element.
-            inner = v.strip("[] ")
-            if not inner:
-                raise
-            parsed = [s.strip().strip("'\"") for s in inner.split(",")]
+        v = " ".join(v.split())  # normalize multiline JSON from toJSON()
+        parsed = _json.loads(v)
         if not isinstance(parsed, list):
             msg = f"Expected JSON array for runner key, got {type(parsed).__name__}"
             raise ValueError(msg)

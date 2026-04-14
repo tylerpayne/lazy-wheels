@@ -37,16 +37,6 @@ class TestValidateRunnerKey:
     def test_tuple_input(self) -> None:
         assert _validate_runner_key(("macos-14",)) == ("macos-14",)
 
-    def test_bare_words_from_powershell(self) -> None:
-        """PowerShell strips double-quotes, leaving bare words."""
-        bare = "[ self-hosted, windows, arm64 ]"
-        assert _validate_runner_key(bare) == ("self-hosted", "windows", "arm64")
-
-    def test_multiline_bare_words(self) -> None:
-        """Multiline AND stripped quotes (both mangling forms combined)."""
-        mangled = "[\n  self-hosted,\n  windows,\n  arm64\n]"
-        assert _validate_runner_key(mangled) == ("self-hosted", "windows", "arm64")
-
 
 class TestPackageInfo:
     def test_create_with_required_fields(self) -> None:

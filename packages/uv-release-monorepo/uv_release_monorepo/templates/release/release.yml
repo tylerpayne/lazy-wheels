@@ -46,7 +46,8 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
-      run: uv run uvr jobs build --runner '${{ toJSON(matrix.runner) }}'
+        UVR_RUNNER: ${{ toJSON(matrix.runner) }}
+      run: uv run uvr jobs build
     - id: upload
       uses: actions/upload-artifact@v4
       with:
