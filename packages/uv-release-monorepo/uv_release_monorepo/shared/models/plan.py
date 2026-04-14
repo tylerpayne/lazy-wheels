@@ -26,6 +26,7 @@ from pydantic import (
 def _validate_runner_key(v: Any) -> tuple[str, ...]:
     """Parse a runner key from a JSON string or sequence into a tuple."""
     if isinstance(v, str):
+        v = " ".join(v.split())  # normalize multiline JSON from toJSON()
         parsed = _json.loads(v)
         if not isinstance(parsed, list):
             msg = f"Expected JSON array for runner key, got {type(parsed).__name__}"

@@ -14,9 +14,28 @@ from uv_release_monorepo.shared.models import (
     PackageInfo,
     ReleasePlan,
     ShellCommand,
+    _validate_runner_key,
 )
 
 _SUBPROCESS_RUN = "uv_release_monorepo.shared.models.plan.subprocess.run"
+
+
+class TestValidateRunnerKey:
+    """Tests for _validate_runner_key parsing."""
+
+    def test_compact_json_string(self) -> None:
+        assert _validate_runner_key('["ubuntu-latest"]') == ("ubuntu-latest",)
+
+    def test_multiline_json_string(self) -> None:
+        """Multiline JSON from GitHub Actions toJSON() is normalized before parsing."""
+        multiline = '[\n  "self-hosted",\n  "windows",\n  "arm64"\n]'
+        assert _validate_runner_key(multiline) == ("self-hosted", "windows", "arm64")
+
+    def test_list_input(self) -> None:
+        assert _validate_runner_key(["ubuntu-latest"]) == ("ubuntu-latest",)
+
+    def test_tuple_input(self) -> None:
+        assert _validate_runner_key(("macos-14",)) == ("macos-14",)
 
 
 class TestPackageInfo:
