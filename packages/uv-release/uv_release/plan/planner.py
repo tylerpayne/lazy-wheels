@@ -190,7 +190,7 @@ def _plan_validate_job(
     if params.dev_release:
         return Job(name="validate")
 
-    commands = _build_version_fix_commands(releases)
+    commands = _build_version_fix_commands(releases, push=params.target == "ci")
 
     if params.target == "local" and commands:
         commands = [
@@ -206,6 +206,8 @@ def _plan_validate_job(
 
 def _build_version_fix_commands(
     releases: dict[str, Release],
+    *,
+    push: bool = False,
 ) -> list[Command]:
     """Build SetVersion + PinDeps + git commit commands for dev packages."""
     needs_fix = {
@@ -254,5 +256,8 @@ def _build_version_fix_commands(
             args=["git", "commit", "-am", "chore: set release versions", "-m", body],
         )
     )
+
+    if push:
+        commands.append(ShellCommand(label="Push", args=["git", "push"]))
 
     return commands
