@@ -538,6 +538,10 @@ class Plan(BaseModel):
     releases: dict[str, Release] = Field(default_factory=dict)
     workflow: Workflow = Workflow()
     target: Literal["ci", "local"] = "local"
+    build_matrix: list[list[str]] = Field(default_factory=lambda: [["ubuntu-latest"]])
+    python_version: str = "3.12"
+    publish_environment: str = ""
+    skip: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

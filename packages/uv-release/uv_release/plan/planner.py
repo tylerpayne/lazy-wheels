@@ -122,12 +122,24 @@ def _create_plan(
 
     changes_dict = {c.package.name: c for c in changes}
 
+    # Collect unique runner sets for CI build matrix
+    runner_sets: list[list[str]] = []
+    for name in releases:
+        pkg_runners = workspace.runners.get(name, [["ubuntu-latest"]])
+        for runner in pkg_runners:
+            if runner not in runner_sets:
+                runner_sets.append(runner)
+
     return Plan(
         workspace=workspace,
         changes=changes_dict,
         releases=releases,
         workflow=workflow,
         target=params.target,
+        build_matrix=runner_sets or [["ubuntu-latest"]],
+        python_version=workspace.config.python_version,
+        publish_environment=workspace.publishing.environment,
+        skip=sorted(params.skip),
     )
 
 
