@@ -4,27 +4,24 @@ from __future__ import annotations
 
 import sys
 
-from ..commands import PinDepsCommand, SetVersionCommand, ShellCommand
 from ..detect.detector import detect_changes
 from ..parse.hooks import parse_hooks
 from ..parse.workspace import parse_workspace
 from ..types import (
     BumpType,
     Change,
-    Command,
-    CommandGroup,
     Config,
     Job,
     Plan,
     PlanParams,
     Release,
-    Version,
     Workspace,
 )
 from .build import plan_build_job
 from .bump import plan_bump_job
 from .publish import plan_publish_job
 from .release import plan_release_job
+from .validate import plan_validate_job
 from .versioning import (
     compute_bumped_version,
     compute_next_version,
@@ -91,7 +88,7 @@ def _create_plan(
     skip = params.skip
 
     # Version-fix commands for local target when version != release_version
-    validate_job = _plan_validate_job(releases, params)
+    validate_job = plan_validate_job(releases, params)
 
     build_job = (
         plan_build_job(workspace, releases)
@@ -180,84 +177,3 @@ def _create_release(
         release_notes=notes,
         make_latest=(name == config.latest_package),
     )
-
-
-def _plan_validate_job(
-    releases: dict[str, Release],
-    params: PlanParams,
-) -> Job:
-    """Build the validate job, including version-fix commands when needed."""
-    if params.dev_release:
-        return Job(name="validate")
-
-    commands = _build_version_fix_commands(releases, push=params.target == "ci")
-
-    if params.target == "local" and commands:
-        commands = [
-            CommandGroup(
-                label="Set release versions and commit",
-                needs_user_confirmation=True,
-                commands=commands,
-            )
-        ]
-
-    return Job(name="validate", commands=commands)
-
-
-def _build_version_fix_commands(
-    releases: dict[str, Release],
-    *,
-    push: bool = False,
-) -> list[Command]:
-    """Build SetVersion + PinDeps + git commit commands for dev packages."""
-    needs_fix = {
-        name: release
-        for name, release in releases.items()
-        if release.package.version != release.release_version
-    }
-    if not needs_fix:
-        return []
-
-    commands: list[Command] = []
-
-    # Set release version for each package that needs it
-    pins: dict[str, Version] = {}
-    for name, release in sorted(needs_fix.items()):
-        commands.append(
-            SetVersionCommand(
-                label=f"Set {name} to {release.release_version.raw}",
-                package=release.package,
-                version=release.release_version,
-            )
-        )
-        pins[name] = release.release_version
-
-    # Pin internal deps
-    if pins:
-        for name, release in sorted(releases.items()):
-            pkg_pins = {dep: pins[dep] for dep in release.package.deps if dep in pins}
-            if pkg_pins:
-                commands.append(
-                    PinDepsCommand(
-                        label=f"Pin deps for {name}",
-                        package=release.package,
-                        pins=pkg_pins,
-                    )
-                )
-
-    # Commit
-    body = "\n".join(
-        f"{name} {release.release_version.raw}"
-        for name, release in sorted(needs_fix.items())
-    )
-    commands.append(
-        ShellCommand(
-            label="Commit release versions",
-            args=["git", "commit", "-am", "chore: set release versions", "-m", body],
-        )
-    )
-
-    if push:
-        commands.append(ShellCommand(label="Push", args=["git", "push"]))
-
-    return commands

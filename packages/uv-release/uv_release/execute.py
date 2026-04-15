@@ -35,7 +35,12 @@ def execute_job(
         hooks = parse_hooks()
     job = plan.workflow.jobs.get(job_name)
     if job is None:
-        return
+        available = ", ".join(sorted(plan.workflow.jobs.keys()))
+        print(
+            f"ERROR: Job '{job_name}' not found in plan. Available jobs: {available}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Pre-hook
     if hooks is not None and job.pre_hook:

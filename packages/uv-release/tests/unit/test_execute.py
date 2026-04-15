@@ -256,10 +256,11 @@ class TestNeedsUserConfirmation:
 
 
 class TestExecuteJobEdgeCases:
-    def test_missing_job_is_noop(self) -> None:
-        """execute_job with a non-existent job name does nothing."""
+    def test_missing_job_exits_with_error(self) -> None:
+        """execute_job with a non-existent job name exits with an error."""
         plan = _make_plan({})
-        execute_job(plan, "nonexistent", hooks=None)
+        with pytest.raises(SystemExit):
+            execute_job(plan, "nonexistent", hooks=None)
 
     def test_missing_hook_method_raises(self) -> None:
         """Calling a hook method that doesn't exist raises AttributeError."""

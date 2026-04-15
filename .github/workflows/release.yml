@@ -27,7 +27,7 @@ jobs:
         name: Validate release plan
         env:
           UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs validate
+        run: uv run uvr jobs uvr-validate
   check:
     needs: [uvr-validate]
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
         UVR_RUNNER: ${{ toJSON(matrix.runner) }}
-      run: uv run uvr jobs build
+      run: uv run uvr jobs uvr-build
     - id: upload
       uses: actions/upload-artifact@v4
       with:
@@ -100,7 +100,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
-      run: uv run uvr jobs release
+      run: uv run uvr jobs uvr-release
   uvr-publish:
     if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-publish') }}
     needs: [uvr-release]
@@ -127,7 +127,7 @@ jobs:
         name: Publish to package index
         env:
           UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs publish
+        run: uv run uvr jobs uvr-publish
   uvr-bump:
     if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-bump') }}
     needs: [uvr-publish]
@@ -147,4 +147,4 @@ jobs:
         name: Finalize release
         env:
           UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs bump
+        run: uv run uvr jobs uvr-bump
