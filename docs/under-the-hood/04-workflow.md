@@ -61,7 +61,7 @@ Custom jobs survive <code class="brand-code">uvr workflow init --upgrade</code>.
 For injecting data into the plan before it reaches CI.
 
 ```python
-from uv_release_monorepo import ReleaseHook, ReleasePlan
+from uv_release import ReleaseHook, ReleasePlan
 
 class Hook(ReleaseHook):
     def post_plan(self, plan: ReleasePlan) -> ReleasePlan:

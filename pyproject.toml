@@ -2,17 +2,10 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-pkg-alpha = { workspace = true }
-pkg-beta = { workspace = true }
-pkg-gamma = { workspace = true }
-pkg-delta = { workspace = true }
 uv-release = { workspace = true }
 
 [tool.uvr.config]
 latest = "uv-release"
-init_version = "0.18.0"
-skill_version = "0.21.8.dev0"
-workflow_version = "0.18.2.dev0"
 
 [[tool.uv.index]]
 name = "pypi"
@@ -22,7 +15,7 @@ publish-url = "https://upload.pypi.org/legacy/"
 [tool.uvr.publish]
 index = "pypi"
 environment = "pypi"
-exclude = ["pkg-delta", "pkg-alpha", "pkg-beta", "pkg-gamma"]
+
 [dependency-groups]
 dev = [
     "uv-release",
@@ -37,10 +30,10 @@ dev = [
 format = "ruff format ."
 lint = "ruff check ."
 lintfix = "ruff check --fix ."
-typecheck = "ty check packages/uv-release-monorepo"
+typecheck = "ty check packages/uv-release"
 check = ["lint", "typecheck"]
 fix = ["lintfix", "format"]
-test = "pytest packages/uv-release-monorepo/tests/ -v"
+test = "pytest packages/uv-release/tests/ -v"
 all = ["fix", "check", "test"]
 "docs:dev" = "npx vitepress dev docs"
 "docs:build" = "npx vitepress build docs"

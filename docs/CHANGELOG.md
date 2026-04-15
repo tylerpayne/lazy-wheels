@@ -86,7 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - Add `ReleaseHook` plugin system for extending the release pipeline with Python hooks — supports local hooks (`pre_plan`/`post_plan`) and CI hooks (`pre_build`/`post_build`/`pre_release`/`post_release`/`pre_finalize`/`post_finalize`) (ADR-0011)
 - Add `[tool.uvr.hooks]` config key and convention-based discovery (`uvr_hooks.py` at workspace root)
-- Export `ReleaseHook` and `ReleasePlan` from `uv_release_monorepo` package root
+- Export `ReleaseHook` and `ReleasePlan` from `uv_release` package root
 
 ### Changed
 - Replace `git` and `gh` subprocess calls with pygit2 and httpx for faster release planning (ADR-0012)
@@ -291,7 +291,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [v0.4.2] - 2026-03-23
 
 ### Added
-- Add tag-triggered PyPI publish workflow (`uv-release-monorepo/v*` tags, excluding `-dev`)
+- Add tag-triggered PyPI publish workflow (`uv-release/v*` tags, excluding `-dev`)
 - Add `make_latest` field to `PublishEntry`, driven by `[tool.uvr.config] latest` setting
 
 ### Fixed
@@ -334,7 +334,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `uvr status` command showing workflow config and changed packages
 
 ### Changed
-- **BREAKING**: Replace `lazy-wheels` package entirely with `uv-release-monorepo`
+- **BREAKING**: Replace `lazy-wheels` package entirely with `uv-release`
 - Matrix config moved to `[tool.uvr.matrix]` in workspace root `pyproject.toml`
 
 ### Removed

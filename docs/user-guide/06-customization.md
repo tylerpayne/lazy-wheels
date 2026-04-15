@@ -59,7 +59,7 @@ env:
 Create `uvr_hooks.py` at your workspace root.
 
 ```python
-from uv_release_monorepo import ReleaseHook, ReleasePlan
+from uv_release import ReleaseHook, ReleasePlan
 
 
 class Hook(ReleaseHook):

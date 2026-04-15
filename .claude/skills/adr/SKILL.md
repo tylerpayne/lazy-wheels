@@ -6,7 +6,7 @@ argument-hint: "[short title of the decision]"
 
 # Writing Architecture Decision Records
 
-ADRs use the [MADR](https://adr.github.io/madr/) format and live in `docs/adr/` at the workspace root. All decisions — whether about the CLI, the release pipeline, CI, or tooling — are recorded here. There is only one releasable package (`uv-release-monorepo`) so a single ADR directory is sufficient.
+ADRs use the [MADR](https://adr.github.io/madr/) format and live in `docs/adr/` at the workspace root. All decisions — whether about the CLI, the release pipeline, CI, or tooling — are recorded here. There is only one releasable package (`uv-release`) so a single ADR directory is sufficient.
 
 See also: [ADR practices](https://adr.github.io/ad-practices/).
 
