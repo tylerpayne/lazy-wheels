@@ -41,6 +41,8 @@ def cmd_bump(args: argparse.Namespace) -> None:
         skip=frozenset({"build", "release", "publish"}),
         bump_type=bump_type,
         pin=not parsed.no_pin,
+        tag=False,
+        push=False,
     )
     plan = create_plan(params)
 
