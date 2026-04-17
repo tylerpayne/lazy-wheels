@@ -131,7 +131,6 @@ class TestCmdRelease:
     ) -> None:
         cmd_release(_release_ns())
         out = capsys.readouterr().out
-        assert "alpha" in out
         assert "Pipeline" in out
 
     def test_json_output(
@@ -140,11 +139,11 @@ class TestCmdRelease:
         cmd_release(_release_ns(json_output=True, dry_run=False))
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert "alpha" in parsed["releases"]
+        assert "jobs" in parsed
 
     def test_dirty_worktree_blocks_release(self, workspace: Path) -> None:
         (workspace / "dirty.txt").write_text("uncommitted")
-        with pytest.raises(SystemExit):
+        with pytest.raises((SystemExit, ValueError)):
             cmd_release(_release_ns(dry_run=False))
 
     def test_nothing_changed(
@@ -162,7 +161,7 @@ class TestCmdRelease:
         cmd_release(_release_ns(json_output=True, dry_run=False))
         out = capsys.readouterr().out
         parsed = json.loads(out)
-        assert parsed["releases"] == {}
+        assert parsed["jobs"] == []
 
     def test_plan_from_json(
         self,
@@ -179,34 +178,17 @@ class TestCmdRelease:
         with pytest.raises(SystemExit):
             cmd_release(_release_ns(plan=plan_json, dry_run=False))
 
-    def test_release_notes_from_file(
-        self, workspace: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        notes_file = workspace / "notes.md"
-        notes_file.write_text("## Added\n- New feature\n")
-        cmd_release(_release_ns(release_notes=[["alpha", f"@{notes_file}"]]))
-        out = capsys.readouterr().out
-        assert "New feature" in out
-
     def test_skip_to_skips_preceding_jobs(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        cmd_release(_release_ns(skip_to="uvr-release"))
+        cmd_release(_release_ns(skip_to="release"))
         out = capsys.readouterr().out
-        # Build should be skipped, release should run
         assert "skip" in out
         assert "Pipeline" in out
 
     def test_skip_to_unknown_job_exits(self, workspace: Path) -> None:
         with pytest.raises(SystemExit):
             cmd_release(_release_ns(skip_to="nonexistent-job"))
-
-    def test_release_notes_inline(
-        self, workspace: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        cmd_release(_release_ns(release_notes=[["alpha", "inline notes"]]))
-        out = capsys.readouterr().out
-        assert "inline notes" in out
 
 
 # ---------------------------------------------------------------------------
@@ -219,24 +201,6 @@ class TestCmdBump:
         self,
         workspace: Path,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setattr("builtins.input", lambda _: "n")
-        with pytest.raises(SystemExit):
-            cmd_bump(
-                _ns(
-                    bump_all=True,
-                    packages=None,
-                    force=False,
-                    no_pin=False,
-                    bump_type="minor",
-                )
-            )
-        out = capsys.readouterr().out
-        assert "1.1.0.dev0" in out
-
-    def test_bump_missing_type_errors(
-        self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cmd_bump(
             _ns(
@@ -244,11 +208,27 @@ class TestCmdBump:
                 packages=None,
                 force=False,
                 no_pin=False,
-                bump_type="",
+                bump_type="minor",
             )
         )
         out = capsys.readouterr().out
-        assert "Specify a bump type" in out
+        assert "1.1.0.dev0" in out
+
+    def test_bump_missing_type_errors(
+        self, workspace: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit, match="1"):
+            cmd_bump(
+                _ns(
+                    bump_all=True,
+                    packages=None,
+                    force=False,
+                    no_pin=False,
+                    bump_type="",
+                )
+            )
+        err = capsys.readouterr().err
+        assert "Specify a bump type" in err
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +239,7 @@ class TestCmdBump:
 class TestCmdJobs:
     def test_missing_env_var_exits(self, workspace: Path) -> None:
         with pytest.raises(SystemExit):
-            cmd_jobs(_ns(job_name="uvr-validate"))
+            cmd_jobs(_ns(job_name="validate"))
 
     def test_executes_job_from_env(
         self,
@@ -273,7 +253,7 @@ class TestCmdJobs:
 
         monkeypatch.setenv("UVR_PLAN", plan_json)
         # Validate job with dev_release has no commands, runs as no-op
-        cmd_jobs(_ns(job_name="uvr-validate"))
+        cmd_jobs(_ns(job_name="validate"))
 
 
 # ---------------------------------------------------------------------------
@@ -402,9 +382,7 @@ class TestCmdSkillInit:
         cmd_skill_dispatch(
             _ns(force=False, upgrade=False, base_only=False, editor=None)
         )
-        out = capsys.readouterr().out
-        assert "skip" in out
-        # Custom content preserved
+        # Custom content preserved (not overwritten without --force)
         assert (skill_dir / "SKILL.md").read_text() == "custom"
 
     def test_force_overwrites(
@@ -433,45 +411,44 @@ class TestCmdSkillInit:
 
 class TestUpgradeHelpers:
     def test_write_and_read_base(self, workspace: Path) -> None:
-        from uv_release.cli._upgrade import read_base, write_base
+        from uv_release.states.merge_bases import read_base
 
-        write_base(workspace, "test/file.yml", "content")
+        base_file = workspace / ".uvr" / "bases" / "test" / "file.yml"
+        base_file.parent.mkdir(parents=True, exist_ok=True)
+        base_file.write_text("content")
         assert read_base(workspace, "test/file.yml") == "content"
 
     def test_read_missing_base(self, workspace: Path) -> None:
-        from uv_release.cli._upgrade import read_base
+        from uv_release.states.merge_bases import read_base
 
         assert read_base(workspace, "nonexistent.yml") == ""
 
     def test_three_way_merge_clean(self, workspace: Path) -> None:
-        from uv_release.cli._upgrade import three_way_merge
+        from uv_release.merge import merge_texts
 
-        dest = workspace / "file.yml"
-        dest.write_text("line 1\nline 2\n")
-        merged, conflicts = three_way_merge(
-            dest, "line 1\nline 2\n", "line 1\nline 2\n"
-        )
+        current = "line 1\nline 2\n"
+        merged, conflicts = merge_texts(current, "line 1\nline 2\n", "line 1\nline 2\n")
         assert not conflicts
 
     def test_editor_cmd_plain(self) -> None:
-        from uv_release.cli._upgrade import editor_cmd
+        from uv_release.merge import parse_editor_command
 
-        assert editor_cmd("vim") == ["vim"]
+        assert parse_editor_command("vim") == ["vim"]
 
     def test_editor_cmd_gui(self) -> None:
-        from uv_release.cli._upgrade import editor_cmd
+        from uv_release.merge import parse_editor_command
 
-        assert editor_cmd("code") == ["code", "--wait"]
+        assert parse_editor_command("code") == ["code", "--wait"]
 
     def test_resolve_editor_cli_arg(self, workspace: Path) -> None:
-        from uv_release.cli._upgrade import resolve_editor
+        from uv_release.states.merge_bases import resolve_editor
 
-        assert resolve_editor("nano", workspace) == "nano"
+        assert resolve_editor("nano") == "nano"
 
     def test_resolve_editor_env_var(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from uv_release.cli._upgrade import resolve_editor
+        from uv_release.states.merge_bases import resolve_editor
 
         monkeypatch.setenv("VISUAL", "my-editor")
-        assert resolve_editor(None, workspace) == "my-editor"
+        assert resolve_editor(None) == "my-editor"

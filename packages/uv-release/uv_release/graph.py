@@ -63,7 +63,7 @@ def topo_layers(packages: dict[str, Package]) -> dict[str, int]:
     reverse_deps: dict[str, list[str]] = defaultdict(list)
 
     for name, pkg in packages.items():
-        for dep in pkg.deps:
+        for dep in pkg.dependencies:
             if dep in packages:
                 in_degree[name] += 1
                 reverse_deps[dep].append(name)

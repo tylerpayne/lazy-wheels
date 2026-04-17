@@ -24,7 +24,7 @@ class TestCmdClean:
 
         cmd_clean(_ns())
         out = capsys.readouterr().out
-        assert "removed" in out
+        assert "Cleaned" in out
         assert not cache.exists()
 
     def test_nothing_to_clean(

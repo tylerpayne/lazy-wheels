@@ -10,17 +10,16 @@ from uv_release.types import (
     BumpType,
     Change,
     Config,
+    GitState,
     Job,
     MergeResult,
     Package,
     Plan,
-    PlanParams,
     Publishing,
     Release,
     Tag,
     Version,
     VersionState,
-    Workflow,
     Workspace,
 )
 
@@ -118,7 +117,9 @@ def _make_version() -> Version:
 
 
 def _make_package() -> Package:
-    return Package(name="pkg", path="packages/pkg", version=_make_version(), deps=[])
+    return Package(
+        name="pkg", path="packages/pkg", version=_make_version(), dependencies=[]
+    )
 
 
 def _make_tag() -> Tag:
@@ -179,17 +180,8 @@ def _make_release() -> Release:
     )
 
 
-def _make_workflow() -> Workflow:
-    return Workflow(jobs={})
-
-
 def _make_plan() -> Plan:
-    return Plan(
-        workspace=_make_workspace(),
-        releases={},
-        workflow=_make_workflow(),
-        target="local",
-    )
+    return Plan()
 
 
 _FROZEN_INSTANCES = [
@@ -201,8 +193,7 @@ _FROZEN_INSTANCES = [
     ("Workspace", _make_workspace, "publishing", None),
     ("Change", _make_change, "diff_stats", "changed"),
     ("Release", _make_release, "release_notes", "changed"),
-    ("Workflow", _make_workflow, "jobs", {}),
-    ("Plan", _make_plan, "target", "ci"),
+    ("Plan", _make_plan, "python_version", "3.11"),
 ]
 
 
@@ -296,92 +287,55 @@ def test_release_holds_package_reference() -> None:
 
 
 # ---------------------------------------------------------------------------
-# JOB and WORKFLOW
+# JOB
 # ---------------------------------------------------------------------------
 
 
 def test_job_construction() -> None:
-    job = Job(name="build", needs=["validate"], commands=[])
+    job = Job(name="build", commands=[])
     assert job.name == "build"
-    assert job.needs == ["validate"]
     assert job.commands == []
 
 
-def test_workflow_jobs_keyed_by_name() -> None:
-    j = Job(name="build", needs=[], commands=[])
-    wf = Workflow(jobs={"build": j})
-    assert "build" in wf.jobs
-    assert wf.jobs["build"].name == "build"
-
-
 # ---------------------------------------------------------------------------
-# PLAN holds reference to WORKSPACE
+# GIT STATE
 # ---------------------------------------------------------------------------
 
 
-def test_plan_holds_workspace_reference() -> None:
-    ws = _make_workspace()
-    plan = Plan(workspace=ws, releases={}, workflow=_make_workflow(), target="local")
-    assert plan.workspace is ws
+class TestGitState:
+    def test_defaults(self) -> None:
+        gs = GitState()
+        assert gs.is_dirty is False
+        assert gs.is_ahead_or_behind is False
 
+    def test_dirty(self) -> None:
+        gs = GitState(is_dirty=True)
+        assert gs.is_dirty is True
+        assert gs.is_ahead_or_behind is False
 
-def test_plan_target_values() -> None:
-    plan_ci = Plan(
-        workspace=_make_workspace(), releases={}, workflow=_make_workflow(), target="ci"
-    )
-    plan_local = Plan(
-        workspace=_make_workspace(),
-        releases={},
-        workflow=_make_workflow(),
-        target="local",
-    )
-    assert plan_ci.target == "ci"
-    assert plan_local.target == "local"
+    def test_ahead_or_behind(self) -> None:
+        gs = GitState(is_ahead_or_behind=True)
+        assert gs.is_dirty is False
+        assert gs.is_ahead_or_behind is True
 
-
-# ---------------------------------------------------------------------------
-# PLAN serialization round-trip
-# ---------------------------------------------------------------------------
+    def test_frozen(self) -> None:
+        gs = GitState()
+        with pytest.raises((AttributeError, Exception)):
+            setattr(gs, "is_dirty", True)
 
 
 # ---------------------------------------------------------------------------
-# PLAN_PARAMS defaults
+# PLAN defaults
 # ---------------------------------------------------------------------------
 
 
-class TestPlanParamsDefaults:
-    def test_bump_type_defaults_to_dev(self) -> None:
-        params = PlanParams()
-        assert params.bump_type == BumpType.DEV
-
-    def test_pin_defaults_to_true(self) -> None:
-        params = PlanParams()
-        assert params.pin is True
-
-    def test_commit_defaults_to_true(self) -> None:
-        params = PlanParams()
-        assert params.commit is True
-
-    def test_push_defaults_to_true(self) -> None:
-        params = PlanParams()
-        assert params.push is True
-
-    def test_tag_defaults_to_true(self) -> None:
-        params = PlanParams()
-        assert params.tag is True
-
-    def test_target_defaults_to_local(self) -> None:
-        params = PlanParams()
-        assert params.target == "local"
-
-    def test_target_accepts_ci(self) -> None:
-        params = PlanParams(target="ci")
-        assert params.target == "ci"
-
-    def test_bump_type_accepts_all_variants(self) -> None:
-        for bt in BumpType:
-            params = PlanParams(bump_type=bt)
-            assert params.bump_type == bt
+def test_plan_defaults() -> None:
+    plan = Plan()
+    assert plan.build_matrix == [["ubuntu-latest"]]
+    assert plan.python_version == "3.12"
+    assert plan.publish_environment == ""
+    assert plan.skip == []
+    assert plan.jobs == []
 
 
 # ---------------------------------------------------------------------------
@@ -491,51 +445,46 @@ def test_tag_ref_property() -> None:
 
 
 class TestHooksDefaults:
-    def test_pre_plan_returns_params(self) -> None:
+    def test_pre_plan_returns_action(self) -> None:
         from uv_release.types import Hooks
 
         h = Hooks()
-        params = PlanParams()
-        assert h.pre_plan(params) is params
+        assert h.pre_plan(None, "action") == "action"
 
     def test_post_plan_returns_plan(self) -> None:
         from uv_release.types import Hooks
 
         h = Hooks()
         plan = _make_plan()
-        assert h.post_plan(plan) is plan
+        assert h.post_plan(None, None, plan) is plan
 
     def test_build_hooks_are_noop(self) -> None:
         from uv_release.types import Hooks
 
         h = Hooks()
-        plan = _make_plan()
-        h.pre_build(plan)
-        h.post_build(plan)
+        h.pre_build()
+        h.post_build()
 
     def test_release_hooks_are_noop(self) -> None:
         from uv_release.types import Hooks
 
         h = Hooks()
-        plan = _make_plan()
-        h.pre_release(plan)
-        h.post_release(plan)
+        h.pre_release()
+        h.post_release()
 
     def test_publish_hooks_are_noop(self) -> None:
         from uv_release.types import Hooks
 
         h = Hooks()
-        plan = _make_plan()
-        h.pre_publish(plan)
-        h.post_publish(plan)
+        h.pre_publish()
+        h.post_publish()
 
     def test_bump_hooks_are_noop(self) -> None:
         from uv_release.types import Hooks
 
         h = Hooks()
-        plan = _make_plan()
-        h.pre_bump(plan)
-        h.post_bump(plan)
+        h.pre_bump()
+        h.post_bump()
 
 
 # ---------------------------------------------------------------------------
@@ -579,105 +528,72 @@ def test_plan_json_round_trip() -> None:
     )
 
     plan = Plan(
-        workspace=_make_workspace(),
-        releases={"pkg": release},
-        workflow=Workflow(
-            jobs={
-                "uvr-validate": Job(name="uvr-validate"),
-                "uvr-build": Job(
-                    name="uvr-build",
-                    needs=["uvr-validate"],
-                    commands=[
-                        ShellCommand(label="mkdir", args=["mkdir", "-p", "dist"]),
-                        BuildCommand(label="build pkg", package=pkg),
-                    ],
-                    pre_hook="pre_build",
-                    post_hook="post_build",
-                ),
-                "uvr-release": Job(
-                    name="uvr-release",
-                    needs=["uvr-build"],
-                    commands=[
-                        CreateTagCommand(label="tag", tag_name="pkg/v1.0.0"),
-                        ShellCommand(label="push tags", args=["git", "push", "--tags"]),
-                        CreateReleaseCommand(label="release pkg", release=release),
-                    ],
-                ),
-                "uvr-publish": Job(
-                    name="uvr-publish",
-                    needs=["uvr-release"],
-                ),
-                "uvr-bump": Job(
-                    name="uvr-bump",
-                    needs=["uvr-publish"],
-                    commands=[
-                        SetVersionCommand(
-                            label="bump", package=pkg, version=next_version
-                        ),
-                    ],
-                ),
-            },
-            job_order=[
-                "uvr-validate",
-                "uvr-build",
-                "uvr-release",
-                "uvr-publish",
-                "uvr-bump",
-            ],
-        ),
-        target="ci",
+        build_matrix=[["ubuntu-latest"]],
+        python_version="3.12",
+        publish_environment="pypi",
+        skip=["build"],
+        jobs=[
+            Job(name="validate"),
+            Job(
+                name="build",
+                commands=[
+                    ShellCommand(label="mkdir", args=["mkdir", "-p", "dist"]),
+                    BuildCommand(label="build pkg", package=pkg),
+                ],
+                pre_hook="pre_build",
+                post_hook="post_build",
+            ),
+            Job(
+                name="release",
+                commands=[
+                    CreateTagCommand(label="tag", tag_name="pkg/v1.0.0"),
+                    ShellCommand(label="push tags", args=["git", "push", "--tags"]),
+                    CreateReleaseCommand(label="release pkg", release=release),
+                ],
+            ),
+            Job(name="publish"),
+            Job(
+                name="bump",
+                commands=[
+                    SetVersionCommand(label="bump", package=pkg, version=next_version),
+                ],
+            ),
+        ],
     )
 
     json_str = plan.model_dump_json()
     restored = Plan.model_validate_json(json_str)
 
     # Top-level fields
-    assert restored.target == "ci"
-    assert restored.workspace.config.uvr_version == plan.workspace.config.uvr_version
-    assert set(restored.workspace.packages.keys()) == {"pkg"}
+    assert restored.build_matrix == [["ubuntu-latest"]]
+    assert restored.python_version == "3.12"
+    assert restored.publish_environment == "pypi"
+    assert restored.skip == ["build"]
 
-    # Releases
-    assert "pkg" in restored.releases
-    r = restored.releases["pkg"]
-    assert r.release_version.raw == "1.0.0"
-    assert r.next_version.raw == "1.0.1.dev0"
-    assert r.release_notes == "Fixed a bug"
-    assert r.make_latest is True
-    assert r.package.name == "pkg"
-
-    # Workflow structure
-    assert set(restored.workflow.jobs.keys()) == {
-        "uvr-validate",
-        "uvr-build",
-        "uvr-release",
-        "uvr-publish",
-        "uvr-bump",
-    }
-    assert restored.workflow.job_order == [
-        "uvr-validate",
-        "uvr-build",
-        "uvr-release",
-        "uvr-publish",
-        "uvr-bump",
+    # Jobs structure
+    assert len(restored.jobs) == 5
+    assert [j.name for j in restored.jobs] == [
+        "validate",
+        "build",
+        "release",
+        "publish",
+        "bump",
     ]
 
-    # Job DAG edges
-    assert restored.workflow.jobs["uvr-build"].needs == ["uvr-validate"]
-    assert restored.workflow.jobs["uvr-release"].needs == ["uvr-build"]
-
     # Job hooks
-    assert restored.workflow.jobs["uvr-build"].pre_hook == "pre_build"
-    assert restored.workflow.jobs["uvr-build"].post_hook == "post_build"
+    build_job = restored.jobs[1]
+    assert build_job.pre_hook == "pre_build"
+    assert build_job.post_hook == "post_build"
 
     # Command types survive round-trip
-    build_cmds = restored.workflow.jobs["uvr-build"].commands
+    build_cmds = build_job.commands
     assert len(build_cmds) == 2
     assert isinstance(build_cmds[0], ShellCommand)
     assert build_cmds[0].args == ["mkdir", "-p", "dist"]
     assert isinstance(build_cmds[1], BuildCommand)
     assert build_cmds[1].package.name == "pkg"
 
-    release_cmds = restored.workflow.jobs["uvr-release"].commands
+    release_cmds = restored.jobs[2].commands
     assert len(release_cmds) == 3
     assert isinstance(release_cmds[0], CreateTagCommand)
     assert release_cmds[0].tag_name == "pkg/v1.0.0"
@@ -685,7 +601,7 @@ def test_plan_json_round_trip() -> None:
     assert isinstance(release_cmds[2], CreateReleaseCommand)
     assert release_cmds[2].release.package.name == "pkg"
 
-    bump_cmds = restored.workflow.jobs["uvr-bump"].commands
+    bump_cmds = restored.jobs[4].commands
     assert len(bump_cmds) == 1
     assert isinstance(bump_cmds[0], SetVersionCommand)
     assert bump_cmds[0].version.raw == "1.0.1.dev0"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pygit2
 
@@ -109,15 +108,3 @@ class GitRepo:
         local_oid = branch.target
         remote_oid = upstream.target
         return local_oid != remote_oid
-
-    def merge_file(self, current: Path, base: Path, template: Path) -> tuple[str, bool]:
-        """Three-way merge via git merge-file.
-
-        Returns (merged_content, has_conflicts).
-        """
-        result = subprocess.run(
-            ["git", "merge-file", "-p", str(current), str(base), str(template)],
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout, result.returncode > 0

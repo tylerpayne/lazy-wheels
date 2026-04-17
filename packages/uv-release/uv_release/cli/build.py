@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from ._args import CommandArgs
+from ..intents.build import BuildIntent
+from ..planner import compute_plan
 from ..execute import execute_plan
-from ..plan.planner import create_plan
-from ..types import PlanParams
 
 
 class BuildArgs(CommandArgs):
@@ -21,25 +22,21 @@ def cmd_build(args: argparse.Namespace) -> None:
     """Build changed workspace packages locally."""
     parsed = BuildArgs.from_namespace(args)
 
-    params = PlanParams(
+    intent = BuildIntent(
         rebuild_all=parsed.rebuild_all,
         restrict_packages=frozenset(parsed.packages or []),
-        dev_release=True,
-        skip=frozenset({"release", "publish", "bump"}),
     )
-    plan = create_plan(params)
+    try:
+        plan = compute_plan(intent)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    if not plan.releases:
+    if not plan.jobs or not plan.jobs[0].commands:
         print("Nothing to build. No packages have changed since last release.")
         print("Use --rebuild-all to build all packages.")
         return
 
-    nw = max(len(n) for n in plan.releases)
-    print(f"Building {len(plan.releases)} package(s):\n")
-    for name, release in sorted(plan.releases.items()):
-        print(f"  {name.ljust(nw)}  {release.release_version.raw}")
-    print()
-
+    print("Building packages:\n")
     execute_plan(plan, hooks=None)
-
-    print(f"\nBuilt {len(plan.releases)} package(s) into dist/")
+    print("\nDone.")

@@ -1,50 +1,33 @@
-"""Execute a Plan's workflow."""
+"""Execute a Plan's jobs."""
 
 from __future__ import annotations
 
 import sys
-from enum import Enum
 
-from .parse.hooks import parse_hooks
-from .types import Hooks, Plan
-
-
-class _Unset(Enum):
-    UNSET = "UNSET"
+from .states.hooks import parse_hooks
+from .types import Hooks, Job, Plan, Unset, UNSET
 
 
-_unset = _Unset.UNSET
-
-
-def execute_plan(plan: Plan, *, hooks: Hooks | None | _Unset = _unset) -> None:
-    """Execute all jobs in the pre-computed order."""
-    if hooks is _unset:
+def execute_plan(plan: Plan, *, hooks: Hooks | None | Unset = UNSET) -> None:
+    """Execute all jobs in order."""
+    if isinstance(hooks, Unset):
         hooks = parse_hooks()
-    for job_name in plan.workflow.job_order:
-        execute_job(plan, job_name, hooks=hooks)
+    for job in plan.jobs:
+        execute_job(job, hooks=hooks)
 
 
 def execute_job(
-    plan: Plan,
-    job_name: str,
+    job: Job,
     *,
-    hooks: Hooks | None | _Unset = _unset,
+    hooks: Hooks | None | Unset = UNSET,
 ) -> None:
     """Execute a single job's commands with pre/post hooks."""
-    if hooks is _unset:
+    if isinstance(hooks, Unset):
         hooks = parse_hooks()
-    job = plan.workflow.jobs.get(job_name)
-    if job is None:
-        available = ", ".join(sorted(plan.workflow.jobs.keys()))
-        print(
-            f"ERROR: Job '{job_name}' not found in plan. Available jobs: {available}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
     # Pre-hook
     if hooks is not None and job.pre_hook:
-        _call_hook(hooks, job.pre_hook, plan)
+        _call_hook(hooks, job.pre_hook)
 
     # Commands
     for cmd in job.commands:
@@ -64,18 +47,31 @@ def execute_job(
         returncode = cmd.execute()
         if cmd.check and returncode != 0:
             print(
-                f"ERROR: {cmd.label or job_name} failed (exit {returncode})",
+                f"ERROR: {cmd.label or job.name} failed (exit {returncode})",
                 file=sys.stderr,
             )
             sys.exit(1)
 
     # Post-hook
     if hooks is not None and job.post_hook:
-        _call_hook(hooks, job.post_hook, plan)
+        _call_hook(hooks, job.post_hook)
 
 
-def _call_hook(hooks: Hooks, method_name: str, plan: Plan) -> None:
+def find_job(plan: Plan, name: str) -> Job:
+    """Find a job by name in the plan. Exits with error if not found."""
+    for job in plan.jobs:
+        if job.name == name:
+            return job
+    available = ", ".join(j.name for j in plan.jobs)
+    print(
+        f"ERROR: Job '{name}' not found in plan. Available jobs: {available}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _call_hook(hooks: Hooks, method_name: str) -> None:
     if not hasattr(hooks, method_name):
         msg = f"Hooks class {type(hooks).__name__} is missing method '{method_name}'"
         raise AttributeError(msg)
-    getattr(hooks, method_name)(plan)
+    getattr(hooks, method_name)()

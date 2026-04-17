@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from abc import ABC
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator
+
+
+# ---------------------------------------------------------------------------
+# Unset sentinel (shared by planner and executor)
+# ---------------------------------------------------------------------------
+
+
+class Unset(Enum):
+    """Sentinel for unset optional parameters."""
+
+    TOKEN = "TOKEN"
+
+
+UNSET = Unset.TOKEN
 
 
 # ---------------------------------------------------------------------------
@@ -48,31 +62,6 @@ class BumpType(Enum):
     POST = "post"
     DEV = "dev"
     STABLE = "stable"
-
-
-# ---------------------------------------------------------------------------
-# PLAN PARAMS
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class PlanParams:
-    """CLI flags passed to every pipeline step. Frozen."""
-
-    rebuild_all: bool = False
-    rebuild: frozenset[str] = frozenset()
-    restrict_packages: frozenset[str] = frozenset()
-    dev_release: bool = False
-    dry_run: bool = False
-    skip: frozenset[str] = frozenset()
-    release_notes: dict[str, str] | None = None
-    bump_type: BumpType = BumpType.DEV
-    pin: bool = True
-    commit: bool = True
-    push: bool = True
-    tag: bool = True
-    target: Literal["ci", "local"] = "local"
-    require_clean_worktree: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +304,19 @@ class Package(BaseModel):
     name: str
     path: str
     version: Version
-    deps: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+
+    @staticmethod
+    def format_dist_name(name: str) -> str:
+        """Wheel distribution name (PEP 625) from a raw package name."""
+        from packaging.utils import canonicalize_name
+
+        return canonicalize_name(name).replace("-", "_")
+
+    @property
+    def dist_name(self) -> str:
+        """Wheel distribution name (PEP 625). Used for glob patterns."""
+        return Package.format_dist_name(self.name)
 
 
 # ---------------------------------------------------------------------------
@@ -357,41 +358,256 @@ class Publishing(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class Hooks:
-    """User-provided release hooks. Loaded from disk by parse/hooks.py."""
+class Hooks(ABC):
+    """User-provided release hooks. Subclass to customize lifecycle behavior."""
 
     DEFAULT_FILE = "uvr_hooks.py"
     DEFAULT_CLASS = "Hooks"
 
-    def pre_plan(self, params: PlanParams) -> PlanParams:
-        return params
+    def pre_plan(self, workspace: Any, intent: Any) -> Any:
+        return intent
 
-    def post_plan(self, plan: Plan) -> Plan:
+    def post_plan(self, workspace: Any, intent: Any, plan: Any) -> Any:
         return plan
 
-    def pre_build(self, plan: Plan, runner: list[str] | None = None) -> None:
+    def pre_build(self) -> None:
         pass
 
-    def post_build(self, plan: Plan, runner: list[str] | None = None) -> None:
+    def post_build(self) -> None:
         pass
 
-    def pre_release(self, plan: Plan) -> None:
+    def pre_release(self) -> None:
         pass
 
-    def post_release(self, plan: Plan) -> None:
+    def post_release(self) -> None:
         pass
 
-    def pre_publish(self, plan: Plan) -> None:
+    def pre_publish(self) -> None:
         pass
 
-    def post_publish(self, plan: Plan) -> None:
+    def post_publish(self) -> None:
         pass
 
-    def pre_bump(self, plan: Plan) -> None:
+    def pre_bump(self) -> None:
         pass
 
-    def post_bump(self, plan: Plan) -> None:
+    def post_bump(self) -> None:
         pass
+
+
+# ---------------------------------------------------------------------------
+# GIT STATE
+# ---------------------------------------------------------------------------
+
+
+class GitState(BaseModel):
+    """Snapshot of repository state for validation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    is_dirty: bool = False
+    is_ahead_or_behind: bool = False
+
+
+# ---------------------------------------------------------------------------
+# PYPROJECT STRUCTURE (shared by states/ and commands/)
+# ---------------------------------------------------------------------------
+
+
+class ProjectTable(BaseModel):
+    """The [project] table from a package's pyproject.toml."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    name: str = ""
+    version: str = ""
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class BuildSystemTable(BaseModel):
+    """The [build-system] table from a package's pyproject.toml."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    requires: list[str] = Field(default_factory=list)
+
+
+class PackagePyProject(BaseModel):
+    """A package-level pyproject.toml."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    project: ProjectTable = Field(default_factory=ProjectTable)
+    build_system: BuildSystemTable = Field(
+        default_factory=BuildSystemTable, alias="build-system"
+    )
+
+
+class UvWorkspaceTable(BaseModel):
+    """The [tool.uv.workspace] table."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    members: list[str] = Field(default_factory=list)
+
+
+class UvTable(BaseModel):
+    """The [tool.uv] table."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    workspace: UvWorkspaceTable = Field(default_factory=UvWorkspaceTable)
+
+
+class UvrConfigTable(BaseModel):
+    """The [tool.uvr.config] table."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    latest: str = ""
+    python_version: str = "3.12"
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
+class UvrPublishTable(BaseModel):
+    """The [tool.uvr.publish] table."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    index: str = ""
+    environment: str = ""
+    trusted_publishing: str = Field(default="automatic", alias="trusted-publishing")
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
+class UvrHooksTable(BaseModel):
+    """The [tool.uvr.hooks] table."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    file: str = ""
+
+
+class UvrTable(BaseModel):
+    """The [tool.uvr] table."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    config: UvrConfigTable = Field(default_factory=UvrConfigTable)
+    runners: dict[str, list[list[str]]] = Field(default_factory=dict)
+    publish: UvrPublishTable = Field(default_factory=UvrPublishTable)
+    hooks: UvrHooksTable = Field(default_factory=UvrHooksTable)
+
+
+class ToolTable(BaseModel):
+    """The [tool] table from the root pyproject.toml."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    uv: UvTable = Field(default_factory=UvTable)
+    uvr: UvrTable = Field(default_factory=UvrTable)
+
+
+class RootPyProject(BaseModel):
+    """The root pyproject.toml structure."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    tool: ToolTable = Field(default_factory=ToolTable)
+
+
+# ---------------------------------------------------------------------------
+# TOML DOCUMENT WRAPPERS (typed access + comment preservation)
+# ---------------------------------------------------------------------------
+
+
+class PackagePyProjectDoc:
+    """Typed wrapper around a tomlkit document for a package pyproject.toml.
+
+    Reads and writes go through the same tomlkit doc, so comments survive.
+    Used by commands for mutation. States use the Pydantic models above for parsing.
+    """
+
+    def __init__(self, doc: Any) -> None:
+        self._doc = doc
+
+    @classmethod
+    def read(cls, path: str) -> PackagePyProjectDoc:
+        """Read a pyproject.toml from disk."""
+        import tomlkit
+        from pathlib import Path
+
+        return cls(tomlkit.loads(Path(path).read_text()))
+
+    def write(self, path: str) -> None:
+        """Write the document back to disk, preserving comments."""
+        import tomlkit
+        from pathlib import Path
+
+        Path(path).write_text(tomlkit.dumps(self._doc))
+
+    @property
+    def name(self) -> str:
+        return str(self._doc["project"]["name"])
+
+    @property
+    def version(self) -> str:
+        return str(self._doc["project"]["version"])
+
+    @version.setter
+    def version(self, value: str) -> None:
+        self._doc["project"]["version"] = value
+
+    @property
+    def dependencies(self) -> list[Any]:
+        return self._doc.get("project", {}).get("dependencies", [])
+
+    @property
+    def build_requires(self) -> list[Any]:
+        return self._doc.get("build-system", {}).get("requires", [])
+
+
+class WorkspacePyProjectDoc:
+    """Typed wrapper around a tomlkit document for the root pyproject.toml.
+
+    Provides typed access to [tool.uvr.*] sections while preserving comments.
+    """
+
+    def __init__(self, doc: Any) -> None:
+        self._doc = doc
+
+    @classmethod
+    def read(cls, path: str = "pyproject.toml") -> WorkspacePyProjectDoc:
+        """Read the root pyproject.toml from disk."""
+        import tomlkit
+        from pathlib import Path
+
+        return cls(tomlkit.loads(Path(path).read_text()))
+
+    def write(self, path: str = "pyproject.toml") -> None:
+        """Write the document back to disk, preserving comments."""
+        import tomlkit
+        from pathlib import Path
+
+        Path(path).write_text(tomlkit.dumps(self._doc))
+
+    def set_config(self, key: str, value: str) -> None:
+        """Set a key in [tool.uvr.config]."""
+        tool = self._doc.setdefault("tool", {})
+        uvr = tool.setdefault("uvr", {})
+        config = uvr.setdefault("config", {})
+        config[key] = value
+
+    @property
+    def workspace_members(self) -> list[str]:
+        return (
+            self._doc.get("tool", {})
+            .get("uv", {})
+            .get("workspace", {})
+            .get("members", [])
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -488,12 +704,11 @@ class CommandGroup(Command):
 
 
 class Job(BaseModel):
-    """A single job in the release workflow DAG."""
+    """A named group of commands with optional lifecycle hooks."""
 
     model_config = ConfigDict(frozen=True)
 
     name: str
-    needs: list[str] = Field(default_factory=list)
     commands: list[SerializeAsAny[Command]] = Field(default_factory=list)
     pre_hook: str = ""
     post_hook: str = ""
@@ -510,17 +725,16 @@ class Job(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# WORKFLOW
+# PLAN_METADATA
 # ---------------------------------------------------------------------------
 
 
-class Workflow(BaseModel):
-    """The release workflow. A DAG of jobs with a pre-computed execution order."""
+class PlanMetadata(BaseModel):
+    """Transient context from plan computation. Not serialized."""
 
     model_config = ConfigDict(frozen=True)
 
-    jobs: dict[str, Job] = Field(default_factory=dict)
-    job_order: list[str] = Field(default_factory=list)
+    workspace: Workspace | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -529,19 +743,26 @@ class Workflow(BaseModel):
 
 
 class Plan(BaseModel):
-    """The final pipeline output. Holds everything needed to execute a release."""
+    """What to execute. Nothing more."""
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True)
 
-    workspace: Workspace
-    changes: dict[str, Change] = Field(default_factory=dict)
-    releases: dict[str, Release] = Field(default_factory=dict)
-    workflow: Workflow = Workflow()
-    target: Literal["ci", "local"] = "local"
+    # CI (read by GitHub Actions YAML via fromJSON)
     build_matrix: list[list[str]] = Field(default_factory=lambda: [["ubuntu-latest"]])
     python_version: str = "3.12"
     publish_environment: str = ""
     skip: list[str] = Field(default_factory=list)
+
+    # Execution
+    jobs: list[SerializeAsAny[Job]] = Field(default_factory=list)
+
+    # Results (populated by read-only intents)
+    changes: tuple[Change, ...] = ()
+    validation_errors: tuple[str, ...] = ()
+    validation_warnings: tuple[str, ...] = ()
+
+    # Transient (excluded from serialization, populated by compute_plan)
+    metadata: PlanMetadata = Field(default_factory=PlanMetadata, exclude=True)
 
 
 # ---------------------------------------------------------------------------
@@ -557,3 +778,16 @@ class MergeResult(BaseModel):
     path: str
     has_conflicts: bool = False
     is_new: bool = False
+
+
+# ---------------------------------------------------------------------------
+# INTENT PROTOCOL
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class Intent(Protocol):
+    """Protocol for all intent types. Every intent must implement guard() and plan()."""
+
+    def guard(self, workspace: Workspace) -> None: ...
+    def plan(self, workspace: Workspace) -> Plan: ...

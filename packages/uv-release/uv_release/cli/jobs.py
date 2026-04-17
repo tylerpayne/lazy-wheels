@@ -6,8 +6,8 @@ import argparse
 import os
 import sys
 
-from ..execute import execute_job
-from ..parse.hooks import parse_hooks
+from ..execute import execute_job, find_job
+from ..states.hooks import parse_hooks
 from ..types import Plan
 
 
@@ -22,5 +22,6 @@ def cmd_jobs(args: argparse.Namespace) -> None:
 
     plan = Plan.model_validate_json(plan_json)
     hooks = parse_hooks()
+    job = find_job(plan, job_name)
 
-    execute_job(plan, job_name, hooks=hooks)
+    execute_job(job, hooks=hooks)

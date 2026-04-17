@@ -8,12 +8,12 @@ from uv_release.graph import topo_layers, topo_sort
 from uv_release.types import Package, Version
 
 
-def _pkg(name: str, deps: list[str] | None = None) -> Package:
+def _pkg(name: str, dependencies: list[str] | None = None) -> Package:
     return Package(
         name=name,
         path=f"packages/{name}",
         version=Version.parse("1.0.0"),
-        deps=deps or [],
+        dependencies=dependencies or [],
     )
 
 
@@ -22,9 +22,9 @@ class TestTopoLayers:
         """A→B→D, A→C→D produces 3 layers."""
         pkgs = {
             "a": _pkg("a"),
-            "b": _pkg("b", deps=["a"]),
-            "c": _pkg("c", deps=["a"]),
-            "d": _pkg("d", deps=["b", "c"]),
+            "b": _pkg("b", dependencies=["a"]),
+            "c": _pkg("c", dependencies=["a"]),
+            "d": _pkg("d", dependencies=["b", "c"]),
         }
         layers = topo_layers(pkgs)
         assert layers["a"] == 0
@@ -46,8 +46,8 @@ class TestTopoLayers:
         """A→B→C produces 3 layers."""
         pkgs = {
             "a": _pkg("a"),
-            "b": _pkg("b", deps=["a"]),
-            "c": _pkg("c", deps=["b"]),
+            "b": _pkg("b", dependencies=["a"]),
+            "c": _pkg("c", dependencies=["b"]),
         }
         layers = topo_layers(pkgs)
         assert layers["a"] == 0
@@ -57,8 +57,8 @@ class TestTopoLayers:
     def test_cycle_raises(self) -> None:
         """Cycle detection raises RuntimeError."""
         pkgs = {
-            "a": _pkg("a", deps=["b"]),
-            "b": _pkg("b", deps=["a"]),
+            "a": _pkg("a", dependencies=["b"]),
+            "b": _pkg("b", dependencies=["a"]),
         }
         with pytest.raises(RuntimeError):
             topo_layers(pkgs)

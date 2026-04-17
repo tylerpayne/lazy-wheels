@@ -1,0 +1,50 @@
+"""Tests for CleanIntent: guard and plan."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from uv_release.intents.clean import CleanIntent
+from uv_release.types import Config, Plan, Publishing, Workspace
+
+
+def _workspace() -> Workspace:
+    return Workspace(
+        packages={},
+        config=Config(uvr_version="0.1.0"),
+        runners={},
+        publishing=Publishing(),
+    )
+
+
+class TestCleanIntent:
+    def test_type_discriminator(self) -> None:
+        assert CleanIntent().type == "clean"
+
+    def test_guard_always_passes(self) -> None:
+        CleanIntent().guard(_workspace())
+
+    def test_plan_returns_plan(self) -> None:
+        result = CleanIntent().plan(_workspace())
+        assert isinstance(result, Plan)
+
+    def test_plan_has_job(self) -> None:
+        result = CleanIntent().plan(_workspace())
+        assert len(result.jobs) == 1
+        assert result.jobs[0].name == "clean"
+
+    def test_removes_cache_dirs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        cache = tmp_path / ".uvr" / "cache"
+        cache.mkdir(parents=True)
+        (cache / "somefile").write_text("data")
+
+        plan = CleanIntent().plan(_workspace())
+        for cmd in plan.jobs[0].commands:
+            cmd.execute()
+
+        assert not cache.exists()

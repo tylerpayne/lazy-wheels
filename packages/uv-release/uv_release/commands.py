@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import Discriminator, Field
 
-from .types import Command, CommandGroup, Package, Publishing, Release, Tag, Version
+from .types import (
+    Command,
+    CommandGroup,
+    Package,
+    PackagePyProjectDoc,
+    Publishing,
+    Release,
+    Tag,
+    Version,
+)
+
+_UVR_RUNNER_ENV = "UVR_RUNNER"
 
 
 class ShellCommand(Command):
@@ -37,21 +48,17 @@ class CreateTagCommand(Command):
 
 
 class SetVersionCommand(Command):
-    """Write a version to a package's pyproject.toml."""
+    """Set [project].version in a package's pyproject.toml."""
 
     type: Literal["set_version"] = "set_version"
     package: Package
     version: Version
 
     def execute(self) -> int:
-        from pathlib import Path
-
-        import tomlkit
-
-        pyproject_path = Path(self.package.path) / "pyproject.toml"
-        doc = tomlkit.loads(pyproject_path.read_text())
-        doc["project"]["version"] = self.version.raw  # type: ignore[index]
-        pyproject_path.write_text(tomlkit.dumps(doc))
+        path = f"{self.package.path}/pyproject.toml"
+        doc = PackagePyProjectDoc.read(path)
+        doc.version = self.version.raw
+        doc.write(path)
         return 0
 
 
@@ -60,30 +67,26 @@ class PinDepsCommand(Command):
 
     type: Literal["pin_deps"] = "pin_deps"
     package: Package
-    pins: dict[str, Version]
+    pins: dict[str, Package]
 
     def execute(self) -> int:
-        from pathlib import Path
-
-        import tomlkit
         from packaging.requirements import Requirement
         from packaging.utils import canonicalize_name
 
-        pyproject_path = Path(self.package.path) / "pyproject.toml"
-        doc = tomlkit.loads(pyproject_path.read_text())
+        path = f"{self.package.path}/pyproject.toml"
+        doc = PackagePyProjectDoc.read(path)
 
-        for section in ("project", "build-system"):
-            key = "dependencies" if section == "project" else "requires"
-            deps = doc.get(section, {}).get(key, [])
-            for i, dep in enumerate(deps):
+        for dep_list in (doc.dependencies, doc.build_requires):
+            for i, dep in enumerate(dep_list):
                 req = Requirement(str(dep))
                 name = canonicalize_name(req.name)
                 if name in self.pins:
                     pinned = self.pins[name]
-                    upper = pinned.bump_minor()
-                    deps[i] = f"{req.name}>={pinned.raw},<{upper.raw}"
+                    lower = pinned.version.raw
+                    upper = pinned.version.bump_minor().raw
+                    dep_list[i] = f"{req.name}>={lower},<{upper}"
 
-        pyproject_path.write_text(tomlkit.dumps(doc))
+        doc.write(path)
         return 0
 
 
@@ -100,7 +103,7 @@ class CreateReleaseCommand(Command):
         tag = Tag.release_tag_name(
             self.release.package.name, self.release.release_version
         )
-        dist_name = self.release.package.name.replace("-", "_")
+        dist_name = self.release.package.dist_name
         dist_pattern = f"dist/{dist_name}-{self.release.release_version.raw}-*.whl"
 
         files = sorted(glob_fn(dist_pattern))
@@ -133,7 +136,7 @@ class PublishToIndexCommand(Command):
         import subprocess
         from glob import glob as glob_fn
 
-        dist_name = self.release.package.name.replace("-", "_")
+        dist_name = self.release.package.dist_name
         dist_pattern = f"dist/{dist_name}-{self.release.release_version.raw}-*.whl"
 
         files = sorted(glob_fn(dist_pattern))
@@ -161,7 +164,7 @@ class BuildCommand(Command):
         import subprocess
 
         # If UVR_RUNNER is set, skip if this command's runners don't match
-        runner_json = os.environ.get("UVR_RUNNER", "")
+        runner_json = os.environ.get(_UVR_RUNNER_ENV, "")
         if runner_json and self.runners:
             current_runner = json.loads(runner_json)
             if current_runner not in self.runners:
@@ -205,6 +208,176 @@ class DownloadWheelsCommand(Command):
         return 0
 
 
+class MakeDirectoryCommand(Command):
+    """Create a directory, including parent directories."""
+
+    type: Literal["make_directory"] = "make_directory"
+    path: str
+
+    def execute(self) -> int:
+        from pathlib import Path
+
+        Path(self.path).mkdir(parents=True, exist_ok=True)
+        return 0
+
+
+class WriteFileCommand(Command):
+    """Write content to a file, creating parent directories as needed."""
+
+    type: Literal["write_file"] = "write_file"
+    path: str
+    content: str
+
+    def execute(self) -> int:
+        from pathlib import Path
+
+        dest = Path(self.path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(self.content, encoding="utf-8")
+        return 0
+
+
+class UpdateTomlCommand(Command):
+    """Update a key in [tool.uvr.config] of the root pyproject.toml."""
+
+    type: Literal["update_toml"] = "update_toml"
+    key: str
+    value: Any
+
+    def execute(self) -> int:
+        import tomlkit
+        from pathlib import Path
+
+        path = Path("pyproject.toml")
+        if not path.exists():
+            return 1
+        doc = tomlkit.loads(path.read_text())
+        tool = doc.setdefault("tool", {})
+        uvr = tool.setdefault("uvr", {})
+        config = uvr.setdefault("config", {})
+        config[self.key] = self.value
+        path.write_text(tomlkit.dumps(doc))
+        return 0
+
+
+class WriteUvrSectionCommand(Command):
+    """Write a complete section under [tool.uvr] in root pyproject.toml."""
+
+    type: Literal["write_uvr_section"] = "write_uvr_section"
+    section: str
+    data: Any
+
+    def execute(self) -> int:
+        import tomlkit
+        from pathlib import Path
+
+        path = Path("pyproject.toml")
+        if not path.exists():
+            return 1
+        doc = tomlkit.loads(path.read_text())
+        tool = doc.setdefault("tool", {})
+        uvr = tool.setdefault("uvr", {})
+        uvr[self.section] = self.data
+        path.write_text(tomlkit.dumps(doc))
+        return 0
+
+
+class DispatchWorkflowCommand(Command):
+    """Dispatch a release plan to GitHub Actions."""
+
+    type: Literal["dispatch_workflow"] = "dispatch_workflow"
+    plan_json: str
+    workflow: str = "release.yml"
+
+    def execute(self) -> int:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+        )
+        ref = result.stdout.strip() if result.returncode == 0 else "main"
+
+        return subprocess.run(
+            [
+                "gh",
+                "workflow",
+                "run",
+                self.workflow,
+                "--ref",
+                ref,
+                "-f",
+                f"plan={self.plan_json}",
+            ],
+        ).returncode
+
+
+class MergeUpgradeCommand(Command):
+    """Three-way merge of a file with interactive conflict resolution.
+
+    Reads the current file, merges with base and fresh versions, writes the result.
+    If conflicts remain, opens an editor and offers to revert.
+    """
+
+    type: Literal["merge_upgrade"] = "merge_upgrade"
+    dest_path: str
+    base_text: str
+    fresh_text: str
+    editor: str = ""
+
+    def execute(self) -> int:
+        import subprocess
+        from pathlib import Path
+
+        from .merge import parse_editor_command, merge_texts
+
+        dest = Path(self.dest_path)
+        existing_text = dest.read_text()
+
+        merged_text, has_conflicts = merge_texts(
+            existing_text, self.base_text, self.fresh_text
+        )
+
+        if merged_text.rstrip() == existing_text.rstrip():
+            print(f"  {self.dest_path}: already up to date")
+            return 0
+
+        dest.write_text(merged_text)
+
+        if not (has_conflicts or "<<<<<<" in merged_text):
+            print(f"  {self.dest_path}: merged cleanly")
+            return 0
+
+        # Conflicts: interactive resolution
+        print(f"  {self.dest_path}: merged with conflicts")
+        if self.editor:
+            prompt = f"  Open in {self.editor} to resolve? [Y/n] "
+        else:
+            prompt = "  Resolve conflicts manually, then press Enter. [n to skip] "
+
+        try:
+            answer = input(prompt).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = "n"
+
+        if self.editor and answer not in ("n", "no"):
+            subprocess.run([*parse_editor_command(self.editor), str(dest)])
+
+        if "<<<<<<" in dest.read_text():
+            print("  Unresolved conflicts remain.")
+            try:
+                revert = input("  Revert to original? [Y/n] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                revert = ""
+            if revert not in ("n", "no"):
+                dest.write_text(existing_text)
+                print("  Reverted.")
+                return 1
+
+        return 0
+
+
 AnyCommand = Annotated[
     Union[
         ShellCommand,
@@ -215,6 +388,12 @@ AnyCommand = Annotated[
         PublishToIndexCommand,
         BuildCommand,
         DownloadWheelsCommand,
+        MakeDirectoryCommand,
+        WriteFileCommand,
+        UpdateTomlCommand,
+        WriteUvrSectionCommand,
+        DispatchWorkflowCommand,
+        MergeUpgradeCommand,
         CommandGroup,
     ],
     Discriminator("type"),

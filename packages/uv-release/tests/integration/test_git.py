@@ -145,7 +145,7 @@ class TestBaselinesIntegration:
 
     def test_baseline_tag_with_garbage_tags(self, workspace: Path) -> None:
         """Tags with unparseable versions are skipped during baseline search."""
-        from uv_release.detect.baselines import find_baseline_tag
+        from uv_release.states.baselines import find_baseline_tag
         from uv_release.types import Version
 
         repo = GitRepo()
@@ -159,7 +159,7 @@ class TestBaselinesIntegration:
 
     def test_baseline_skips_base_tags_in_previous_search(self, workspace: Path) -> None:
         """When searching for previous release, baseline tags are skipped."""
-        from uv_release.detect.baselines import find_baseline_tag
+        from uv_release.states.baselines import find_baseline_tag
         from uv_release.types import Version
 
         repo = GitRepo()

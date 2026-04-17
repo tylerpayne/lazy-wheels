@@ -1,20 +1,22 @@
 """The ``uvr release`` command."""
 
 from __future__ import annotations
-from typing import Literal
 
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 
 from ._args import CommandArgs
 from .display import print_plan_summary
-from ..execute import execute_plan
-from ..plan.planner import create_plan
-from ..types import Plan, PlanParams
+from ..commands import DispatchWorkflowCommand
+from ..planner import compute_plan
+from ..intents.release import ReleaseIntent
+from ..execute import execute_job, execute_plan
+from ..types import Job, Plan
 
 
 class ReleaseArgs(CommandArgs):
@@ -54,11 +56,11 @@ def cmd_release(args: argparse.Namespace) -> None:
     skipped = set(parsed.skip or [])
     if parsed.skip_to:
         _JOB_ORDER = [
-            "uvr-validate",
-            "uvr-build",
-            "uvr-release",
-            "uvr-publish",
-            "uvr-bump",
+            "validate",
+            "build",
+            "release",
+            "publish",
+            "bump",
         ]
         if parsed.skip_to not in _JOB_ORDER:
             print(
@@ -67,22 +69,27 @@ def cmd_release(args: argparse.Namespace) -> None:
             )
             sys.exit(1)
         idx = _JOB_ORDER.index(parsed.skip_to)
-        skipped |= {j for j in _JOB_ORDER[:idx] if j != "uvr-validate"}
+        skipped |= {j for j in _JOB_ORDER[:idx] if j != "validate"}
 
-    params = PlanParams(
+    intent = ReleaseIntent(
         rebuild_all=parsed.rebuild_all,
         rebuild=frozenset(parsed.rebuild or []),
         dev_release=parsed.dev,
-        dry_run=dry_run,
-        push=not parsed.no_push,
         skip=frozenset(skipped),
-        release_notes=user_notes or None,
+        release_notes=user_notes or {},
         target=parsed.where,
-        require_clean_worktree=not dry_run,
     )
-    plan = create_plan(params)
 
-    if not plan.releases:
+    try:
+        plan = compute_plan(intent)
+    except ValueError as exc:
+        if not dry_run:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+        # Dry run tolerates guard failures
+        plan = Plan()
+
+    if not plan.jobs:
         if parsed.json_output:
             print(plan.model_dump_json(indent=2))
         else:
@@ -155,34 +162,24 @@ def _parse_release_notes(raw: list[list[str]] | None) -> dict[str, str]:
 
 
 def _dispatch_to_ci(plan: Plan) -> None:
-    """Serialize the plan and dispatch to GitHub Actions."""
-    import subprocess
-
-    plan_json = plan.model_dump_json()
-    ref_result = subprocess.run(
-        ["git", "branch", "--show-current"], capture_output=True, text=True
+    """Serialize the plan and dispatch via the command framework."""
+    print("Dispatching release...")
+    dispatch_cmd = DispatchWorkflowCommand(
+        label="Dispatch release to CI",
+        plan_json=plan.model_dump_json(),
     )
-    ref = ref_result.stdout.strip() if ref_result.returncode == 0 else "main"
-    cmd = [
-        "gh",
-        "workflow",
-        "run",
-        "release.yml",
-        "--ref",
-        ref,
-        "-f",
-        f"plan={plan_json}",
-    ]
+    dispatch_job = Job(name="dispatch", commands=[dispatch_cmd])
+    execute_job(dispatch_job, hooks=None)
 
-    print(f"Dispatching release for: {', '.join(sorted(plan.releases))}")
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print("ERROR: Failed to trigger workflow.", file=sys.stderr)
-        sys.exit(1)
+    _poll_workflow_run()
 
-    print("Waiting for workflow run...")
+
+def _poll_workflow_run() -> None:
+    """Poll GitHub Actions for the latest workflow run status."""
+    import subprocess
     import time
 
+    print("Waiting for workflow run...")
     time.sleep(2)
 
     result = subprocess.run(

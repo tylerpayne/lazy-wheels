@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from ._args import CommandArgs
 from .display import print_bump_summary
+from ..intents.bump import BumpIntent
+from ..intents.shared.versioning import compute_bumped_version
+from ..planner import compute_plan
 from ..execute import execute_plan
-from ..plan.planner import create_plan
-from ..types import BumpType, PlanParams
+from ..types import BumpType
 
 
 class BumpArgs(CommandArgs):
@@ -17,7 +20,7 @@ class BumpArgs(CommandArgs):
     bump_all: bool = False
     packages: list[str] | None = None
     force: bool = False
-    no_pin: bool = False  # CLI uses negative flag, inverted for PlanParams.pin
+    no_pin: bool = False  # CLI uses negative flag, inverted for BumpIntent.pin
     bump_type: str = ""
 
 
@@ -26,35 +29,42 @@ def cmd_bump(args: argparse.Namespace) -> None:
     parsed = BumpArgs.from_namespace(args)
 
     if not parsed.bump_type:
-        print("ERROR: Specify a bump type: --minor, --major, --patch, etc.")
-        return
+        print(
+            "ERROR: Specify a bump type: --minor, --major, --patch, etc.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     bump_type = BumpType(parsed.bump_type)
 
-    # Map CLI flags to PlanParams
-    rebuild_packages = frozenset(parsed.packages or [])
-    params = PlanParams(
-        rebuild_all=parsed.bump_all or not rebuild_packages,
-        rebuild=rebuild_packages,
-        restrict_packages=rebuild_packages,
-        dev_release=True,
-        skip=frozenset({"build", "release", "publish"}),
+    intent = BumpIntent(
         bump_type=bump_type,
+        packages=frozenset(parsed.packages or []),
         pin=not parsed.no_pin,
-        tag=False,
-        push=False,
+        commit=True,
     )
-    plan = create_plan(params)
+    try:
+        plan = compute_plan(intent)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    if not plan.releases:
+    if not plan.jobs or not plan.jobs[0].commands:
         print("No packages to bump.")
         return
 
-    # Show what will happen
-    results = [
-        (name, release.package.version.raw, release.next_version.raw)
-        for name, release in sorted(plan.releases.items())
-    ]
+    # Display what will happen using workspace from plan metadata
+    workspace = plan.metadata.workspace
+    assert workspace is not None
+    results = []
+    targets = intent.packages or frozenset(workspace.packages.keys())
+    for name in sorted(targets):
+        if name not in workspace.packages:
+            continue
+        pkg = workspace.packages[name]
+        bumped = compute_bumped_version(pkg.version, bump_type)
+        results.append((name, pkg.version.raw, bumped.raw))
+
     print()
     print_bump_summary(results)
     print()

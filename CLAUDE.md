@@ -76,18 +76,18 @@ All entities are frozen after construction. No mutation. Builders are internal t
 
 ### ETL-style pipeline
 
-The pipeline isolates I/O from pure computation. Each step has a clear verb and I/O profile. Adding a new verb is a significant design decision.
+The pipeline isolates reads from writes. Each step has a clear verb and I/O profile. Adding a new verb is a significant design decision.
 
 #### Verbs
 
 | Verb | Function | I/O profile |
 |---|---|---|
 | parse | `parse_workspace()` | Reads filesystem |
-| detect | `detect_changes()` | Reads git |
-| plan | `create_plan()` | Pure |
+| detect | `parse_changes()` | Reads git |
+| plan | `intent.plan()` | Reads filesystem and git (never writes) |
 | execute | `execute_plan()` | Writes filesystem, runs subprocesses |
 
-Every CLI command produces a Plan. The difference is which jobs have commands. One executor consumes the Plan regardless of how it was built.
+Every CLI command produces a Plan. The difference is which jobs have commands. One executor consumes the Plan regardless of how it was built. The planner calls `intent.guard()` before `intent.plan()` so hooks can intercept between parse and guard.
 
 #### Import direction
 
@@ -96,16 +96,14 @@ Imports follow the pipeline direction. Later steps may import from earlier steps
 ```
 types, graph, commands  (shared, imported by all)
      ↓
-   parse                (reads filesystem)
+   states/*             (reads filesystem, git)
      ↓
-   detect               (reads git)
-     ↓
-   plan                 (pure transforms)
+   intents/*            (reads state, builds plan — never writes)
      ↓
    execute              (runs commands)
 ```
 
-A module must never import from a later pipeline step. For example, `parse` must not import from `plan` or `detect`. Sibling imports within the same module are fine.
+A module must never import from a later pipeline step. For example, `states` must not import from `intents`. Sibling imports within the same module are fine.
 
 ### TDD with parametrized tests
 
@@ -129,4 +127,4 @@ Type annotations on every function signature, variable, and return. Use `Any` wh
 
 ### File organization
 
-Public functions and methods come first, private helpers last. No cross-file private imports or access to another class's private methods, properties, or attributes. Module-level private constants may appear at the top of a file when a class definition depends on them.
+Public functions and methods come first, private helpers last. No cross-file private imports or access to another class's private methods, properties, or attributes. Module-level private constants may appear at the top of a file when a class definition depends on them. Never put code in `__init__.py` files. They are for re-exports only.

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from ._args import CommandArgs
-from .display import print_status_table
-from ..plan.planner import create_plan
-from ..types import PlanParams
+from ..intents.status import StatusIntent
+from ..planner import compute_plan
 
 
 class StatusArgs(CommandArgs):
@@ -21,25 +21,38 @@ def cmd_status(args: argparse.Namespace) -> None:
     """Show workspace package status. Read-only, never modifies disk."""
     parsed = StatusArgs.from_namespace(args)
 
-    params = PlanParams(
+    intent = StatusIntent(
         rebuild_all=parsed.rebuild_all,
         rebuild=frozenset(parsed.rebuild or []),
-        dev_release=True,
-        skip=frozenset({"build", "release", "publish", "bump"}),
-        require_clean_worktree=False,
     )
-    plan = create_plan(params)
+    try:
+        plan = compute_plan(intent)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    if not plan.releases and not plan.workspace.packages:
+    changed_map = {c.package.name: c for c in plan.changes}
+
+    workspace = plan.metadata.workspace
+    assert workspace is not None
+
+    if not workspace.packages:
         print("No packages found.")
         return
 
     print()
     print("Packages")
     print("--------")
-    print_status_table(plan, show_release_version=False)
 
-    if not plan.releases:
+    nw = max(len(n) for n in workspace.packages)
+    for name, pkg in sorted(workspace.packages.items()):
+        if name in changed_map:
+            reason = changed_map[name].reason or "changed"
+            print(f"  {reason.ljust(16)}  {name.ljust(nw)}  {pkg.version.raw}")
+        else:
+            print(f"  {'unchanged'.ljust(16)}  {name.ljust(nw)}  {pkg.version.raw}")
+
+    if not changed_map:
         print()
         print("Nothing changed since last release. Use --rebuild-all to force.")
 

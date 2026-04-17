@@ -13,8 +13,9 @@ from uv_release.commands import (
     SetVersionCommand,
     ShellCommand,
 )
+from uv_release.types import Package
 from uv_release.git import GitRepo
-from uv_release.types import Package, Version
+from uv_release.types import Version
 
 
 def _version(raw: str) -> Version:
@@ -55,8 +56,16 @@ class TestSetVersionCommand:
 class TestPinDepsCommand:
     def test_pins_dependency_version(self, workspace: Path) -> None:
         pkg = _package(workspace, "beta")
-        pins = {"alpha": _version("2.0.0")}
-        cmd = PinDepsCommand(label="pin deps", package=pkg, pins=pins)
+        alpha = _package(workspace, "alpha")
+        alpha_pinned = Package(
+            name=alpha.name,
+            path=alpha.path,
+            version=_version("2.0.0"),
+            dependencies=alpha.dependencies,
+        )
+        cmd = PinDepsCommand(
+            label="pin deps", package=pkg, pins={"alpha": alpha_pinned}
+        )
         result = cmd.execute()
         assert result == 0
 

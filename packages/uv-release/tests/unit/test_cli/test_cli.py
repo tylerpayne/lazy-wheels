@@ -4,11 +4,45 @@ from __future__ import annotations
 
 import argparse
 
+import pytest
+
+from uv_release.cli import build_parser
 from uv_release.cli.status import StatusArgs
 from uv_release.cli.build import BuildArgs
 from uv_release.cli.bump import BumpArgs
 from uv_release.cli.release import ReleaseArgs
 from uv_release.types import BumpType
+
+
+class TestParserConstruction:
+    """Smoke tests that the argparse parser builds and parses without error."""
+
+    def test_build_parser(self) -> None:
+        """Parser construction succeeds (catches invalid kwargs like intent=)."""
+        parser = build_parser()
+        assert parser is not None
+
+    @pytest.mark.parametrize(
+        "argv,expected_command",
+        [
+            (["status"], "status"),
+            (["build"], "build"),
+            (["release", "--dry-run"], "release"),
+            (["bump", "--minor"], "bump"),
+            (["clean"], "clean"),
+            (["workflow", "init"], "workflow"),
+            (["workflow", "validate"], "workflow"),
+            (["skill", "init"], "skill"),
+            (["install"], "install"),
+            (["download"], "download"),
+            (["jobs", "build"], "jobs"),
+        ],
+    )
+    def test_parse_subcommands(self, argv: list[str], expected_command: str) -> None:
+        """Each subcommand parses minimal valid argv."""
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        assert args.command == expected_command
 
 
 class TestStatusArgs:
@@ -107,7 +141,7 @@ class TestReleaseArgs:
             rebuild=None,
             dev=True,
             yes=False,
-            skip=["uvr-publish"],
+            skip=["publish"],
             no_push=True,
             json_output=False,
             release_notes=None,
@@ -115,5 +149,5 @@ class TestReleaseArgs:
         parsed = ReleaseArgs.from_namespace(ns)
         assert parsed.where == "local"
         assert parsed.dev is True
-        assert parsed.skip == ["uvr-publish"]
+        assert parsed.skip == ["publish"]
         assert parsed.no_push is True

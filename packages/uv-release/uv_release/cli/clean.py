@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import shutil
-from pathlib import Path
+import sys
 
 from ._args import CommandArgs
+from ..intents.clean import CleanIntent
+from ..planner import compute_plan
+from ..execute import execute_plan
 
 
 class CleanArgs(CommandArgs):
@@ -16,16 +18,17 @@ class CleanArgs(CommandArgs):
 def cmd_clean(args: argparse.Namespace) -> None:
     """Remove uvr caches and ephemeral files."""
     _parsed = CleanArgs.from_namespace(args)
-    removed: list[str] = []
 
-    for cache in (Path.home() / ".uvr" / "cache", Path.cwd() / ".uvr" / "cache"):
-        if cache.is_dir():
-            shutil.rmtree(cache)
-            removed.append(str(cache))
+    intent = CleanIntent()
+    try:
+        plan = compute_plan(intent)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    if removed:
-        for p in removed:
-            print(f"  removed {p}")
-        print(f"\nCleaned {len(removed)} location(s).")
-    else:
+    if not plan.jobs or not plan.jobs[0].commands:
         print("Nothing to clean.")
+        return
+
+    execute_plan(plan, hooks=None)
+    print("Cleaned.")

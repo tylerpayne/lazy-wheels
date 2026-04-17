@@ -16,8 +16,8 @@ from .status import cmd_status
 from .workflow import cmd_init_dispatch
 
 
-def cli() -> None:
-    """Main CLI entry point."""
+def build_parser() -> argparse.ArgumentParser:
+    """Build the uvr argument parser."""
     parser = argparse.ArgumentParser(
         prog="uvr",
         description="Lazy monorepo wheel builder.",
@@ -326,6 +326,11 @@ def cli() -> None:
     jobs_parser.add_argument("job_name", help="Job name to execute")
     jobs_parser.set_defaults(func=cmd_jobs)
 
-    # -- dispatch ------------------------------------------------------
+    return parser
+
+
+def cli() -> None:
+    """Main CLI entry point."""
+    parser = build_parser()
     args = parser.parse_args()
     args.func(args)
