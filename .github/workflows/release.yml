@@ -11,7 +11,7 @@ permissions:
   contents: write
   id-token: write
 jobs:
-  uvr-validate:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,9 +32,9 @@ jobs:
         name: Validate release plan
         env:
           UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs uvr-validate
+        run: uv run uvr jobs validate
   check:
-    needs: [uvr-validate]
+    needs: [validate]
     runs-on: ubuntu-latest
     if: ${{ !contains(fromJSON(inputs.plan).skip, 'check') }}
     steps:
@@ -49,9 +49,9 @@ jobs:
           uv run poe check
           uv run poe test
   
-  uvr-build:
-    needs: [uvr-validate, check]
-    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-build') }}
+  build:
+    needs: [validate, check]
+    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'build') }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: true
@@ -72,16 +72,16 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
         UVR_RUNNER: ${{ toJSON(matrix.runner) }}
-      run: uv run uvr jobs uvr-build
+      run: uv run uvr jobs build
     - id: upload
       uses: actions/upload-artifact@v4
       with:
         name: wheels-${{ join(matrix.runner, '-') }}
         path: dist/*.whl
         if-no-files-found: error
-  uvr-release:
-    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-release') }}
-    needs: [uvr-build]
+  release:
+    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'release') }}
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
     - id: checkout
@@ -101,19 +101,20 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
     - id: download
       name: Download wheels
-      env:
-        GH_TOKEN: ${{ github.token }}
-        UVR_PLAN: ${{ inputs.plan }}
-      run: uv run uvr jobs download
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+        pattern: wheels-*
+        merge-multiple: true
     - id: publish
       name: Tag and publish releases
       env:
         GH_TOKEN: ${{ github.token }}
         UVR_PLAN: ${{ inputs.plan }}
-      run: uv run uvr jobs uvr-release
-  uvr-publish:
-    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-publish') }}
-    needs: [uvr-release]
+      run: uv run uvr jobs release
+  publish:
+    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'publish') }}
+    needs: [release]
     runs-on: ubuntu-latest
     environment: ${{ fromJSON(inputs.plan).publish_environment || null }}
     steps:
@@ -129,18 +130,19 @@ jobs:
           uv python install ${{ fromJSON(inputs.plan).python_version }}
       - id: download
         name: Download wheels
-        env:
-          GH_TOKEN: ${{ github.token }}
-          UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs download
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
       - id: publish
         name: Publish to package index
         env:
           UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs uvr-publish
-  uvr-bump:
-    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'uvr-bump') }}
-    needs: [uvr-publish]
+        run: uv run uvr jobs publish
+  bump:
+    if: ${{ always() && !failure() && !cancelled() && !contains(fromJSON(inputs.plan).skip, 'bump') }}
+    needs: [publish]
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -162,4 +164,4 @@ jobs:
         name: Finalize release
         env:
           UVR_PLAN: ${{ inputs.plan }}
-        run: uv run uvr jobs uvr-bump
+        run: uv run uvr jobs bump
