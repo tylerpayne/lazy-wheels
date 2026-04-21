@@ -95,4 +95,15 @@ def compute_download_job(*, reuse_run: str = "") -> Job:
             )
         )
 
+    commands.append(
+        ShellCommand(
+            label="Flatten artifact directories",
+            args=[
+                "bash",
+                "-c",
+                'find dist -mindepth 2 -name "*.whl" -exec mv {} dist/ \\;',
+            ],
+        )
+    )
+
     return Job(name="download", commands=commands)
