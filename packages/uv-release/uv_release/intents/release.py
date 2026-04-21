@@ -391,6 +391,9 @@ def _compute_bump_job(
         baseline_tag = Tag.baseline_tag_name(name, release.next_version)
         commands.append(TagCmd(label=f"Baseline {baseline_tag}", tag_name=baseline_tag))
 
+    commands.append(
+        ShellCommand(label="Pull before push", args=["git", "pull", "--rebase"])
+    )
     commands.append(ShellCommand(label="Push", args=["git", "push", "--follow-tags"]))
 
     if target == "local":
