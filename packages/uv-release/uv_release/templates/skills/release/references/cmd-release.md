@@ -48,7 +48,8 @@ uvr bump --all --post        # advance post-release number
 
 | Flag | Description |
 |------|-------------|
-| `--rebuild-all` | Rebuild all packages, not just changed ones |
+| `--all-packages` | Release all packages, not just changed ones |
+| `--packages PKG...` | Release specific packages |
 | `--python VER` | Python version for CI builds (default: `3.12`) |
 
 ## Dispatch options (CI mode)

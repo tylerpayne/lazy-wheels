@@ -69,15 +69,15 @@ uvr release --skip-to release --reuse-run <RUN_ID>
 GitHub releases already exist. Skip straight to bump (or publish):
 
 ```bash
-uvr release --skip-to bump --rebuild-all
+uvr release --skip-to bump --all-packages
 ```
 
-Bump doesn't need wheel artifacts, so `--reuse-run` and `--reuse-release` are not required. `--rebuild-all` is needed so the planner treats packages with clean versions as changed.
+Bump doesn't need wheel artifacts, so `--reuse-run` and `--reuse-release` are not required. `--all-packages` is needed so the planner treats packages with clean versions as changed.
 
 If publish failed and you need to retry it before bump:
 
 ```bash
-uvr release --skip-to publish --reuse-release --rebuild-all
+uvr release --skip-to publish --reuse-release --all-packages
 ```
 
 ### Skipping custom jobs
@@ -101,7 +101,7 @@ Custom jobs must check the plan's skip list in their `if` condition for this to 
 - `--reuse-run` and `--reuse-release` are only required when `release` or `publish` will run (they need wheel artifacts)
 - `--skip-to bump` does not require any `--reuse-*` flag (bump doesn't need wheels)
 - `--reuse-run` and `--reuse-release` are mutually exclusive
-- Use `--rebuild-all` when packages have clean versions (no `.devN`) from a prior release commit
+- Use `--all-packages` when packages have clean versions (no `.devN`) from a prior release commit
 
 ## Main moved ahead of the release branch
 
