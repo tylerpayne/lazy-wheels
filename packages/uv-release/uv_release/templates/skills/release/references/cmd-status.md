@@ -1,15 +1,16 @@
-# `uvr release --dry-run`
+# `uvr status`
 
-Preview what would be released without making changes.
+Show which packages have changed since their last release baseline.
 
 ```bash
-uvr release --dry-run
+uvr status
 ```
 
-Shows which packages have changed since their last release tag, their current versions, and whether they changed directly or transitively (via dependency updates).
+Displays each package's name, version, and change reason (files changed, initial release, dependency changed, or unchanged).
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
-| `--workflow-dir DIR` | Workflow directory (default: `.github/workflows`) |
+| `--all-packages` | Show all packages as changed |
+| `--packages PKG...` | Show specific packages |

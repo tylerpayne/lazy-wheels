@@ -62,22 +62,22 @@ Reuse the build artifacts so you don't rebuild:
 uvr release --skip-to release --reuse-run <RUN_ID>
 ```
 
-`--skip-to release` skips the build job. `--reuse-run` downloads artifacts from the prior run.
+`--skip-to release` skips the build job. `--reuse-run` tells the release and publish jobs to download artifacts from the prior run instead of the current one.
 
 ### Release succeeded, publish or bump failed
 
-GitHub releases already exist. Skip straight to bump (or publish):
+GitHub releases already exist. Skip straight to publish with `--reuse-run` to fetch artifacts from the original build:
 
 ```bash
-uvr release --skip-to bump --all-packages
+uvr release --skip-to publish --reuse-run <RUN_ID> --reuse-release --all-packages
 ```
 
-Bump doesn't need wheel artifacts, so `--reuse-run` and `--reuse-release` are not required. `--all-packages` is needed so the planner treats packages with clean versions as changed.
+`--reuse-release` skips the release job (tags already exist). `--all-packages` is needed so the planner treats packages with clean versions as changed.
 
-If publish failed and you need to retry it before bump:
+For bump-only retry:
 
 ```bash
-uvr release --skip-to publish --reuse-release --all-packages
+uvr release --skip-to bump --reuse-release --all-packages
 ```
 
 ### Skipping custom jobs
