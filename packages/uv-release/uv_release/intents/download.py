@@ -7,8 +7,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from ..commands import MakeDirectoryCommand, ShellCommand
-from ..types import Command, Job, Package, Plan, Workspace
-from ..states.github import find_latest_release_tag, infer_gh_repo
+from ..states.github import LatestReleaseTags
+from ..states.worktree import Worktree
+from ..types import Command, Job, Package, Plan
 
 
 class DownloadIntent(BaseModel):
@@ -23,15 +24,17 @@ class DownloadIntent(BaseModel):
     repo: str = ""
     output: str = "dist"
 
-    def guard(self, workspace: Workspace) -> None:
+    def guard(self) -> None:
         """Check that we have enough info to download."""
         if not self.package and not self.run_id:
             msg = "Specify a package name or --run-id."
             raise ValueError(msg)
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(
+        self, *, worktree: Worktree, latest_release_tags: LatestReleaseTags
+    ) -> Plan:
         """(state, intent) -> plan."""
-        gh_repo = self.repo or infer_gh_repo() or ""
+        repo_name = self.repo or worktree.repo
         output_dir = self.output
 
         commands: list[Command] = [
@@ -51,7 +54,7 @@ class DownloadIntent(BaseModel):
                 "download",
                 self.run_id,
                 "--repo",
-                gh_repo,
+                repo_name,
                 "--dir",
                 output_dir,
             ]
@@ -64,7 +67,7 @@ class DownloadIntent(BaseModel):
             )
         else:
             dist_name = Package.format_dist_name(self.package)
-            tag = self.release_tag or find_latest_release_tag(self.package, gh_repo)
+            tag = self.release_tag or latest_release_tags.tags.get(self.package, "")
             if not tag:
                 msg = f"No release found for '{self.package}'."
                 raise ValueError(msg)
@@ -78,7 +81,7 @@ class DownloadIntent(BaseModel):
                         "download",
                         tag,
                         "--repo",
-                        gh_repo,
+                        repo_name,
                         "--dir",
                         output_dir,
                         "--pattern",

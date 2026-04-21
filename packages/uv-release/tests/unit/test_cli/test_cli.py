@@ -48,32 +48,32 @@ class TestParserConstruction:
 class TestStatusArgs:
     def test_defaults(self) -> None:
         ns = argparse.Namespace(
-            command="status", func=None, rebuild_all=False, rebuild=None
+            command="status", func=None, all_packages=False, packages=None
         )
         parsed = StatusArgs.from_namespace(ns)
-        assert parsed.rebuild_all is False
-        assert parsed.rebuild is None
+        assert parsed.all_packages is False
+        assert parsed.packages is None
 
-    def test_rebuild_all(self) -> None:
+    def test_all_packages(self) -> None:
         ns = argparse.Namespace(
-            command="status", func=None, rebuild_all=True, rebuild=None
+            command="status", func=None, all_packages=True, packages=None
         )
         parsed = StatusArgs.from_namespace(ns)
-        assert parsed.rebuild_all is True
+        assert parsed.all_packages is True
 
 
 class TestBuildArgs:
     def test_defaults(self) -> None:
         ns = argparse.Namespace(
-            command="build", func=None, rebuild_all=False, packages=None
+            command="build", func=None, all_packages=False, packages=None
         )
         parsed = BuildArgs.from_namespace(ns)
-        assert parsed.rebuild_all is False
+        assert parsed.all_packages is False
         assert parsed.packages is None
 
     def test_with_packages(self) -> None:
         ns = argparse.Namespace(
-            command="build", func=None, rebuild_all=False, packages=["alpha", "beta"]
+            command="build", func=None, all_packages=False, packages=["alpha", "beta"]
         )
         parsed = BuildArgs.from_namespace(ns)
         assert parsed.packages == ["alpha", "beta"]
@@ -117,8 +117,8 @@ class TestReleaseArgs:
             where="ci",
             dry_run=False,
             plan=None,
-            rebuild_all=False,
-            rebuild=None,
+            all_packages=False,
+            packages=None,
             dev=False,
             yes=False,
             skip=None,
@@ -137,8 +137,8 @@ class TestReleaseArgs:
             where="local",
             dry_run=True,
             plan=None,
-            rebuild_all=False,
-            rebuild=None,
+            all_packages=False,
+            packages=None,
             dev=True,
             yes=False,
             skip=["publish"],

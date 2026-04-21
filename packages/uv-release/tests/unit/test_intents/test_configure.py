@@ -8,20 +8,25 @@ import pytest
 
 from uv_release.commands import UpdateTomlCommand
 from uv_release.intents.configure import ConfigureIntent
+from uv_release.states.uvr_state import UvrState
+from uv_release.states.workspace import Workspace
 from uv_release.types import (
     Config,
     Plan,
     Publishing,
-    Workspace,
 )
 
 
 def _workspace() -> Workspace:
-    return Workspace(
-        packages={},
+    return Workspace(root=Path("."), packages={})
+
+
+def _uvr_state() -> UvrState:
+    return UvrState(
         config=Config(uvr_version="0.1.0"),
         runners={},
         publishing=Publishing(),
+        uvr_version="0.1.0",
     )
 
 
@@ -53,16 +58,7 @@ class TestConfigureIntentConstruction:
 
 
 class TestConfigureGuard:
-    """guard raises ValueError when no pyproject.toml exists."""
-
-    def test_no_pyproject_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        ws = _workspace()
-        intent = ConfigureIntent()
-        with pytest.raises(ValueError, match="No pyproject.toml found"):
-            intent.guard(ws)
+    """guard validates preconditions for configure intent."""
 
     def test_pyproject_exists_passes(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -71,7 +67,7 @@ class TestConfigureGuard:
         (tmp_path / "pyproject.toml").write_text("[project]\n")
         ws = _workspace()
         intent = ConfigureIntent()
-        intent.guard(ws)  # should not raise
+        intent.guard(workspace=ws)  # should not raise
 
 
 # ---------------------------------------------------------------------------
@@ -83,33 +79,33 @@ class TestConfigurePlan:
     """plan() produces UpdateTomlCommand for each key."""
 
     def test_plan_returns_plan(self) -> None:
-        ws = _workspace()
+        uvr = _uvr_state()
         intent = ConfigureIntent(updates={"latest": "my-pkg"})
-        result = intent.plan(ws)
+        result = intent.plan(uvr_state=uvr)
         assert isinstance(result, Plan)
 
     def test_plan_produces_update_commands(self) -> None:
-        ws = _workspace()
+        uvr = _uvr_state()
         intent = ConfigureIntent(updates={"latest": "my-pkg", "python_version": "3.13"})
-        result = intent.plan(ws)
+        result = intent.plan(uvr_state=uvr)
         job = result.jobs[0]
         assert job.name == "configure"
         update_cmds = [c for c in job.commands if isinstance(c, UpdateTomlCommand)]
         assert len(update_cmds) == 2
 
     def test_plan_commands_sorted_by_key(self) -> None:
-        ws = _workspace()
+        uvr = _uvr_state()
         intent = ConfigureIntent(updates={"z_key": "z_val", "a_key": "a_val"})
-        result = intent.plan(ws)
+        result = intent.plan(uvr_state=uvr)
         job = result.jobs[0]
         update_cmds = [c for c in job.commands if isinstance(c, UpdateTomlCommand)]
         assert update_cmds[0].key == "a_key"
         assert update_cmds[1].key == "z_key"
 
     def test_plan_command_values(self) -> None:
-        ws = _workspace()
+        uvr = _uvr_state()
         intent = ConfigureIntent(updates={"latest": "my-pkg"})
-        result = intent.plan(ws)
+        result = intent.plan(uvr_state=uvr)
         job = result.jobs[0]
         cmd = job.commands[0]
         assert isinstance(cmd, UpdateTomlCommand)
@@ -117,7 +113,7 @@ class TestConfigurePlan:
         assert cmd.value == "my-pkg"
 
     def test_empty_updates_produces_empty_plan(self) -> None:
-        ws = _workspace()
+        uvr = _uvr_state()
         intent = ConfigureIntent(updates={})
-        result = intent.plan(ws)
+        result = intent.plan(uvr_state=uvr)
         assert result.jobs == []

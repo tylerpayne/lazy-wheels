@@ -2,24 +2,23 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..commands import (
-    BuildCommand,
     CreateReleaseCommand,
     CreateTagCommand,
-    DownloadWheelsCommand,
     PinDepsCommand,
     PublishToIndexCommand,
     SetVersionCommand,
     ShellCommand,
 )
-from ..graph import topo_layers
-from ..states.changes import parse_changes
-from ..states.worktree import parse_git_state
+from ..states.changes import Changes
+from ..states.release_tags import ReleaseTags
+from ..states.uvr_state import UvrState
+from ..states.workspace import Workspace
+from ..states.worktree import Worktree
 from ..types import (
     Change,
     Command,
@@ -30,8 +29,8 @@ from ..types import (
     Publishing,
     Release,
     Tag,
-    Workspace,
 )
+from .shared.jobs import compute_build_job, compute_download_job
 from .shared.versioning import (
     compute_next_version,
     compute_release_version,
@@ -46,40 +45,44 @@ class ReleaseIntent(BaseModel):
     type: Literal["release"] = "release"
     dev_release: bool = False
     release_notes: dict[str, str] = Field(default_factory=dict)
-    rebuild_all: bool = False
-    rebuild: frozenset[str] = frozenset()
-    restrict_packages: frozenset[str] = frozenset()
     target: Literal["ci", "local"] = "local"
     skip: frozenset[str] = frozenset()
+    reuse_run: str = ""
+    reuse_release: bool = False
 
-    def guard(self, workspace: Workspace) -> None:
+    def guard(self, *, worktree: Worktree) -> None:
         """Check preconditions. Raises ValueError on failure."""
-        git_state = parse_git_state()
-        if git_state.is_dirty:
+        if worktree.is_dirty:
             msg = "Working tree is not clean. Commit or stash changes first."
             raise ValueError(msg)
-        if git_state.is_ahead_or_behind:
+        if worktree.is_ahead_or_behind:
             msg = "Local HEAD differs from remote. Pull or push first."
             raise ValueError(msg)
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(
+        self,
+        *,
+        workspace: Workspace,
+        uvr_state: UvrState,
+        changes: Changes,
+        release_tags: ReleaseTags,
+    ) -> Plan:
         """(state, intent) -> plan. Full release pipeline."""
-        changes = parse_changes(
-            workspace,
-            rebuild_all=self.rebuild_all,
-            rebuild=self.rebuild,
-            restrict_packages=self.restrict_packages,
-        )
-        if not changes:
+        if not changes.items:
             return Plan()
 
         releases: dict[str, Release] = {}
-        for change in changes:
-            release = self._compute_release(change, workspace)
+        for change in changes.items:
+            release = self._compute_release(change, uvr_state)
             releases[change.package.name] = release
 
         jobs: list[Job] = []
-        skip = self.skip
+        skip = set(self.skip)
+
+        if self.reuse_run:
+            skip.add("build")
+        if self.reuse_release:
+            skip.add("release")
 
         # Version-fix job
         jobs.append(
@@ -90,9 +93,17 @@ class ReleaseIntent(BaseModel):
 
         # Build job
         if "build" not in skip:
-            jobs.append(_compute_build_job(workspace, releases))
+            jobs.append(
+                compute_build_job(workspace, releases, release_tags, uvr_state.runners)
+            )
         else:
             jobs.append(Job(name="build"))
+
+        # Download job (fetches build artifacts for release/publish)
+        if "download" not in skip:
+            jobs.append(compute_download_job(reuse_run=self.reuse_run))
+        else:
+            jobs.append(Job(name="download"))
 
         # Release job (tags + GitHub releases)
         if "release" not in skip:
@@ -102,7 +113,7 @@ class ReleaseIntent(BaseModel):
 
         # Publish job
         if "publish" not in skip:
-            jobs.append(_compute_publish_job(releases, workspace.publishing))
+            jobs.append(_compute_publish_job(releases, uvr_state.publishing))
         else:
             jobs.append(Job(name="publish"))
 
@@ -115,20 +126,22 @@ class ReleaseIntent(BaseModel):
         # Collect unique runner sets for CI build matrix
         runner_sets: list[list[str]] = []
         for name in releases:
-            pkg_runners = workspace.runners.get(name, [["ubuntu-latest"]])
+            pkg_runners = uvr_state.runners.get(name, [["ubuntu-latest"]])
             for runner in pkg_runners:
                 if runner not in runner_sets:
                     runner_sets.append(runner)
 
         return Plan(
             build_matrix=runner_sets or [["ubuntu-latest"]],
-            python_version=workspace.config.python_version,
-            publish_environment=workspace.publishing.environment,
-            skip=sorted(self.skip),
+            python_version=uvr_state.config.python_version,
+            publish_environment=uvr_state.publishing.environment,
+            skip=sorted(skip),
+            reuse_run=self.reuse_run,
+            reuse_release=self.reuse_release,
             jobs=jobs,
         )
 
-    def _compute_release(self, change: Change, workspace: Workspace) -> Release:
+    def _compute_release(self, change: Change, uvr_state: UvrState) -> Release:
         """Create a frozen Release from a Change."""
         name = change.package.name
         release_version = compute_release_version(
@@ -154,7 +167,7 @@ class ReleaseIntent(BaseModel):
             release_version=release_version,
             next_version=next_version,
             release_notes=notes,
-            make_latest=(name == workspace.config.latest_package),
+            make_latest=(name == uvr_state.config.latest_package),
         )
 
 
@@ -249,61 +262,6 @@ def _build_version_fix_commands(
         commands.append(ShellCommand(label="Push", args=["git", "push"]))
 
     return commands
-
-
-def _compute_build_job(
-    workspace: Workspace,
-    releases: dict[str, Release],
-) -> Job:
-    """Generate build job with layered stages."""
-    if not releases:
-        return Job(name="build")
-
-    release_packages = {name: releases[name].package for name in releases}
-    layers = topo_layers(release_packages)
-
-    by_layer: dict[int, list[str]] = defaultdict(list)
-    for name, layer in layers.items():
-        by_layer[layer].append(name)
-
-    commands: list[Command] = []
-    commands.append(
-        ShellCommand(
-            label="Create build directories", args=["mkdir", "-p", "dist", "deps"]
-        )
-    )
-
-    dep_tags: dict[str, str] = {}
-    dep_packages: list[Package] = []
-    for name, pkg in workspace.packages.items():
-        if name in releases:
-            continue
-        tag = _find_release_tag(name, pkg)
-        if tag:
-            dep_tags[name] = tag
-            dep_packages.append(pkg)
-    if dep_packages:
-        commands.append(
-            DownloadWheelsCommand(
-                label="Fetch unchanged dependencies",
-                packages=dep_packages,
-                release_tags=dep_tags,
-            )
-        )
-
-    for layer_idx in sorted(by_layer.keys()):
-        for pkg_name in sorted(by_layer[layer_idx]):
-            release = releases[pkg_name]
-            pkg_runners = workspace.runners.get(pkg_name, [])
-            commands.append(
-                BuildCommand(
-                    label=f"Build {pkg_name} (layer {layer_idx})",
-                    package=release.package,
-                    runners=pkg_runners,
-                )
-            )
-
-    return Job(name="build", commands=commands)
 
 
 def _compute_release_job(releases: dict[str, Release]) -> Job:
@@ -447,10 +405,3 @@ def _compute_bump_job(
         ]
 
     return Job(name="bump", commands=commands)
-
-
-def _find_release_tag(name: str, pkg: Package) -> str | None:
-    """Find the release tag name for an unchanged package's current version."""
-    if pkg.version.is_dev:
-        return None
-    return Tag.release_tag_name(name, pkg.version)

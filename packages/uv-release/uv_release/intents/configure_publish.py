@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..commands import WriteUvrSectionCommand
-from ..types import Command, Job, Plan, Workspace
+from ..states.uvr_state import UvrState
+from ..states.workspace import Workspace
+from ..types import Command, Job, Plan
 
 
 class ConfigurePublishIntent(BaseModel):
@@ -25,13 +26,10 @@ class ConfigurePublishIntent(BaseModel):
     remove_packages: list[str] = Field(default_factory=list)
     clear: bool = False
 
-    def guard(self, workspace: Workspace) -> None:
-        """Check preconditions."""
-        if not Path("pyproject.toml").exists():
-            msg = "No pyproject.toml found."
-            raise ValueError(msg)
+    def guard(self, *, workspace: Workspace) -> None:
+        """No preconditions. Workspace parse already validates pyproject.toml."""
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(self, *, uvr_state: UvrState) -> Plan:
         """(state, intent) -> plan."""
         has_mutations = any(
             [
@@ -47,7 +45,7 @@ class ConfigurePublishIntent(BaseModel):
         if not has_mutations:
             return Plan()
 
-        pub = workspace.publishing
+        pub = uvr_state.publishing
         data: dict[str, Any] = {
             "index": pub.index,
             "environment": pub.environment,

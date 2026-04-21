@@ -8,8 +8,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..commands import ShellCommand
-from ..types import Command, Job, Package, Plan, Tag, Workspace
-from ..states.github import find_latest_release_tag, infer_gh_repo
+from ..states.github import LatestReleaseTags
+from ..states.worktree import Worktree
+from ..types import Command, Job, Package, Plan, Tag
 
 
 def _parse_spec(spec: str) -> tuple[str, str]:
@@ -35,7 +36,7 @@ class InstallIntent(BaseModel):
     dist: str = ""
     repo: str = ""
 
-    def guard(self, workspace: Workspace) -> None:
+    def guard(self) -> None:
         """Check that we have something to install."""
         if not self.packages and not self.dist:
             msg = "Specify at least one package or --dist directory."
@@ -45,7 +46,9 @@ class InstallIntent(BaseModel):
             msg = f"Directory not found: {self.dist}"
             raise ValueError(msg)
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(
+        self, *, worktree: Worktree, latest_release_tags: LatestReleaseTags
+    ) -> Plan:
         """(state, intent) -> plan."""
         commands: list[Command] = []
 
@@ -81,7 +84,7 @@ class InstallIntent(BaseModel):
                 )
             )
         else:
-            gh_repo = self.repo or infer_gh_repo() or ""
+            repo_name = self.repo or worktree.repo
             cache_dir = Path.home() / ".uvr" / "cache"
 
             for spec in self.packages:
@@ -91,7 +94,7 @@ class InstallIntent(BaseModel):
                 if version:
                     tag = f"{Tag.tag_prefix(name)}{version}"
                 else:
-                    tag = find_latest_release_tag(name, gh_repo) or ""
+                    tag = latest_release_tags.tags.get(name, "")
 
                 if not tag:
                     continue
@@ -105,7 +108,7 @@ class InstallIntent(BaseModel):
                             "download",
                             tag,
                             "--repo",
-                            gh_repo,
+                            repo_name,
                             "--dir",
                             str(cache_dir),
                             "--pattern",

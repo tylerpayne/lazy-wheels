@@ -30,8 +30,8 @@ def _release_ns(**overrides: object) -> argparse.Namespace:
         "where": "local",
         "dry_run": True,
         "plan": None,
-        "rebuild_all": False,
-        "rebuild": None,
+        "all_packages": False,
+        "packages": None,
         "dev": True,
         "yes": False,
         "skip": None,
@@ -55,7 +55,7 @@ class TestCmdStatus:
     def test_shows_changed_packages(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        cmd_status(_ns(rebuild_all=False, rebuild=None))
+        cmd_status(_ns(all_packages=False, packages=None))
         out = capsys.readouterr().out
         assert "alpha" in out
         assert "beta" in out
@@ -64,24 +64,24 @@ class TestCmdStatus:
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         add_baseline_tags(workspace)
-        cmd_status(_ns(rebuild_all=False, rebuild=None))
+        cmd_status(_ns(all_packages=False, packages=None))
         out = capsys.readouterr().out
         assert "unchanged" in out
 
-    def test_rebuild_all_forces_changed(
+    def test_all_packages_forces_changed(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         add_baseline_tags(workspace)
-        cmd_status(_ns(rebuild_all=True, rebuild=None))
+        cmd_status(_ns(all_packages=True, packages=None))
         out = capsys.readouterr().out
         assert "alpha" in out
-        assert "rebuild all" in out
+        assert "all packages" in out
 
     def test_dirty_worktree_warns_not_fails(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         (workspace / "dirty.txt").write_text("uncommitted")
-        cmd_status(_ns(rebuild_all=False, rebuild=None))
+        cmd_status(_ns(all_packages=False, packages=None))
         captured = capsys.readouterr()
         assert "WARNING" in captured.err
 
@@ -89,7 +89,7 @@ class TestCmdStatus:
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         add_baseline_tags(workspace)
-        cmd_status(_ns(rebuild_all=False, rebuild=None))
+        cmd_status(_ns(all_packages=False, packages=None))
         out = capsys.readouterr().out
         assert "Nothing changed" in out
 
@@ -104,7 +104,7 @@ class TestCmdBuild:
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         add_baseline_tags(workspace)
-        cmd_build(_ns(rebuild_all=False, packages=None))
+        cmd_build(_ns(all_packages=False, packages=None))
         out = capsys.readouterr().out
         assert "Nothing to build" in out
 
@@ -114,7 +114,7 @@ class TestCmdBuild:
         add_baseline_tags(workspace)
         modify_file(workspace, "packages/alpha/alpha/__init__.py", "# changed\n")
         # Build will fail (no uv sync in tmp) but we just check the display
-        cmd_build(_ns(rebuild_all=False, packages=None))
+        cmd_build(_ns(all_packages=False, packages=None))
         out = capsys.readouterr().out
         assert "Building" in out
         assert "alpha" in out
@@ -411,7 +411,7 @@ class TestCmdSkillInit:
 
 class TestUpgradeHelpers:
     def test_write_and_read_base(self, workspace: Path) -> None:
-        from uv_release.states.merge_bases import read_base
+        from uv_release.states.workflow import _read_base as read_base
 
         base_file = workspace / ".uvr" / "bases" / "test" / "file.yml"
         base_file.parent.mkdir(parents=True, exist_ok=True)
@@ -419,7 +419,7 @@ class TestUpgradeHelpers:
         assert read_base(workspace, "test/file.yml") == "content"
 
     def test_read_missing_base(self, workspace: Path) -> None:
-        from uv_release.states.merge_bases import read_base
+        from uv_release.states.workflow import _read_base as read_base
 
         assert read_base(workspace, "nonexistent.yml") == ""
 
@@ -441,14 +441,14 @@ class TestUpgradeHelpers:
         assert parse_editor_command("code") == ["code", "--wait"]
 
     def test_resolve_editor_cli_arg(self, workspace: Path) -> None:
-        from uv_release.states.merge_bases import resolve_editor
+        from uv_release.states.uvr_state import _resolve_editor as resolve_editor
 
         assert resolve_editor("nano") == "nano"
 
     def test_resolve_editor_env_var(
         self, workspace: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from uv_release.states.merge_bases import resolve_editor
+        from uv_release.states.uvr_state import _resolve_editor as resolve_editor
 
         monkeypatch.setenv("VISUAL", "my-editor")
         assert resolve_editor(None) == "my-editor"

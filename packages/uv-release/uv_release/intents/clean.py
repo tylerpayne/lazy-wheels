@@ -8,7 +8,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from ..commands import ShellCommand
-from ..types import Command, Job, Plan, Workspace
+from ..states.workspace import Workspace
+from ..types import Command, Job, Plan
 
 
 class CleanIntent(BaseModel):
@@ -18,28 +19,19 @@ class CleanIntent(BaseModel):
 
     type: Literal["clean"] = "clean"
 
-    def guard(self, workspace: Workspace) -> None:
+    def guard(self, *, workspace: Workspace) -> None:
         """No preconditions for clean."""
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(self, *, workspace: Workspace) -> Plan:
         """(state, intent) -> plan."""
-        commands: list[Command] = []
-        cache_dir = Path.cwd() / ".uvr" / "cache"
-        if cache_dir.is_dir():
-            commands.append(
-                ShellCommand(
-                    label=f"Remove {cache_dir}",
-                    args=["rm", "-rf", str(cache_dir)],
-                )
-            )
-
-        home_cache = Path.home() / ".uvr" / "cache"
-        if home_cache.is_dir():
-            commands.append(
-                ShellCommand(
-                    label=f"Remove {home_cache}",
-                    args=["rm", "-rf", str(home_cache)],
-                )
-            )
-
+        commands: list[Command] = [
+            ShellCommand(
+                label="Remove project cache",
+                args=["rm", "-rf", str(workspace.root / ".uvr" / "cache")],
+            ),
+            ShellCommand(
+                label="Remove user cache",
+                args=["rm", "-rf", str(Path.home() / ".uvr" / "cache")],
+            ),
+        ]
         return Plan(jobs=[Job(name="clean", commands=commands)])

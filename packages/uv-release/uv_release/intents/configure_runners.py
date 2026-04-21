@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..commands import WriteUvrSectionCommand
-from ..types import Command, Job, Plan, Workspace
+from ..states.uvr_state import UvrState
+from ..types import Command, Job, Plan
 
 
 class ConfigureRunnersIntent(BaseModel):
@@ -22,28 +22,24 @@ class ConfigureRunnersIntent(BaseModel):
     remove: list[str] = Field(default_factory=list)
     clear: bool = False
 
-    def guard(self, workspace: Workspace) -> None:
+    def guard(self, *, uvr_state: UvrState) -> None:
         """Check preconditions."""
-        if not Path("pyproject.toml").exists():
-            msg = "No pyproject.toml found."
-            raise ValueError(msg)
-
         if self.remove and self.package:
-            runners = list(workspace.runners.get(self.package, []))
+            runners = list(uvr_state.runners.get(self.package, []))
             for runner in self.remove:
                 labels = [s.strip() for s in runner.split(",")]
                 if labels not in runners:
                     msg = f"[{', '.join(labels)}] not in runners for '{self.package}'"
                     raise ValueError(msg)
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(self, *, uvr_state: UvrState) -> Plan:
         """(state, intent) -> plan."""
         has_mutations = bool(self.add or self.remove or self.clear)
         if not has_mutations:
             return Plan()
 
         matrix: dict[str, list[list[str]]] = {
-            k: [list(r) for r in v] for k, v in workspace.runners.items()
+            k: [list(r) for r in v] for k, v in uvr_state.runners.items()
         }
 
         if self.clear:

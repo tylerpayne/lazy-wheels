@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from uv_release.states.baselines import find_baseline_tag
+from uv_release.states.changes import _find_baseline_tag as find_baseline_tag
 from uv_release.types import Version, VersionState
 
 

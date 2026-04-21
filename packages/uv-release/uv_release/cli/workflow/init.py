@@ -8,7 +8,6 @@ import sys
 from .._args import CommandArgs
 from ...planner import compute_plan
 from ...intents.upgrade_workflow import UpgradeWorkflowIntent
-from ...states.workspace import read_uvr_version
 from ...execute import execute_plan
 
 
@@ -50,7 +49,7 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     execute_plan(plan, hooks=None)
 
-    version = read_uvr_version()
+    version = plan.metadata.uvr_state.uvr_version if plan.metadata.uvr_state else ""
     if parsed.base_only:
         print(f"OK: Wrote merge base (uvr v{version})")
     else:
@@ -83,5 +82,5 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
 
     execute_plan(plan, hooks=None)
 
-    version = read_uvr_version()
+    version = plan.metadata.uvr_state.uvr_version if plan.metadata.uvr_state else ""
     print(f"OK: Upgrade complete (uvr v{version})")

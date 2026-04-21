@@ -8,13 +8,13 @@ from pydantic import BaseModel, ConfigDict
 
 from ..commands import PinDepsCommand, SetVersionCommand, ShellCommand
 from .shared.versioning import compute_bumped_version
+from ..states.workspace import Workspace
 from ..types import (
     BumpType,
     Command,
     Job,
     Package,
     Plan,
-    Workspace,
 )
 
 
@@ -29,7 +29,7 @@ class BumpIntent(BaseModel):
     pin: bool = True
     commit: bool = True
 
-    def guard(self, workspace: Workspace) -> None:
+    def guard(self, *, workspace: Workspace) -> None:
         """Check preconditions. Raises ValueError on failure."""
         # Check requested packages exist
         for name in self.packages:
@@ -43,7 +43,7 @@ class BumpIntent(BaseModel):
             # Delegate to compute_bumped_version which raises ValueError on invalid transitions
             compute_bumped_version(pkg.version, self.bump_type)
 
-    def plan(self, workspace: Workspace) -> Plan:
+    def plan(self, *, workspace: Workspace) -> Plan:
         """(state, intent) -> plan."""
         targets = self._target_packages(workspace)
         bumped_packages: dict[str, Package] = {}

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
+from pathlib import Path
 from uv_release.intents.status import StatusIntent
+from uv_release.states.changes import Changes
+from uv_release.states.workspace import Workspace
+from uv_release.states.worktree import Worktree
 from uv_release.types import (
-    Config,
     Package,
     Plan,
-    Publishing,
     Version,
-    Workspace,
 )
 
 
@@ -24,12 +23,7 @@ def _package(name: str, version: str = "1.0.0.dev0") -> Package:
 
 
 def _workspace(packages: dict[str, Package]) -> Workspace:
-    return Workspace(
-        packages=packages,
-        config=Config(uvr_version="0.1.0"),
-        runners={},
-        publishing=Publishing(),
-    )
+    return Workspace(root=Path("."), packages=packages)
 
 
 # ---------------------------------------------------------------------------
@@ -44,11 +38,6 @@ class TestStatusIntentConstruction:
         intent = StatusIntent()
         assert intent.type == "status"
 
-    def test_defaults(self) -> None:
-        intent = StatusIntent()
-        assert intent.rebuild_all is False
-        assert intent.rebuild == frozenset()
-
 
 # ---------------------------------------------------------------------------
 # StatusIntent.guard
@@ -61,12 +50,12 @@ class TestStatusGuard:
     def test_guard_always_passes(self) -> None:
         ws = _workspace({"a": _package("a")})
         intent = StatusIntent()
-        intent.guard(ws)  # should not raise
+        intent.guard(workspace=ws, worktree=Worktree())  # should not raise
 
     def test_guard_passes_with_empty_workspace(self) -> None:
         ws = _workspace({})
         intent = StatusIntent()
-        intent.guard(ws)  # should not raise
+        intent.guard(workspace=ws, worktree=Worktree())  # should not raise
 
 
 # ---------------------------------------------------------------------------
@@ -80,13 +69,11 @@ class TestStatusPlan:
     def test_returns_plan(self) -> None:
         ws = _workspace({"a": _package("a")})
         intent = StatusIntent()
-        with patch("uv_release.intents.status.parse_changes", return_value=[]):
-            result = intent.plan(ws)
+        result = intent.plan(workspace=ws, changes=Changes())
         assert isinstance(result, Plan)
 
     def test_no_jobs(self) -> None:
         ws = _workspace({"a": _package("a")})
         intent = StatusIntent()
-        with patch("uv_release.intents.status.parse_changes", return_value=[]):
-            result = intent.plan(ws)
+        result = intent.plan(workspace=ws, changes=Changes())
         assert result.jobs == []

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
+from pathlib import Path
 import pytest
 
 from uv_release.intents.build import BuildIntent
 from uv_release.commands import BuildCommand, ShellCommand
+from uv_release.states.changes import Changes
+from uv_release.states.release_tags import ReleaseTags
+from uv_release.states.uvr_state import UvrState
+from uv_release.states.workspace import Workspace
 from uv_release.types import (
     Change,
     Config,
@@ -16,7 +19,6 @@ from uv_release.types import (
     Publishing,
     Tag,
     Version,
-    Workspace,
 )
 
 
@@ -35,16 +37,19 @@ def _package(
     )
 
 
-def _workspace(
-    packages: dict[str, Package],
+def _workspace(packages: dict[str, Package]) -> Workspace:
+    return Workspace(root=Path("."), packages=packages)
+
+
+def _uvr_state(
     *,
     runners: dict[str, list[list[str]]] | None = None,
-) -> Workspace:
-    return Workspace(
-        packages=packages,
+) -> UvrState:
+    return UvrState(
         config=Config(uvr_version="0.1.0"),
         runners=runners or {},
         publishing=Publishing(),
+        uvr_version="0.1.0",
     )
 
 
@@ -78,40 +83,10 @@ class TestBuildIntentConstruction:
         intent = BuildIntent()
         assert intent.type == "build"
 
-    def test_defaults(self) -> None:
-        intent = BuildIntent()
-        assert intent.rebuild_all is False
-        assert intent.restrict_packages == frozenset()
-
     def test_frozen(self) -> None:
         intent = BuildIntent()
         with pytest.raises(Exception):
-            intent.rebuild_all = True
-
-
-# ---------------------------------------------------------------------------
-# BuildIntent.guard
-# ---------------------------------------------------------------------------
-
-
-class TestBuildGuard:
-    """guard raises ValueError for unknown packages."""
-
-    def test_unknown_package_raises(self) -> None:
-        ws = _workspace({"a": _package("a")})
-        intent = BuildIntent(restrict_packages=frozenset({"nonexistent"}))
-        with pytest.raises(ValueError, match="nonexistent"):
-            intent.guard(ws)
-
-    def test_known_package_passes(self) -> None:
-        ws = _workspace({"a": _package("a")})
-        intent = BuildIntent(restrict_packages=frozenset({"a"}))
-        intent.guard(ws)  # should not raise
-
-    def test_empty_restriction_passes(self) -> None:
-        ws = _workspace({"a": _package("a")})
-        intent = BuildIntent()
-        intent.guard(ws)  # should not raise
+            intent.type = "build"
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +102,12 @@ class TestBuildPlanWithChanges:
         ws = _workspace(pkgs)
         changes = _changes_for(pkgs)
         intent = BuildIntent()
-        with patch("uv_release.intents.build.parse_changes", return_value=changes):
-            result = intent.plan(ws)
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
         assert isinstance(result, Plan)
 
     def test_has_build_job(self) -> None:
@@ -136,8 +115,12 @@ class TestBuildPlanWithChanges:
         ws = _workspace(pkgs)
         changes = _changes_for(pkgs)
         intent = BuildIntent()
-        with patch("uv_release.intents.build.parse_changes", return_value=changes):
-            result = intent.plan(ws)
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
         assert len(result.jobs) == 1
         assert result.jobs[0].name == "build"
 
@@ -146,8 +129,12 @@ class TestBuildPlanWithChanges:
         ws = _workspace(pkgs)
         changes = _changes_for(pkgs)
         intent = BuildIntent()
-        with patch("uv_release.intents.build.parse_changes", return_value=changes):
-            result = intent.plan(ws)
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
         job = result.jobs[0]
         build_cmds = [c for c in job.commands if isinstance(c, BuildCommand)]
         assert len(build_cmds) == 1
@@ -157,8 +144,12 @@ class TestBuildPlanWithChanges:
         ws = _workspace(pkgs)
         changes = _changes_for(pkgs)
         intent = BuildIntent()
-        with patch("uv_release.intents.build.parse_changes", return_value=changes):
-            result = intent.plan(ws)
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
         job = result.jobs[0]
         build_cmds = [c for c in job.commands if isinstance(c, BuildCommand)]
         assert len(build_cmds) == 2
@@ -168,8 +159,12 @@ class TestBuildPlanWithChanges:
         ws = _workspace(pkgs)
         changes = _changes_for(pkgs)
         intent = BuildIntent()
-        with patch("uv_release.intents.build.parse_changes", return_value=changes):
-            result = intent.plan(ws)
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
         job = result.jobs[0]
         shell_cmds = [c for c in job.commands if isinstance(c, ShellCommand)]
         mkdir_cmds = [c for c in shell_cmds if "mkdir" in c.args]
@@ -182,16 +177,10 @@ class TestBuildPlanNoChanges:
     def test_no_changes_empty_plan(self) -> None:
         ws = _workspace({"a": _package("a")})
         intent = BuildIntent()
-        with patch("uv_release.intents.build.parse_changes", return_value=[]):
-            result = intent.plan(ws)
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=_uvr_state(),
+            changes=Changes(),
+            release_tags=ReleaseTags(),
+        )
         assert result.jobs == []
-
-
-class TestBuildPlanCallsGuard:
-    """guard() raises on invalid state. Called by planner before plan()."""
-
-    def test_guard_raises_on_unknown_package(self) -> None:
-        ws = _workspace({"a": _package("a")})
-        intent = BuildIntent(restrict_packages=frozenset({"nonexistent"}))
-        with pytest.raises(ValueError, match="nonexistent"):
-            intent.guard(ws)

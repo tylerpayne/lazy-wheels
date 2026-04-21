@@ -8,25 +8,27 @@ import sys
 from ._args import CommandArgs
 from ..intents.status import StatusIntent
 from ..planner import compute_plan
+from ..types import PlanParams
 
 
 class StatusArgs(CommandArgs):
     """Typed arguments for ``uvr status``."""
 
-    rebuild_all: bool = False
-    rebuild: list[str] | None = None
+    all_packages: bool = False
+    packages: list[str] | None = None
 
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Show workspace package status. Read-only, never modifies disk."""
     parsed = StatusArgs.from_namespace(args)
 
-    intent = StatusIntent(
-        rebuild_all=parsed.rebuild_all,
-        rebuild=frozenset(parsed.rebuild or []),
+    params = PlanParams(
+        all_packages=parsed.all_packages,
+        packages=frozenset(parsed.packages or []),
     )
+    intent = StatusIntent()
     try:
-        plan = compute_plan(intent)
+        plan = compute_plan(intent, params=params)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -54,6 +56,6 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     if not changed_map:
         print()
-        print("Nothing changed since last release. Use --rebuild-all to force.")
+        print("Nothing changed since last release. Use --all-packages to force.")
 
     print()

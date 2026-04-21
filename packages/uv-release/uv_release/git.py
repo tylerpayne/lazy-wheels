@@ -3,15 +3,33 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 
 import pygit2
 
+_thread_local = threading.local()
+
 
 class GitRepo:
-    """All git I/O goes through this class."""
+    """All git I/O goes through this class. Thread-local singleton."""
+
+    _repo: pygit2.Repository
+
+    def __new__(cls, path: str = ".") -> GitRepo:
+        import os
+
+        resolved = os.path.realpath(path)
+        cache: dict[str, GitRepo] = getattr(_thread_local, "git_repos", {})
+        if resolved in cache:
+            return cache[resolved]
+        instance = super().__new__(cls)
+        instance._repo = pygit2.Repository(path)
+        cache[resolved] = instance
+        _thread_local.git_repos = cache
+        return instance
 
     def __init__(self, path: str = ".") -> None:
-        self._repo = pygit2.Repository(path)
+        pass
 
     def find_tag(self, tag_name: str) -> str | None:
         """Return commit SHA for a tag, or None if it doesn't exist."""
@@ -86,6 +104,13 @@ class GitRepo:
         """Create a lightweight git tag pointing at the given target."""
         obj = self._repo.revparse_single(target)
         self._repo.create_reference(f"refs/tags/{tag_name}", obj.id)
+
+    def remote_url(self, remote_name: str = "origin") -> str | None:
+        """Return the URL for a remote, or None if it doesn't exist."""
+        if remote_name not in self._repo.remotes.names():
+            return None
+        remote = self._repo.remotes[remote_name]
+        return remote.url
 
     def head_commit(self) -> str:
         """Return HEAD commit SHA."""

@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ._args import CommandArgs
-from .display import print_bump_summary
+from ._display import print_bump_summary
 from ..intents.bump import BumpIntent
 from ..intents.shared.versioning import compute_bumped_version
 from ..planner import compute_plan

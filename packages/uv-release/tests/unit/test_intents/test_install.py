@@ -7,20 +7,6 @@ from pathlib import Path
 import pytest
 
 from uv_release.intents.install import InstallIntent
-from uv_release.types import (
-    Config,
-    Publishing,
-    Workspace,
-)
-
-
-def _workspace() -> Workspace:
-    return Workspace(
-        packages={},
-        config=Config(uvr_version="0.1.0"),
-        runners={},
-        publishing=Publishing(),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -56,26 +42,22 @@ class TestInstallGuard:
     """guard validates that we have something to install."""
 
     def test_no_packages_no_dist_raises(self) -> None:
-        ws = _workspace()
         intent = InstallIntent()
         with pytest.raises(ValueError, match="Specify at least one package or --dist"):
-            intent.guard(ws)
+            intent.guard()
 
     def test_dist_not_a_directory_raises(self, tmp_path: Path) -> None:
-        ws = _workspace()
         nonexistent = str(tmp_path / "no-such-dir")
         intent = InstallIntent(dist=nonexistent)
         with pytest.raises(ValueError, match="Directory not found"):
-            intent.guard(ws)
+            intent.guard()
 
     def test_with_packages_passes(self) -> None:
-        ws = _workspace()
         intent = InstallIntent(packages=["my-pkg"])
-        intent.guard(ws)  # should not raise
+        intent.guard()  # should not raise
 
     def test_with_dist_dir_passes(self, tmp_path: Path) -> None:
-        ws = _workspace()
         dist_dir = tmp_path / "dist"
         dist_dir.mkdir()
         intent = InstallIntent(dist=str(dist_dir))
-        intent.guard(ws)  # should not raise
+        intent.guard()  # should not raise

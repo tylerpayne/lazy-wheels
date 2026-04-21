@@ -11,12 +11,12 @@ from typing import Literal
 from pydantic import Field
 
 from ._args import CommandArgs
-from .display import print_plan_summary
+from ._display import print_plan_summary
 from ..commands import DispatchWorkflowCommand
 from ..planner import compute_plan
 from ..intents.release import ReleaseIntent
 from ..execute import execute_job, execute_plan
-from ..types import Job, Plan
+from ..types import Job, Plan, PlanParams
 
 
 class ReleaseArgs(CommandArgs):
@@ -25,8 +25,8 @@ class ReleaseArgs(CommandArgs):
     where: Literal["ci", "local"] = "ci"
     dry_run: bool = False
     plan: str | None = None
-    rebuild_all: bool = False
-    rebuild: list[str] | None = None
+    all_packages: bool = False
+    packages: list[str] | None = None
     dev: bool = False
     yes: bool = False
     skip: list[str] | None = None
@@ -58,6 +58,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         _JOB_ORDER = [
             "validate",
             "build",
+            "download",
             "release",
             "publish",
             "bump",
@@ -71,17 +72,21 @@ def cmd_release(args: argparse.Namespace) -> None:
         idx = _JOB_ORDER.index(parsed.skip_to)
         skipped |= {j for j in _JOB_ORDER[:idx] if j != "validate"}
 
+    params = PlanParams(
+        all_packages=parsed.all_packages,
+        packages=frozenset(parsed.packages or []),
+    )
     intent = ReleaseIntent(
-        rebuild_all=parsed.rebuild_all,
-        rebuild=frozenset(parsed.rebuild or []),
         dev_release=parsed.dev,
         skip=frozenset(skipped),
         release_notes=user_notes or {},
         target=parsed.where,
+        reuse_run=parsed.reuse_run or "",
+        reuse_release=parsed.reuse_release,
     )
 
     try:
-        plan = compute_plan(intent)
+        plan = compute_plan(intent, params=params)
     except ValueError as exc:
         if not dry_run:
             print(f"ERROR: {exc}", file=sys.stderr)
@@ -94,7 +99,7 @@ def cmd_release(args: argparse.Namespace) -> None:
             print(plan.model_dump_json(indent=2))
         else:
             print(
-                "Nothing changed since last release. Use --rebuild-all to rebuild all."
+                "Nothing changed since last release. Use --all-packages to include all."
             )
         return
 

@@ -27,9 +27,9 @@ class TestCmdClean:
         assert "Cleaned" in out
         assert not cache.exists()
 
-    def test_nothing_to_clean(
+    def test_no_cache_succeeds(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cmd_clean(_ns())
         out = capsys.readouterr().out
-        assert "Nothing to clean" in out
+        assert "Cleaned" in out

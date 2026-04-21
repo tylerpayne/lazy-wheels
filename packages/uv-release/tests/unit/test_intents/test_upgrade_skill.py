@@ -7,20 +7,26 @@ from pathlib import Path
 import pytest
 
 from uv_release.intents.upgrade_skill import UpgradeSkillIntent
+from uv_release.states.skill import SkillState
+from uv_release.states.uvr_state import UvrState
+from uv_release.states.workspace import Workspace
 from uv_release.types import (
     Config,
     Plan,
     Publishing,
-    Workspace,
 )
 
 
 def _workspace() -> Workspace:
-    return Workspace(
-        packages={},
+    return Workspace(root=Path("."), packages={})
+
+
+def _uvr_state() -> UvrState:
+    return UvrState(
         config=Config(uvr_version="0.1.0"),
         runners={},
         publishing=Publishing(),
+        uvr_version="0.1.0",
     )
 
 
@@ -50,15 +56,6 @@ class TestUpgradeSkillConstruction:
 
 
 class TestUpgradeSkillGuard:
-    def test_no_git_repo_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        ws = _workspace()
-        intent = UpgradeSkillIntent()
-        with pytest.raises(ValueError, match="Not a git repository"):
-            intent.guard(ws)
-
     def test_valid_repo_passes(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -66,7 +63,7 @@ class TestUpgradeSkillGuard:
         (tmp_path / ".git").mkdir()
         ws = _workspace()
         intent = UpgradeSkillIntent()
-        intent.guard(ws)  # should not raise
+        intent.guard(workspace=ws)  # should not raise
 
 
 # ---------------------------------------------------------------------------
@@ -80,9 +77,10 @@ class TestUpgradeSkillPlanInit:
     ) -> None:
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
-        ws = _workspace()
+        uvr = _uvr_state()
+        skill = SkillState.parse()
         intent = UpgradeSkillIntent(force=True)
-        result = intent.plan(ws)
+        result = intent.plan(workspace=_workspace(), uvr_state=uvr, skill_state=skill)
         assert isinstance(result, Plan)
         assert len(result.jobs) == 1
         assert result.jobs[0].name == "upgrade_skill"
@@ -92,9 +90,10 @@ class TestUpgradeSkillPlanInit:
     ) -> None:
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
-        ws = _workspace()
+        uvr = _uvr_state()
+        skill = SkillState.parse()
         intent = UpgradeSkillIntent(force=True)
-        result = intent.plan(ws)
+        result = intent.plan(workspace=_workspace(), uvr_state=uvr, skill_state=skill)
         assert len(result.jobs[0].commands) > 0
 
     def test_writes_skill_files(
@@ -103,9 +102,10 @@ class TestUpgradeSkillPlanInit:
         """Init mode writes all skill files to .claude/skills/."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
-        ws = _workspace()
+        uvr = _uvr_state()
+        skill = SkillState.parse()
         intent = UpgradeSkillIntent(force=True)
-        plan = intent.plan(ws)
+        plan = intent.plan(workspace=_workspace(), uvr_state=uvr, skill_state=skill)
 
         # Execute the commands
         for cmd in plan.jobs[0].commands:

@@ -11,7 +11,6 @@ import tomlkit
 
 from .._args import CommandArgs
 from ...planner import compute_plan
-from ...states.templates import load_workflow_template
 from ...intents.validate_workflow import ValidateWorkflowIntent
 
 
@@ -57,7 +56,6 @@ def cmd_validate(args: argparse.Namespace) -> None:
     if has_diff:
         print("  Run `uvr workflow validate --diff` to view differences.")
 
-    # Show stored version
     root = Path.cwd()
     pyproject = root / "pyproject.toml"
     if pyproject.exists():
@@ -72,15 +70,17 @@ def cmd_validate(args: argparse.Namespace) -> None:
             print(f"  Workflow version: {stored_version}")
 
     if parsed.diff and has_diff:
-        dest = root / parsed.workflow_dir / "release.yml"
-        existing_text = dest.read_text()
-        fresh_text = load_workflow_template()
-        print()
-        diff_lines = difflib.unified_diff(
-            existing_text.splitlines(keepends=True),
-            fresh_text.splitlines(keepends=True),
-            fromfile=str(dest.relative_to(root)),
-            tofile="template",
-        )
-        for line in diff_lines:
-            print(line, end="")
+        workflow_state = plan.metadata.workflow_state
+        if workflow_state:
+            existing_text = workflow_state.file_content
+            fresh_text = workflow_state.template
+            rel_path = f"{parsed.workflow_dir}/release.yml"
+            print()
+            diff_lines = difflib.unified_diff(
+                existing_text.splitlines(keepends=True),
+                fresh_text.splitlines(keepends=True),
+                fromfile=rel_path,
+                tofile="template",
+            )
+            for line in diff_lines:
+                print(line, end="")

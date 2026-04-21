@@ -47,9 +47,9 @@ def cmd_config(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     if not plan.jobs:
-        workspace = plan.metadata.workspace
-        assert workspace is not None
-        _print_config(workspace)
+        uvr_state = plan.metadata.uvr_state
+        assert uvr_state is not None
+        _print_config(uvr_state)
         return
 
     execute_plan(plan, hooks=None)
@@ -60,12 +60,12 @@ def cmd_config(args: argparse.Namespace) -> None:
         print("Updated workspace config.")
 
 
-def _print_config(workspace: object) -> None:
+def _print_config(uvr_state: object) -> None:
     """Print the current workspace config."""
-    from ...types import Workspace
+    from ...states.uvr_state import UvrState
 
-    assert isinstance(workspace, Workspace)
-    config = workspace.config
+    assert isinstance(uvr_state, UvrState)
+    config = uvr_state.config
 
     include = sorted(config.include)
     exclude = sorted(config.exclude)

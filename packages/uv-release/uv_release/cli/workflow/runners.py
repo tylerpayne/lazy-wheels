@@ -40,14 +40,16 @@ def cmd_runners(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     if not plan.jobs:
+        uvr_state = plan.metadata.uvr_state
         workspace = plan.metadata.workspace
+        assert uvr_state is not None
         assert workspace is not None
         if parsed.package:
-            runners = workspace.runners.get(parsed.package, _DEFAULT_RUNNERS)
+            runners = uvr_state.runners.get(parsed.package, _DEFAULT_RUNNERS)
             for r in runners:
                 print(f"  [{', '.join(r)}]")
         else:
-            _print_all_runners(workspace)
+            _print_all_runners(workspace, uvr_state)
         return
 
     execute_plan(plan, hooks=None)
@@ -66,16 +68,18 @@ def cmd_runners(args: argparse.Namespace) -> None:
         print(f"Removed {removed} from '{parsed.package}' runners.")
 
 
-def _print_all_runners(workspace: object) -> None:
+def _print_all_runners(workspace: object, uvr_state: object) -> None:
     """Print effective runners for all packages."""
-    from ...types import Workspace
+    from ...states.uvr_state import UvrState
+    from ...states.workspace import Workspace
 
     assert isinstance(workspace, Workspace)
+    assert isinstance(uvr_state, UvrState)
     if not workspace.packages:
         print("No packages found.")
         return
     nw = max(len(n) for n in workspace.packages)
     for name in sorted(workspace.packages):
-        runners = workspace.runners.get(name, _DEFAULT_RUNNERS)
+        runners = uvr_state.runners.get(name, _DEFAULT_RUNNERS)
         labels = ", ".join(f"[{', '.join(r)}]" for r in runners)
         print(f"  {name.ljust(nw)}  {labels}")

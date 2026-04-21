@@ -29,17 +29,19 @@ def build_parser() -> argparse.ArgumentParser:
         "status", help="Show workspace package status"
     )
     status_parser.add_argument(
-        "--rebuild-all", action="store_true", help="Show all packages as changed"
+        "--all-packages",
+        action="store_true",
+        help="Show all packages as changed",
     )
     status_parser.add_argument(
-        "--rebuild", nargs="+", metavar="PKG", help="Force specific packages changed"
+        "--packages", nargs="+", metavar="PKG", help="Show specific packages"
     )
     status_parser.set_defaults(func=cmd_status)
 
     # -- build ---------------------------------------------------------
     build_parser = subparsers.add_parser("build", help="Build changed packages locally")
     build_parser.add_argument(
-        "--rebuild-all", action="store_true", help="Build all packages"
+        "--all-packages", action="store_true", help="Build all packages"
     )
     build_parser.add_argument(
         "--packages", nargs="+", metavar="PKG", help="Only build specific packages"
@@ -64,10 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Execute a pre-computed release plan",
     )
     release_parser.add_argument(
-        "--rebuild-all", action="store_true", help="Rebuild all packages"
+        "--all-packages", action="store_true", help="Release all packages"
     )
     release_parser.add_argument(
-        "--rebuild", nargs="+", metavar="PKG", help="Force rebuild specific packages"
+        "--packages", nargs="+", metavar="PKG", help="Release specific packages"
     )
     release_parser.add_argument(
         "--dev",

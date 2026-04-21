@@ -44,9 +44,9 @@ def cmd_publish_config(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     if not plan.jobs:
-        workspace = plan.metadata.workspace
-        assert workspace is not None
-        _print_publish(workspace)
+        uvr_state = plan.metadata.uvr_state
+        assert uvr_state is not None
+        _print_publish(uvr_state)
         return
 
     execute_plan(plan, hooks=None)
@@ -57,12 +57,12 @@ def cmd_publish_config(args: argparse.Namespace) -> None:
         print("Updated publish config.")
 
 
-def _print_publish(workspace: object) -> None:
+def _print_publish(uvr_state: object) -> None:
     """Print the current publish config."""
-    from ...types import Workspace
+    from ...states.uvr_state import UvrState
 
-    assert isinstance(workspace, Workspace)
-    pub = workspace.publishing
+    assert isinstance(uvr_state, UvrState)
+    pub = uvr_state.publishing
     if not any([pub.index, pub.environment, pub.include, pub.exclude]):
         print("No publish config set. All packages publish to the default index.")
         return

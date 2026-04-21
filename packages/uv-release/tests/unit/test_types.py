@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from uv_release.states.workspace import Workspace
+from uv_release.states.worktree import Worktree
 from uv_release.types import (
     BumpType,
     Change,
     Config,
-    GitState,
     Job,
     MergeResult,
     Package,
@@ -20,7 +22,6 @@ from uv_release.types import (
     Tag,
     Version,
     VersionState,
-    Workspace,
 )
 
 
@@ -153,12 +154,7 @@ def _make_publishing() -> Publishing:
 
 
 def _make_workspace() -> Workspace:
-    return Workspace(
-        packages={"pkg": _make_package()},
-        config=_make_config(),
-        runners={},
-        publishing=_make_publishing(),
-    )
+    return Workspace(root=Path("."), packages={"pkg": _make_package()})
 
 
 def _make_change() -> Change:
@@ -302,24 +298,24 @@ def test_job_construction() -> None:
 # ---------------------------------------------------------------------------
 
 
-class TestGitState:
+class TestWorktree:
     def test_defaults(self) -> None:
-        gs = GitState()
+        gs = Worktree()
         assert gs.is_dirty is False
         assert gs.is_ahead_or_behind is False
 
     def test_dirty(self) -> None:
-        gs = GitState(is_dirty=True)
+        gs = Worktree(is_dirty=True)
         assert gs.is_dirty is True
         assert gs.is_ahead_or_behind is False
 
     def test_ahead_or_behind(self) -> None:
-        gs = GitState(is_ahead_or_behind=True)
+        gs = Worktree(is_ahead_or_behind=True)
         assert gs.is_dirty is False
         assert gs.is_ahead_or_behind is True
 
     def test_frozen(self) -> None:
-        gs = GitState()
+        gs = Worktree()
         with pytest.raises((AttributeError, Exception)):
             setattr(gs, "is_dirty", True)
 

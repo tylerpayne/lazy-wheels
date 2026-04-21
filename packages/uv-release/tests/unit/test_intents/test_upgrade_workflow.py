@@ -7,20 +7,43 @@ from pathlib import Path
 import pytest
 
 from uv_release.intents.upgrade_workflow import UpgradeWorkflowIntent
+from uv_release.states.uvr_state import UvrState
+from uv_release.states.workflow import WorkflowState
+from uv_release.states.workspace import Workspace
 from uv_release.types import (
     Config,
     Plan,
     Publishing,
-    Workspace,
 )
 
 
 def _workspace() -> Workspace:
-    return Workspace(
-        packages={},
+    return Workspace(root=Path("."), packages={})
+
+
+def _uvr_state() -> UvrState:
+    return UvrState(
         config=Config(uvr_version="0.1.0"),
         runners={},
         publishing=Publishing(),
+        uvr_version="0.1.0",
+    )
+
+
+def _workflow_state(
+    *,
+    file_exists: bool = False,
+    has_uncommitted: bool = False,
+    template: str = "name: release\n",
+    file_content: str = "",
+    merge_base: str = "",
+) -> WorkflowState:
+    return WorkflowState(
+        template=template,
+        file_content=file_content,
+        merge_base=merge_base,
+        has_uncommitted=has_uncommitted,
+        file_exists=file_exists,
     )
 
 
@@ -51,25 +74,6 @@ class TestUpgradeWorkflowConstruction:
 
 
 class TestUpgradeWorkflowGuard:
-    def test_no_git_repo_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        ws = _workspace()
-        intent = UpgradeWorkflowIntent(force=True)
-        with pytest.raises(ValueError, match="Not a git repository"):
-            intent.guard(ws)
-
-    def test_no_pyproject_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / ".git").mkdir()
-        ws = _workspace()
-        intent = UpgradeWorkflowIntent(force=True)
-        with pytest.raises(ValueError, match="pyproject.toml"):
-            intent.guard(ws)
-
     def test_valid_repo_passes(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -79,8 +83,9 @@ class TestUpgradeWorkflowGuard:
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
         )
         ws = _workspace()
+        wfs = _workflow_state()
         intent = UpgradeWorkflowIntent(force=True)
-        intent.guard(ws)  # should not raise
+        intent.guard(workspace=ws, workflow_state=wfs)  # should not raise
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +102,10 @@ class TestUpgradeWorkflowPlanInit:
         (tmp_path / "pyproject.toml").write_text(
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
         )
-        ws = _workspace()
+        uvr = _uvr_state()
+        wfs = _workflow_state()
         intent = UpgradeWorkflowIntent(force=True)
-        result = intent.plan(ws)
+        result = intent.plan(workspace=_workspace(), uvr_state=uvr, workflow_state=wfs)
         assert isinstance(result, Plan)
         assert len(result.jobs) == 1
         assert result.jobs[0].name == "upgrade_workflow"
@@ -112,9 +118,10 @@ class TestUpgradeWorkflowPlanInit:
         (tmp_path / "pyproject.toml").write_text(
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
         )
-        ws = _workspace()
+        uvr = _uvr_state()
+        wfs = _workflow_state()
         intent = UpgradeWorkflowIntent(force=True)
-        result = intent.plan(ws)
+        result = intent.plan(workspace=_workspace(), uvr_state=uvr, workflow_state=wfs)
         assert len(result.jobs[0].commands) > 0
 
 
@@ -136,6 +143,7 @@ class TestUpgradeWorkflowPlanUpgrade:
         dest.mkdir(parents=True)
         (dest / "release.yml").write_text("existing content")
         ws = _workspace()
+        wfs = _workflow_state(file_exists=True)
         intent = UpgradeWorkflowIntent(force=False)
         with pytest.raises(ValueError, match="already exists"):
-            intent.guard(ws)
+            intent.guard(workspace=ws, workflow_state=wfs)

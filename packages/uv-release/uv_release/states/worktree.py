@@ -2,26 +2,37 @@
 
 from __future__ import annotations
 
-import subprocess
-from pathlib import Path
 
 from ..git import GitRepo
-from ..types import GitState
+from .base import State
 
 
-def parse_git_state() -> GitState:
-    """Read repository state for validation."""
-    repo = GitRepo()
-    return GitState(
-        is_dirty=repo.is_dirty(),
-        is_ahead_or_behind=repo.is_ahead_or_behind(),
-    )
+class Worktree(State):
+    """Snapshot of the git worktree: cleanliness and remote identity."""
+
+    is_dirty: bool = False
+    is_ahead_or_behind: bool = False
+    repo: str = ""
+
+    @classmethod
+    def parse(cls, *, git_repo: GitRepo) -> Worktree:
+        """Read worktree state from git."""
+        return Worktree(
+            is_dirty=git_repo.is_dirty(),
+            is_ahead_or_behind=git_repo.is_ahead_or_behind(),
+            repo=_parse_gh_repo(git_repo.remote_url()) or "",
+        )
 
 
-def has_uncommitted_changes(path: Path) -> bool:
-    """Check whether a file has uncommitted changes via git diff."""
-    result = subprocess.run(
-        ["git", "diff", "--quiet", "--", str(path)],
-        capture_output=True,
-    )
-    return result.returncode != 0
+def _parse_gh_repo(url: str | None) -> str | None:
+    """Extract owner/repo from a GitHub remote URL."""
+    if url is None:
+        return None
+    if url.startswith("git@"):
+        path = url.split(":", 1)[1]
+        return path.removesuffix(".git")
+    if "github.com" in url:
+        parts = url.rstrip("/").removesuffix(".git").split("github.com/", 1)
+        if len(parts) == 2:
+            return parts[1]
+    return None

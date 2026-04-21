@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC
 from enum import Enum
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol
 
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator
@@ -396,17 +396,17 @@ class Hooks(ABC):
 
 
 # ---------------------------------------------------------------------------
-# GIT STATE
+# PLAN PARAMS
 # ---------------------------------------------------------------------------
 
 
-class GitState(BaseModel):
-    """Snapshot of repository state for validation."""
+class PlanParams(BaseModel):
+    """CLI flags passed through the pipeline. Not a State."""
 
     model_config = ConfigDict(frozen=True)
 
-    is_dirty: bool = False
-    is_ahead_or_behind: bool = False
+    all_packages: bool = False
+    packages: frozenset[str] = frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -615,17 +615,6 @@ class WorkspacePyProjectDoc:
 # ---------------------------------------------------------------------------
 
 
-class Workspace(BaseModel):
-    """The workspace as parsed from disk. Frozen."""
-
-    model_config = ConfigDict(frozen=True)
-
-    packages: dict[str, Package]
-    config: Config
-    runners: dict[str, list[list[str]]]
-    publishing: Publishing
-
-
 # ---------------------------------------------------------------------------
 # CHANGE
 # ---------------------------------------------------------------------------
@@ -734,7 +723,9 @@ class PlanMetadata(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    workspace: Workspace | None = None
+    workspace: Any | None = None
+    uvr_state: Any | None = None
+    workflow_state: Any | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -752,6 +743,8 @@ class Plan(BaseModel):
     python_version: str = "3.12"
     publish_environment: str = ""
     skip: list[str] = Field(default_factory=list)
+    reuse_run: str = ""
+    reuse_release: bool = False
 
     # Execution
     jobs: list[SerializeAsAny[Job]] = Field(default_factory=list)
@@ -785,9 +778,13 @@ class MergeResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@runtime_checkable
 class Intent(Protocol):
-    """Protocol for all intent types. Every intent must implement guard() and plan()."""
+    """Protocol for all intent types.
 
-    def guard(self, workspace: Workspace) -> None: ...
-    def plan(self, workspace: Workspace) -> Plan: ...
+    Intents declare state dependencies as keyword-only parameters
+    on guard() and plan(). The planner inspects type hints, resolves
+    only what each intent declares, and passes them as kwargs.
+    """
+
+    def guard(self, **state: object) -> None: ...
+    def plan(self, **state: object) -> Plan: ...

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uv_release.cli.display import format_table
+from uv_release.cli._display import format_table
 
 
 class TestFormatTable:
