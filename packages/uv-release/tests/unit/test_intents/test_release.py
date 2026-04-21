@@ -164,18 +164,18 @@ class TestReleasePlanJobStructure:
         result = self._plan_with_changes(ws, ReleaseIntent(), _changes_for(pkgs))
         assert isinstance(result, Plan)
 
-    def test_has_six_jobs(self) -> None:
+    def test_has_five_jobs(self) -> None:
         pkgs = {"a": _package("a")}
         ws = _workspace(pkgs)
         result = self._plan_with_changes(ws, ReleaseIntent(), _changes_for(pkgs))
-        assert len(result.jobs) == 6
+        assert len(result.jobs) == 5
 
     def test_job_names_in_order(self) -> None:
         pkgs = {"a": _package("a")}
         ws = _workspace(pkgs)
         result = self._plan_with_changes(ws, ReleaseIntent(), _changes_for(pkgs))
         names = [j.name for j in result.jobs]
-        assert names == ["validate", "build", "download", "release", "publish", "bump"]
+        assert names == ["validate", "build", "release", "publish", "bump"]
 
     def test_no_changes_empty_plan(self) -> None:
         ws = _workspace({"a": _package("a")})
@@ -387,15 +387,14 @@ class TestReleasePlanReuse:
         build_job = next(j for j in result.jobs if j.name == "build")
         assert build_job.commands == []
 
-    def test_reuse_run_download_has_run_id(self) -> None:
+    def test_reuse_run_release_job_has_download(self) -> None:
         pkgs = {"a": _package("a")}
         ws = _workspace(pkgs)
         result = self._plan_with_changes(
             ws, ReleaseIntent(reuse_run="12345"), _changes_for(pkgs)
         )
-        download_job = next(j for j in result.jobs if j.name == "download")
-        assert len(download_job.commands) > 0
-        labels = " ".join(c.label for c in download_job.commands)
+        release_job = next(j for j in result.jobs if j.name == "release")
+        labels = " ".join(c.label for c in release_job.commands)
         assert "12345" in labels
 
     def test_reuse_release_skips_release(self) -> None:

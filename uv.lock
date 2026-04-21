@@ -800,7 +800,7 @@ wheels = [
 
 [[package]]
 name = "uv-release"
-version = "0.29.0a1"
+version = "0.29.0a2.dev0"
 source = { editable = "packages/uv-release" }
 dependencies = [
     { name = "packaging" },

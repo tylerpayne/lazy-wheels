@@ -30,7 +30,7 @@ from ..types import (
     Release,
     Tag,
 )
-from .shared.jobs import compute_build_job, compute_download_job
+from .shared.jobs import compute_build_job, compute_download_commands
 from .shared.versioning import (
     compute_next_version,
     compute_release_version,
@@ -91,6 +91,8 @@ class ReleaseIntent(BaseModel):
             )
         )
 
+        download = compute_download_commands(reuse_run=self.reuse_run)
+
         # Build job
         if "build" not in skip:
             jobs.append(
@@ -99,21 +101,15 @@ class ReleaseIntent(BaseModel):
         else:
             jobs.append(Job(name="build"))
 
-        # Download job (fetches build artifacts for release/publish)
-        if "download" not in skip:
-            jobs.append(compute_download_job(reuse_run=self.reuse_run))
-        else:
-            jobs.append(Job(name="download"))
-
-        # Release job (tags + GitHub releases)
+        # Release job (download artifacts + tags + GitHub releases)
         if "release" not in skip:
-            jobs.append(_compute_release_job(releases))
+            jobs.append(_compute_release_job(releases, download))
         else:
             jobs.append(Job(name="release"))
 
-        # Publish job
+        # Publish job (download artifacts + publish to index)
         if "publish" not in skip:
-            jobs.append(_compute_publish_job(releases, uvr_state.publishing))
+            jobs.append(_compute_publish_job(releases, uvr_state.publishing, download))
         else:
             jobs.append(Job(name="publish"))
 
@@ -264,12 +260,12 @@ def _build_version_fix_commands(
     return commands
 
 
-def _compute_release_job(releases: dict[str, Release]) -> Job:
-    """Generate git tag + GitHub release commands."""
+def _compute_release_job(releases: dict[str, Release], download: list[Command]) -> Job:
+    """Generate download + git tag + GitHub release commands."""
     if not releases:
         return Job(name="release")
 
-    commands: list[Command] = []
+    commands: list[Command] = list(download)
     for name, release in releases.items():
         tag_name = Tag.release_tag_name(name, release.release_version)
         commands.append(CreateTagCommand(label=f"Tag {tag_name}", tag_name=tag_name))
@@ -290,8 +286,10 @@ def _compute_release_job(releases: dict[str, Release]) -> Job:
     return Job(name="release", commands=commands)
 
 
-def _compute_publish_job(releases: dict[str, Release], publishing: Publishing) -> Job:
-    """Generate publish job filtered by publishing config."""
+def _compute_publish_job(
+    releases: dict[str, Release], publishing: Publishing, download: list[Command]
+) -> Job:
+    """Generate download + publish commands filtered by publishing config."""
     if not releases or not publishing.index:
         return Job(name="publish")
 
@@ -303,7 +301,7 @@ def _compute_publish_job(releases: dict[str, Release], publishing: Publishing) -
     if not publishable:
         return Job(name="publish")
 
-    commands: list[Command] = []
+    commands: list[Command] = list(download)
     for name in sorted(publishable):
         release = releases[name]
         commands.append(

@@ -58,7 +58,6 @@ def cmd_release(args: argparse.Namespace) -> None:
         _JOB_ORDER = [
             "validate",
             "build",
-            "download",
             "release",
             "publish",
             "bump",
@@ -70,7 +69,7 @@ def cmd_release(args: argparse.Namespace) -> None:
             )
             sys.exit(1)
         idx = _JOB_ORDER.index(parsed.skip_to)
-        skipped |= {j for j in _JOB_ORDER[:idx] if j not in ("validate", "download")}
+        skipped |= {j for j in _JOB_ORDER[:idx] if j != "validate"}
 
     params = PlanParams(
         all_packages=parsed.all_packages,

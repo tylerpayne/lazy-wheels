@@ -74,8 +74,8 @@ def compute_build_job(
     return Job(name="build", commands=commands)
 
 
-def compute_download_job(*, reuse_run: str = "") -> Job:
-    """Download built wheels from current or prior CI run."""
+def compute_download_commands(*, reuse_run: str = "") -> list[Command]:
+    """Commands to download built wheels from current or prior CI run."""
     commands: list[Command] = [
         MakeDirectoryCommand(label="Create dist directory", path="dist"),
     ]
@@ -106,4 +106,4 @@ def compute_download_job(*, reuse_run: str = "") -> Job:
         )
     )
 
-    return Job(name="download", commands=commands)
+    return commands
