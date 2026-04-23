@@ -34,16 +34,21 @@ class ShellCommand(Command):
 
 
 class CreateTagCommand(Command):
-    """Create a git tag in-process."""
+    """Create a git tag via subprocess.
+
+    Uses ``git tag`` so the tag is visible to ``git push --follow-tags``.
+    """
 
     type: Literal["create_tag"] = "create_tag"
     tag_name: str
 
     def execute(self) -> int:
-        from .git import GitRepo
+        import subprocess
 
-        repo = GitRepo()
-        repo.create_tag(self.tag_name)
+        subprocess.run(
+            ["git", "tag", self.tag_name],
+            check=True,
+        )
         return 0
 
 
