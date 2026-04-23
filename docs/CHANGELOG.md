@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Fix `ModuleNotFoundError: No module named 'yaml'` on every `uvr` invocation by declaring `pyyaml` as a runtime dependency (#20)
+
 ## [v0.22.0] - 2026-04-02
 
 ### Added
