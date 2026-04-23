@@ -29,6 +29,8 @@ from ..types import (
     Publishing,
     Release,
     Tag,
+    UserRecoverableError,
+    Version,
 )
 from .shared.jobs import compute_build_job, compute_download_commands
 from .shared.versioning import (
@@ -50,14 +52,22 @@ class ReleaseIntent(BaseModel):
     reuse_run: str = ""
     reuse_release: bool = False
 
-    def guard(self, *, worktree: Worktree) -> None:
+    def guard(self, *, worktree: Worktree, changes: Changes) -> None:
         """Check preconditions. Raises ValueError on failure."""
         if worktree.is_dirty:
             msg = "Working tree is not clean. Commit or stash changes first."
             raise ValueError(msg)
-        if worktree.is_ahead_or_behind:
+        if self.target == "ci" and worktree.is_ahead_or_behind:
             msg = "Local HEAD differs from remote. Pull or push first."
             raise ValueError(msg)
+
+        if not self.dev_release:
+            fix = _build_version_fix_group(changes, push=self.target == "ci")
+            if fix is not None:
+                raise UserRecoverableError(
+                    "Some packages have dev versions that need to be set to stable.",
+                    fix=fix,
+                )
 
     def plan(
         self,
@@ -84,12 +94,8 @@ class ReleaseIntent(BaseModel):
         if self.reuse_release:
             skip.add("release")
 
-        # Version-fix job
-        jobs.append(
-            _compute_version_fix_job(
-                releases, dev_release=self.dev_release, target=self.target
-            )
-        )
+        # Validate job (version-fix is handled by guard, not the plan)
+        jobs.append(Job(name="validate"))
 
         download = compute_download_commands(reuse_run=self.reuse_run)
 
@@ -173,80 +179,59 @@ class ReleaseIntent(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _compute_version_fix_job(
-    releases: dict[str, Release],
-    *,
-    dev_release: bool,
-    target: str,
-) -> Job:
-    """Version-fix commands for dev packages."""
-    if dev_release:
-        return Job(name="validate")
-
-    commands = _build_version_fix_commands(releases, push=target == "ci")
-
-    if target == "local" and commands:
-        commands = [
-            CommandGroup(
-                label="Set release versions and commit",
-                needs_user_confirmation=True,
-                commands=commands,
-            )
-        ]
-
-    return Job(name="validate", commands=commands)
-
-
-def _build_version_fix_commands(
-    releases: dict[str, Release],
+def _build_version_fix_group(
+    changes: Changes,
     *,
     push: bool = False,
-) -> list[Command]:
-    """Build SetVersion + PinDeps + git commit commands for dev packages."""
-    needs_fix = {
-        name: release
-        for name, release in releases.items()
-        if release.package.version != release.release_version
-    }
+) -> CommandGroup | None:
+    """Build a CommandGroup to fix dev versions for release.
+
+    Returns None if no packages need fixing.
+    """
+    needs_fix: dict[str, tuple[Package, Version]] = {}
+    for change in changes.items:
+        release_version = compute_release_version(change.package.version)
+        if change.package.version != release_version:
+            needs_fix[change.package.name] = (change.package, release_version)
+
     if not needs_fix:
-        return []
+        return None
 
     commands: list[Command] = []
     pinned_packages: dict[str, Package] = {}
-    for name, release in sorted(needs_fix.items()):
+    for name, (pkg, version) in sorted(needs_fix.items()):
         commands.append(
             SetVersionCommand(
-                label=f"Set {name} to {release.release_version.raw}",
-                package=release.package,
-                version=release.release_version,
+                label=f"Set {name} to {version.raw}",
+                package=pkg,
+                version=version,
             )
         )
         pinned_packages[name] = Package(
-            name=release.package.name,
-            path=release.package.path,
-            version=release.release_version,
-            dependencies=release.package.dependencies,
+            name=pkg.name,
+            path=pkg.path,
+            version=version,
+            dependencies=pkg.dependencies,
         )
 
     if pinned_packages:
-        for name, release in sorted(releases.items()):
+        for change in changes.items:
             pkg_pins = {
                 dep: pinned_packages[dep]
-                for dep in release.package.dependencies
+                for dep in change.package.dependencies
                 if dep in pinned_packages
             }
             if pkg_pins:
                 commands.append(
                     PinDepsCommand(
-                        label=f"Pin deps for {name}",
-                        package=release.package,
+                        label=f"Pin deps for {change.package.name}",
+                        package=change.package,
                         pins=pkg_pins,
                     )
                 )
 
     body = "\n".join(
-        f"{name} {release.release_version.raw}"
-        for name, release in sorted(needs_fix.items())
+        f"{name} {version.raw}" for name, (_pkg, version) in sorted(needs_fix.items())
     )
     commands.append(
         ShellCommand(
@@ -258,7 +243,11 @@ def _build_version_fix_commands(
     if push:
         commands.append(ShellCommand(label="Push", args=["git", "push"]))
 
-    return commands
+    return CommandGroup(
+        label="Set release versions and commit",
+        needs_user_confirmation=True,
+        commands=commands,
+    )
 
 
 def _compute_release_job(releases: dict[str, Release], download: list[Command]) -> Job:

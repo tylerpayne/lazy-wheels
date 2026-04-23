@@ -16,7 +16,7 @@ from ..commands import DispatchWorkflowCommand
 from ..planner import compute_plan
 from ..intents.release import ReleaseIntent
 from ..execute import execute_job, execute_plan
-from ..types import Job, Plan, PlanParams
+from ..types import Job, Plan, PlanParams, UserRecoverableError
 
 
 class ReleaseArgs(CommandArgs):
@@ -85,6 +85,12 @@ def cmd_release(args: argparse.Namespace) -> None:
     )
 
     try:
+        plan = compute_plan(intent, params=params)
+    except UserRecoverableError as exc:
+        if dry_run:
+            raise
+        fix_job = Job(name="version-fix", commands=[exc.fix])
+        execute_job(fix_job, hooks=None)
         plan = compute_plan(intent, params=params)
     except ValueError as exc:
         if not dry_run:

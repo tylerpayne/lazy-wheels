@@ -19,6 +19,7 @@ from uv_release.types import (
     Plan,
     Publishing,
     Tag,
+    UserRecoverableError,
     Version,
 )
 
@@ -119,21 +120,67 @@ class TestReleaseGuard:
     """guard raises ValueError for dirty worktree or out-of-sync HEAD."""
 
     def test_dirty_worktree_raises(self) -> None:
-        _workspace({"a": _package("a")})
+        pkgs = {"a": _package("a")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
         intent = ReleaseIntent()
         with pytest.raises(ValueError, match="not clean"):
-            intent.guard(worktree=_dirty_git())
+            intent.guard(worktree=_dirty_git(), changes=changes)
 
-    def test_ahead_of_remote_raises(self) -> None:
-        _workspace({"a": _package("a")})
-        intent = ReleaseIntent()
+    def test_ahead_of_remote_raises_for_ci(self) -> None:
+        pkgs = {"a": _package("a")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
+        intent = ReleaseIntent(target="ci")
         with pytest.raises(ValueError, match="differs from remote"):
-            intent.guard(worktree=_ahead_git())
+            intent.guard(worktree=_ahead_git(), changes=changes)
+
+    def test_ahead_of_remote_allowed_for_local(self) -> None:
+        pkgs = {"a": _package("a", version="1.0.0")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
+        intent = ReleaseIntent(target="local")
+        intent.guard(worktree=_ahead_git(), changes=changes)  # should not raise
 
     def test_clean_worktree_passes(self) -> None:
-        _workspace({"a": _package("a")})
+        pkgs = {"a": _package("a", version="1.0.0")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
         intent = ReleaseIntent()
-        intent.guard(worktree=_clean_git())  # should not raise
+        intent.guard(worktree=_clean_git(), changes=changes)  # should not raise
+
+    def test_dev_versions_raise_recoverable(self) -> None:
+        """Non-dev release with dev versions raises UserRecoverableError."""
+        pkgs = {"a": _package("a", version="1.0.0.dev0")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
+        intent = ReleaseIntent()
+        with pytest.raises(UserRecoverableError) as exc_info:
+            intent.guard(worktree=_clean_git(), changes=changes)
+        assert isinstance(exc_info.value.fix, CommandGroup)
+        assert exc_info.value.fix.needs_user_confirmation is True
+
+    def test_dev_versions_fix_includes_push_for_ci(self) -> None:
+        """CI target: fix commands include a push."""
+        pkgs = {"a": _package("a", version="1.0.0.dev0")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
+        intent = ReleaseIntent(target="ci")
+        with pytest.raises(UserRecoverableError) as exc_info:
+            intent.guard(worktree=_clean_git(), changes=changes)
+        labels = [c.label for c in exc_info.value.fix.commands]
+        assert "Push" in labels
+
+    def test_dev_versions_fix_no_push_for_local(self) -> None:
+        """Local target: fix commands do not include a push."""
+        pkgs = {"a": _package("a", version="1.0.0.dev0")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
+        intent = ReleaseIntent(target="local")
+        with pytest.raises(UserRecoverableError) as exc_info:
+            intent.guard(worktree=_clean_git(), changes=changes)
+        labels = [c.label for c in exc_info.value.fix.commands]
+        assert "Push" not in labels
+
+    def test_dev_release_no_version_fix(self) -> None:
+        """dev_release=True: dev versions are fine, no fix needed."""
+        pkgs = {"a": _package("a", version="1.0.0.dev0")}
+        changes = Changes(items=tuple(_changes_for(pkgs)))
+        intent = ReleaseIntent(dev_release=True)
+        intent.guard(worktree=_clean_git(), changes=changes)  # should not raise
 
 
 # ---------------------------------------------------------------------------
@@ -205,34 +252,12 @@ class TestReleasePlanVersions:
             release_tags=ReleaseTags(),
         )
 
-    def test_validate_job_has_version_fix_local(self) -> None:
-        """Dev package with target=local: validate job has a CommandGroup."""
-        pkgs = {"a": _package("a", version="1.0.0.dev0")}
+    def test_validate_job_always_empty(self) -> None:
+        """Version fix is handled by guard, validate job is always empty."""
+        pkgs = {"a": _package("a", version="1.0.0")}
         ws = _workspace(pkgs)
         result = self._plan_with_changes(
             ws, ReleaseIntent(target="local"), _changes_for(pkgs)
-        )
-        validate_cmds = result.jobs[0].commands
-        assert len(validate_cmds) == 1
-        assert isinstance(validate_cmds[0], CommandGroup)
-
-    def test_validate_job_ci_no_group(self) -> None:
-        """CI target: version fix commands not wrapped in CommandGroup."""
-        pkgs = {"a": _package("a", version="1.0.0.dev0")}
-        ws = _workspace(pkgs)
-        result = self._plan_with_changes(
-            ws, ReleaseIntent(target="ci"), _changes_for(pkgs)
-        )
-        validate_cmds = result.jobs[0].commands
-        assert len(validate_cmds) > 0
-        assert not isinstance(validate_cmds[0], CommandGroup)
-
-    def test_dev_release_no_version_fix(self) -> None:
-        """dev_release=True: no version fix needed."""
-        pkgs = {"a": _package("a", version="1.0.0.dev0")}
-        ws = _workspace(pkgs)
-        result = self._plan_with_changes(
-            ws, ReleaseIntent(dev_release=True), _changes_for(pkgs)
         )
         validate_cmds = result.jobs[0].commands
         assert len(validate_cmds) == 0

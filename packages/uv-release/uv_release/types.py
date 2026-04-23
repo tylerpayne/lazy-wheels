@@ -788,3 +788,15 @@ class Intent(Protocol):
 
     def guard(self, **state: object) -> None: ...
     def plan(self, **state: object) -> Plan: ...
+
+
+class UserRecoverableError(ValueError):
+    """Error that the user can recover from by executing commands.
+
+    The fix CommandGroup is presented to the user for confirmation.
+    If they accept, the caller executes the commands and retries.
+    """
+
+    def __init__(self, message: str, fix: CommandGroup) -> None:
+        super().__init__(message)
+        self.fix = fix
