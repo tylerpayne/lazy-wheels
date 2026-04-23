@@ -46,7 +46,7 @@ class CreateTagCommand(Command):
         import subprocess
 
         subprocess.run(
-            ["git", "tag", self.tag_name],
+            ["git", "tag", "-a", "-m", self.tag_name, self.tag_name],
             check=True,
         )
         return 0
