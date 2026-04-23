@@ -88,16 +88,14 @@ def cmd_release(args: argparse.Namespace) -> None:
         plan = compute_plan(intent, params=params)
     except UserRecoverableError as exc:
         if dry_run:
-            raise
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
         fix_job = Job(name="version-fix", commands=[exc.fix])
         execute_job(fix_job, hooks=None)
         plan = compute_plan(intent, params=params)
     except ValueError as exc:
-        if not dry_run:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            sys.exit(1)
-        # Dry run tolerates guard failures
-        plan = Plan()
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     if not plan.jobs:
         if parsed.json_output:
