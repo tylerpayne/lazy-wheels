@@ -1,6 +1,6 @@
 [project]
 name = "uv-release"
-version = "0.30.0a4.dev0"
+version = "0.30.0"
 description = "Lazy monorepo wheel builder."
 readme = "README.md"
 requires-python = ">=3.11"
