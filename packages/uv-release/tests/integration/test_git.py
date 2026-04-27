@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from uv_release.git import GitRepo
+from uv_release.utils.git import GitRepo
 
 from .conftest import add_baseline_tags, modify_file
 

@@ -7,27 +7,12 @@ from pathlib import Path
 import pytest
 
 from uv_release.intents.upgrade_workflow import UpgradeWorkflowIntent
-from uv_release.states.uvr_state import UvrState
 from uv_release.states.workflow import WorkflowState
-from uv_release.states.workspace import Workspace
 from uv_release.types import (
-    Config,
     Plan,
-    Publishing,
 )
 
-
-def _workspace() -> Workspace:
-    return Workspace(root=Path("."), packages={})
-
-
-def _uvr_state() -> UvrState:
-    return UvrState(
-        config=Config(uvr_version="0.1.0"),
-        runners={},
-        publishing=Publishing(),
-        uvr_version="0.1.0",
-    )
+from ..conftest import make_uvr_state, make_workspace
 
 
 def _workflow_state(
@@ -82,7 +67,7 @@ class TestUpgradeWorkflowGuard:
         (tmp_path / "pyproject.toml").write_text(
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
         )
-        ws = _workspace()
+        ws = make_workspace()
         wfs = _workflow_state()
         intent = UpgradeWorkflowIntent(force=True)
         intent.guard(workspace=ws, workflow_state=wfs)  # should not raise
@@ -102,10 +87,12 @@ class TestUpgradeWorkflowPlanInit:
         (tmp_path / "pyproject.toml").write_text(
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
         )
-        uvr = _uvr_state()
+        uvr = make_uvr_state()
         wfs = _workflow_state()
         intent = UpgradeWorkflowIntent(force=True)
-        result = intent.plan(workspace=_workspace(), uvr_state=uvr, workflow_state=wfs)
+        result = intent.plan(
+            workspace=make_workspace(), uvr_state=uvr, workflow_state=wfs
+        )
         assert isinstance(result, Plan)
         assert len(result.jobs) == 1
         assert result.jobs[0].name == "upgrade_workflow"
@@ -118,10 +105,12 @@ class TestUpgradeWorkflowPlanInit:
         (tmp_path / "pyproject.toml").write_text(
             '[tool.uv.workspace]\nmembers = ["packages/*"]\n'
         )
-        uvr = _uvr_state()
+        uvr = make_uvr_state()
         wfs = _workflow_state()
         intent = UpgradeWorkflowIntent(force=True)
-        result = intent.plan(workspace=_workspace(), uvr_state=uvr, workflow_state=wfs)
+        result = intent.plan(
+            workspace=make_workspace(), uvr_state=uvr, workflow_state=wfs
+        )
         assert len(result.jobs[0].commands) > 0
 
 
@@ -142,7 +131,7 @@ class TestUpgradeWorkflowPlanUpgrade:
         dest = tmp_path / ".github" / "workflows"
         dest.mkdir(parents=True)
         (dest / "release.yml").write_text("existing content")
-        ws = _workspace()
+        ws = make_workspace()
         wfs = _workflow_state(file_exists=True)
         intent = UpgradeWorkflowIntent(force=False)
         with pytest.raises(ValueError, match="already exists"):

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from diny import provider
 
-from ..git import GitRepo
+from ..utils.git import GitRepo
 from .base import State
 
 

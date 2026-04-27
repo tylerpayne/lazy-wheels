@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .types import Package
+from ..types import Package
 
 
 def topo_sort(nodes: dict[str, list[str]]) -> list[str]:

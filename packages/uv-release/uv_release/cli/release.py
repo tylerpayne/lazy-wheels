@@ -17,6 +17,7 @@ from ._display import print_plan_summary
 from ..commands import DispatchWorkflowCommand
 from ..planner import compute_plan
 from ..intents.release import ReleaseIntent
+from ..intents.release.params import ReleaseParams
 from ..execute import execute_job, execute_plan
 from ..types import Job, Plan, PlanParams, UserRecoverableError
 
@@ -77,7 +78,7 @@ def cmd_release(args: argparse.Namespace) -> None:
         all_packages=parsed.all_packages,
         packages=frozenset(parsed.packages or []),
     )
-    intent = ReleaseIntent(
+    release_params = ReleaseParams(
         dev_release=parsed.dev,
         skip=frozenset(skipped),
         release_notes=user_notes or {},
@@ -85,9 +86,10 @@ def cmd_release(args: argparse.Namespace) -> None:
         reuse_run=parsed.reuse_run or "",
         reuse_release=parsed.reuse_release,
     )
+    intent = ReleaseIntent()
 
     try:
-        with provide(params):
+        with provide(params, release_params):
             plan = compute_plan(intent)
     except UserRecoverableError as exc:
         if dry_run:
@@ -95,7 +97,7 @@ def cmd_release(args: argparse.Namespace) -> None:
             sys.exit(1)
         fix_job = Job(name="version-fix", commands=[exc.fix])
         execute_job(fix_job, hooks=None)
-        with provide(params):
+        with provide(params, release_params):
             plan = compute_plan(intent)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

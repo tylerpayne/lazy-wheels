@@ -8,19 +8,11 @@ import pytest
 
 from uv_release.commands import PinDepsCommand, SetVersionCommand, UpdateTomlCommand
 from uv_release.types import (
-    Package,
     PackagePyProjectDoc,
-    Version,
     WorkspacePyProjectDoc,
 )
 
-
-def _version(raw: str) -> Version:
-    return Version.parse(raw)
-
-
-def _package(name: str, path: str, version: str = "1.0.0.dev0") -> Package:
-    return Package(name=name, path=path, version=_version(version))
+from .conftest import make_package, make_version
 
 
 # ---------------------------------------------------------------------------
@@ -122,8 +114,8 @@ class TestSetVersionCommand:
         (pkg_dir / "pyproject.toml").write_text(
             '[project]\nname = "alpha"\nversion = "1.0.0.dev0"\n'
         )
-        pkg = _package("alpha", "packages/alpha")
-        cmd = SetVersionCommand(label="set", package=pkg, version=_version("1.0.0"))
+        pkg = make_package("alpha")
+        cmd = SetVersionCommand(label="set", package=pkg, version=make_version("1.0.0"))
         assert cmd.execute() == 0
         assert 'version = "1.0.0"' in (pkg_dir / "pyproject.toml").read_text()
 
@@ -136,8 +128,10 @@ class TestSetVersionCommand:
         (pkg_dir / "pyproject.toml").write_text(
             '# My package\n[project]\nname = "alpha"\nversion = "1.0.0.dev0"\n'
         )
-        pkg = _package("alpha", "packages/alpha")
-        SetVersionCommand(label="set", package=pkg, version=_version("2.0.0")).execute()
+        pkg = make_package("alpha")
+        SetVersionCommand(
+            label="set", package=pkg, version=make_version("2.0.0")
+        ).execute()
         text = (pkg_dir / "pyproject.toml").read_text()
         assert "# My package" in text
         assert 'version = "2.0.0"' in text
@@ -159,8 +153,8 @@ class TestPinDepsCommand:
             '[project]\nname = "beta"\nversion = "1.0.0"\n'
             'dependencies = ["alpha>=1.0.0,<2.0.0"]\n'
         )
-        pkg = _package("beta", "packages/beta", version="1.0.0")
-        alpha_pkg = _package("alpha", "packages/alpha", version="2.0.0")
+        pkg = make_package("beta", version="1.0.0")
+        alpha_pkg = make_package("alpha", version="2.0.0")
         cmd = PinDepsCommand(label="pin", package=pkg, pins={"alpha": alpha_pkg})
         assert cmd.execute() == 0
         assert ">=2.0.0" in (pkg_dir / "pyproject.toml").read_text()
@@ -175,8 +169,8 @@ class TestPinDepsCommand:
             '[project]\nname = "beta"\nversion = "1.0.0"\n'
             'dependencies = ["requests>=2.0"]\n'
         )
-        pkg = _package("beta", "packages/beta", version="1.0.0")
-        alpha_pkg = _package("alpha", "packages/alpha", version="2.0.0")
+        pkg = make_package("beta", version="1.0.0")
+        alpha_pkg = make_package("alpha", version="2.0.0")
         PinDepsCommand(label="pin", package=pkg, pins={"alpha": alpha_pkg}).execute()
         assert "requests>=2.0" in (pkg_dir / "pyproject.toml").read_text()
 
@@ -190,8 +184,8 @@ class TestPinDepsCommand:
             '# Beta package\n[project]\nname = "beta"\nversion = "1.0.0"\n'
             'dependencies = ["alpha>=1.0.0,<2.0.0"]\n'
         )
-        pkg = _package("beta", "packages/beta", version="1.0.0")
-        alpha_pkg = _package("alpha", "packages/alpha", version="2.0.0")
+        pkg = make_package("beta", version="1.0.0")
+        alpha_pkg = make_package("alpha", version="2.0.0")
         PinDepsCommand(label="pin", package=pkg, pins={"alpha": alpha_pkg}).execute()
         text = (pkg_dir / "pyproject.toml").read_text()
         assert "# Beta package" in text
@@ -236,9 +230,11 @@ class TestSequentialMutations:
             '[project]\nname = "beta"\nversion = "1.0.0.dev0"\n'
             'dependencies = ["alpha>=1.0.0,<2.0.0"]\n'
         )
-        pkg = _package("beta", "packages/beta")
-        SetVersionCommand(label="set", package=pkg, version=_version("1.0.0")).execute()
-        alpha_pkg = _package("alpha", "packages/alpha", version="1.0.0")
+        pkg = make_package("beta")
+        SetVersionCommand(
+            label="set", package=pkg, version=make_version("1.0.0")
+        ).execute()
+        alpha_pkg = make_package("alpha", version="1.0.0")
         PinDepsCommand(label="pin", package=pkg, pins={"alpha": alpha_pkg}).execute()
 
         text = (pkg_dir / "pyproject.toml").read_text()

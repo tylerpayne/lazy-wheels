@@ -2,32 +2,19 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from uv_release.utils.git import GitRepo
 from uv_release.intents.upgrade_skill import UpgradeSkillIntent
 from uv_release.states.skill import parse_skill_state
-from uv_release.states.uvr_state import UvrState
-from uv_release.states.workspace import Workspace
 from uv_release.types import (
-    Config,
     Plan,
-    Publishing,
 )
 
-
-def _workspace() -> Workspace:
-    return Workspace(root=Path("."), packages={})
-
-
-def _uvr_state() -> UvrState:
-    return UvrState(
-        config=Config(uvr_version="0.1.0"),
-        runners={},
-        publishing=Publishing(),
-        uvr_version="0.1.0",
-    )
+from ..conftest import make_uvr_state, make_workspace
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +48,7 @@ class TestUpgradeSkillGuard:
     ) -> None:
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
-        ws = _workspace()
+        ws = make_workspace()
         intent = UpgradeSkillIntent()
         intent.guard(workspace=ws)  # should not raise
 
@@ -76,11 +63,13 @@ class TestUpgradeSkillPlanInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".git").mkdir()
-        uvr = _uvr_state()
-        skill = parse_skill_state()
+        subprocess.run(["git", "init"], capture_output=True, check=True)
+        uvr = make_uvr_state()
+        skill = parse_skill_state(git_repo=GitRepo())
         intent = UpgradeSkillIntent(force=True)
-        result = intent.plan(workspace=_workspace(), uvr_state=uvr, skill_state=skill)
+        result = intent.plan(
+            workspace=make_workspace(), uvr_state=uvr, skill_state=skill
+        )
         assert isinstance(result, Plan)
         assert len(result.jobs) == 1
         assert result.jobs[0].name == "upgrade_skill"
@@ -89,11 +78,13 @@ class TestUpgradeSkillPlanInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".git").mkdir()
-        uvr = _uvr_state()
-        skill = parse_skill_state()
+        subprocess.run(["git", "init"], capture_output=True, check=True)
+        uvr = make_uvr_state()
+        skill = parse_skill_state(git_repo=GitRepo())
         intent = UpgradeSkillIntent(force=True)
-        result = intent.plan(workspace=_workspace(), uvr_state=uvr, skill_state=skill)
+        result = intent.plan(
+            workspace=make_workspace(), uvr_state=uvr, skill_state=skill
+        )
         assert len(result.jobs[0].commands) > 0
 
     def test_writes_skill_files(
@@ -101,11 +92,11 @@ class TestUpgradeSkillPlanInit:
     ) -> None:
         """Init mode writes all skill files to .claude/skills/."""
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".git").mkdir()
-        uvr = _uvr_state()
-        skill = parse_skill_state()
+        subprocess.run(["git", "init"], capture_output=True, check=True)
+        uvr = make_uvr_state()
+        skill = parse_skill_state(git_repo=GitRepo())
         intent = UpgradeSkillIntent(force=True)
-        plan = intent.plan(workspace=_workspace(), uvr_state=uvr, skill_state=skill)
+        plan = intent.plan(workspace=make_workspace(), uvr_state=uvr, skill_state=skill)
 
         # Execute the commands
         for cmd in plan.jobs[0].commands:

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
-from ._args import CommandArgs
+from ._args import CommandArgs, compute_plan_or_exit
 from ..intents.clean import CleanIntent
-from ..planner import compute_plan
 from ..execute import execute_plan
 
 
@@ -20,11 +18,7 @@ def cmd_clean(args: argparse.Namespace) -> None:
     _parsed = CleanArgs.from_namespace(args)
 
     intent = CleanIntent()
-    try:
-        plan = compute_plan(intent)
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
+    plan = compute_plan_or_exit(intent)
 
     if not plan.jobs or not plan.jobs[0].commands:
         print("Nothing to clean.")

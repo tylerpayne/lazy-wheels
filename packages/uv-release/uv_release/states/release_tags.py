@@ -6,7 +6,7 @@ from pydantic import Field
 
 from diny import provider
 
-from ..git import GitRepo
+from ..utils.git import GitRepo
 from ..types import Tag
 from .base import State
 from .workspace import Workspace

@@ -10,7 +10,7 @@ from ...commands import (
     MakeDirectoryCommand,
     ShellCommand,
 )
-from ...graph import topo_layers
+from ...utils.graph import topo_layers
 from ...states.release_tags import ReleaseTags
 from ...states.workspace import Workspace
 from ...types import Command, Job, Package, Release

@@ -9,11 +9,9 @@ from uv_release.intents.shared.versioning import (
     compute_next_version,
     compute_release_version,
 )
-from uv_release.types import BumpType, Version
+from uv_release.types import BumpType
 
-
-def _v(raw: str) -> Version:
-    return Version.parse(raw)
+from ..conftest import make_version
 
 
 # ---------------------------------------------------------------------------
@@ -142,13 +140,13 @@ class TestComputeReleaseVersion:
     def test_release_version(
         self, raw: str, dev_release: bool, expected_release: str, _next: str
     ) -> None:
-        version = _v(raw)
+        version = make_version(raw)
         result = compute_release_version(version, dev_release=dev_release)
         assert result.raw == expected_release
 
     @pytest.mark.parametrize("raw", _DEV_RELEASE_INVALID)
     def test_dev_release_non_dev_raises(self, raw: str) -> None:
-        version = _v(raw)
+        version = make_version(raw)
         with pytest.raises(ValueError, match="Cannot do a dev release"):
             compute_release_version(version, dev_release=True)
 
@@ -169,13 +167,13 @@ class TestComputeNextVersion:
     def test_next_version(
         self, raw: str, dev_release: bool, _release: str, expected_next: str
     ) -> None:
-        version = _v(raw)
+        version = make_version(raw)
         result = compute_next_version(version, dev_release=dev_release)
         assert result.raw == expected_next
 
     @pytest.mark.parametrize("raw", _DEV_RELEASE_INVALID)
     def test_dev_release_non_dev_raises(self, raw: str) -> None:
-        version = _v(raw)
+        version = make_version(raw)
         with pytest.raises(ValueError, match="Cannot compute next dev version"):
             compute_next_version(version, dev_release=True)
 
@@ -194,7 +192,7 @@ class TestComputeBumpedVersion:
         ids=[f"{b[0]}-{b[1].value}" for b in _BUMP_VALID],
     )
     def test_valid_bump(self, raw: str, bump_type: BumpType, expected: str) -> None:
-        version = _v(raw)
+        version = make_version(raw)
         result = compute_bumped_version(version, bump_type)
         assert result.raw == expected
 
@@ -204,6 +202,6 @@ class TestComputeBumpedVersion:
         ids=[f"{b[0]}-{b[1].value}" for b in _BUMP_INVALID],
     )
     def test_invalid_bump_raises(self, raw: str, bump_type: BumpType) -> None:
-        version = _v(raw)
+        version = make_version(raw)
         with pytest.raises(ValueError):
             compute_bumped_version(version, bump_type)

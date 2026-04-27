@@ -411,7 +411,7 @@ class TestCmdSkillInit:
 
 class TestUpgradeHelpers:
     def test_write_and_read_base(self, workspace: Path) -> None:
-        from uv_release.states.workflow import _read_base as read_base
+        from uv_release.states.shared.merge_bases import read_merge_base as read_base
 
         base_file = workspace / ".uvr" / "bases" / "test" / "file.yml"
         base_file.parent.mkdir(parents=True, exist_ok=True)
@@ -419,24 +419,24 @@ class TestUpgradeHelpers:
         assert read_base(workspace, "test/file.yml") == "content"
 
     def test_read_missing_base(self, workspace: Path) -> None:
-        from uv_release.states.workflow import _read_base as read_base
+        from uv_release.states.shared.merge_bases import read_merge_base as read_base
 
         assert read_base(workspace, "nonexistent.yml") == ""
 
     def test_three_way_merge_clean(self, workspace: Path) -> None:
-        from uv_release.merge import merge_texts
+        from uv_release.utils.merge import merge_texts
 
         current = "line 1\nline 2\n"
         merged, conflicts = merge_texts(current, "line 1\nline 2\n", "line 1\nline 2\n")
         assert not conflicts
 
     def test_editor_cmd_plain(self) -> None:
-        from uv_release.merge import parse_editor_command
+        from uv_release.utils.merge import parse_editor_command
 
         assert parse_editor_command("vim") == ["vim"]
 
     def test_editor_cmd_gui(self) -> None:
-        from uv_release.merge import parse_editor_command
+        from uv_release.utils.merge import parse_editor_command
 
         assert parse_editor_command("code") == ["code", "--wait"]
 

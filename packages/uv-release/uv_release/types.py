@@ -319,6 +319,15 @@ class Package(BaseModel):
         """Wheel distribution name (PEP 625). Used for glob patterns."""
         return Package.format_dist_name(self.name)
 
+    def with_version(self, version: Version) -> Package:
+        """Return a new Package with a different version, keeping all other fields."""
+        return Package(
+            name=self.name,
+            path=self.path,
+            version=version,
+            dependencies=self.dependencies,
+        )
+
 
 # ---------------------------------------------------------------------------
 # CONFIG

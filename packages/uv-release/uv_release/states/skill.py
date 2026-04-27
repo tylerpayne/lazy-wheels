@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from importlib.resources import files
 from pathlib import Path
 
@@ -10,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from diny import provider
 
+from ..utils.git import GitRepo
+from .shared.merge_bases import read_merge_base
 from .base import State
 
 _SKILLS_TEMPLATE_DIR = files("uv_release").joinpath("templates/skills")
@@ -34,7 +35,7 @@ class SkillState(State):
 
 
 @provider(SkillState)
-def parse_skill_state() -> SkillState:
+def parse_skill_state(git_repo: GitRepo) -> SkillState:
     """Discover skill files, read merge bases, and check uncommitted status."""
     root = Path.cwd()
     skills: dict[str, list[SkillFile]] = {}
@@ -56,12 +57,12 @@ def parse_skill_state() -> SkillState:
             file_list.append(SkillFile(rel_path=rel_path, content=content))
 
             rel_dest = f".claude/skills/{skill_name}/{rel_path}"
-            merge_bases[rel_dest] = _read_base(root, rel_dest)
+            merge_bases[rel_dest] = read_merge_base(root, rel_dest)
 
             dest = root / ".claude" / "skills" / skill_name / rel_path
             if dest.exists():
                 existing_set.add(rel_dest)
-                if _has_uncommitted_changes(dest):
+                if git_repo.file_is_dirty(str(dest)):
                     uncommitted_set.add(rel_dest)
 
         if file_list:
@@ -73,20 +74,3 @@ def parse_skill_state() -> SkillState:
         uncommitted=frozenset(uncommitted_set),
         existing=frozenset(existing_set),
     )
-
-
-def _read_base(root: Path, rel_path: str) -> str:
-    """Read a merge base from .uvr/bases/<rel_path>, or empty string if absent."""
-    base_file = root / ".uvr" / "bases" / rel_path
-    if base_file.exists():
-        return base_file.read_text()
-    return ""
-
-
-def _has_uncommitted_changes(path: Path) -> bool:
-    """Check whether a file has uncommitted changes via git diff."""
-    result = subprocess.run(
-        ["git", "diff", "--quiet", "--", str(path)],
-        capture_output=True,
-    )
-    return result.returncode != 0

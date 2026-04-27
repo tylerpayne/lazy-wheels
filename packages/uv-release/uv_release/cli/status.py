@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
 from diny import provide
 
-from ._args import CommandArgs
+from ._args import CommandArgs, compute_plan_or_exit
 from ..intents.status import StatusIntent
-from ..planner import compute_plan
 from ..types import PlanParams
 
 
@@ -29,12 +27,8 @@ def cmd_status(args: argparse.Namespace) -> None:
         packages=frozenset(parsed.packages or []),
     )
     intent = StatusIntent()
-    try:
-        with provide(params):
-            plan = compute_plan(intent)
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
+    with provide(params):
+        plan = compute_plan_or_exit(intent)
 
     changed_map = {c.package.name: c for c in plan.changes}
 

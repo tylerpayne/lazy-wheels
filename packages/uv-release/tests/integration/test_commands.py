@@ -14,7 +14,7 @@ from uv_release.commands import (
     ShellCommand,
 )
 from uv_release.types import Package
-from uv_release.git import GitRepo
+from uv_release.utils.git import GitRepo
 from uv_release.types import Version
 
 

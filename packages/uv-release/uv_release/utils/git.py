@@ -107,6 +107,14 @@ class GitRepo:
         status = self._repo.status()
         return len(status) > 0
 
+    def file_is_dirty(self, path: str) -> bool:
+        """Return True if a specific file has uncommitted changes."""
+        result = subprocess.run(
+            ["git", "diff", "--quiet", "--", path],
+            capture_output=True,
+        )
+        return result.returncode != 0
+
     def is_ahead_or_behind(self) -> bool:
         """Return True if HEAD differs from its upstream tracking branch."""
         head = self._repo.head

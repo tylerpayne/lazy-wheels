@@ -4,7 +4,9 @@ from __future__ import annotations
 
 
 from uv_release.states.changes import _find_baseline_tag as find_baseline_tag
-from uv_release.types import Version, VersionState
+from uv_release.types import VersionState
+
+from ..conftest import make_version
 
 
 class _FakeGitRepo:
@@ -20,10 +22,6 @@ class _FakeGitRepo:
         return [name for name in self._tags if name.startswith(prefix)]
 
 
-def _v(raw: str) -> Version:
-    return Version.parse(raw)
-
-
 # ---------------------------------------------------------------------------
 # DEV0_STABLE: looks for baseline tag, falls back to previous release
 # ---------------------------------------------------------------------------
@@ -33,7 +31,7 @@ class TestDev0StableBaseline:
     """DEV0_STABLE version finds its baseline tag."""
 
     def test_finds_baseline_tag(self) -> None:
-        version = _v("1.0.1.dev0")
+        version = make_version("1.0.1.dev0")
         assert version.state == VersionState.DEV0_STABLE
         repo = _FakeGitRepo({"mypkg/v1.0.1.dev0-base": "abc123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
@@ -43,7 +41,7 @@ class TestDev0StableBaseline:
         assert tag.raw == "mypkg/v1.0.1.dev0-base"
 
     def test_falls_back_to_previous_release(self) -> None:
-        version = _v("1.0.1.dev0")
+        version = make_version("1.0.1.dev0")
         repo = _FakeGitRepo({"mypkg/v1.0.0": "prev123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is not None
@@ -52,7 +50,7 @@ class TestDev0StableBaseline:
         assert tag.version.raw == "1.0.0"
 
     def test_no_tags_returns_none(self) -> None:
-        version = _v("1.0.1.dev0")
+        version = make_version("1.0.1.dev0")
         repo = _FakeGitRepo({})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is None
@@ -67,7 +65,7 @@ class TestDevkStableBaseline:
     """DEVK_STABLE version finds dev0 baseline tag."""
 
     def test_finds_dev0_baseline(self) -> None:
-        version = _v("1.0.1.dev3")
+        version = make_version("1.0.1.dev3")
         assert version.state == VersionState.DEVK_STABLE
         repo = _FakeGitRepo({"mypkg/v1.0.1.dev0-base": "abc123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
@@ -77,7 +75,7 @@ class TestDevkStableBaseline:
         assert tag.raw == "mypkg/v1.0.1.dev0-base"
 
     def test_falls_back_to_previous_release(self) -> None:
-        version = _v("1.0.1.dev3")
+        version = make_version("1.0.1.dev3")
         repo = _FakeGitRepo({"mypkg/v1.0.0": "prev123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is not None
@@ -85,7 +83,7 @@ class TestDevkStableBaseline:
         assert tag.version.raw == "1.0.0"
 
     def test_no_tags_returns_none(self) -> None:
-        version = _v("1.0.1.dev3")
+        version = make_version("1.0.1.dev3")
         repo = _FakeGitRepo({})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is None
@@ -100,7 +98,7 @@ class TestCleanStableBaseline:
     """CLEAN_STABLE version finds previous release."""
 
     def test_finds_previous_release(self) -> None:
-        version = _v("1.0.1")
+        version = make_version("1.0.1")
         assert version.state == VersionState.CLEAN_STABLE
         repo = _FakeGitRepo({"mypkg/v1.0.0": "prev123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
@@ -109,14 +107,14 @@ class TestCleanStableBaseline:
         assert tag.version.raw == "1.0.0"
 
     def test_no_previous_returns_none(self) -> None:
-        version = _v("1.0.0")
+        version = make_version("1.0.0")
         assert version.state == VersionState.CLEAN_STABLE
         repo = _FakeGitRepo({})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is None
 
     def test_skips_baseline_tags_in_candidates(self) -> None:
-        version = _v("1.0.1")
+        version = make_version("1.0.1")
         repo = _FakeGitRepo(
             {
                 "mypkg/v1.0.0-base": "base123",
@@ -137,7 +135,7 @@ class TestCleanPost0Baseline:
     """CLEAN_POST0 version finds base release tag."""
 
     def test_finds_base_release(self) -> None:
-        version = _v("1.0.1.post0")
+        version = make_version("1.0.1.post0")
         assert version.state == VersionState.CLEAN_POST0
         repo = _FakeGitRepo({"mypkg/v1.0.1": "base123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
@@ -147,7 +145,7 @@ class TestCleanPost0Baseline:
         assert tag.version.raw == "1.0.1"
 
     def test_no_base_release_returns_none(self) -> None:
-        version = _v("1.0.1.post0")
+        version = make_version("1.0.1.post0")
         repo = _FakeGitRepo({})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is None
@@ -162,7 +160,7 @@ class TestDev0PreBaseline:
     """DEV0_PRE version finds its baseline tag."""
 
     def test_finds_baseline_tag(self) -> None:
-        version = _v("1.0.1a0.dev0")
+        version = make_version("1.0.1a0.dev0")
         assert version.state == VersionState.DEV0_PRE
         repo = _FakeGitRepo({"mypkg/v1.0.1a0.dev0-base": "abc123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
@@ -170,7 +168,7 @@ class TestDev0PreBaseline:
         assert tag.is_baseline is True
 
     def test_falls_back_to_previous_release(self) -> None:
-        version = _v("1.0.1a0.dev0")
+        version = make_version("1.0.1a0.dev0")
         repo = _FakeGitRepo({"mypkg/v1.0.0": "prev123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
         assert tag is not None
@@ -186,7 +184,7 @@ class TestDev0PostBaseline:
     """DEV0_POST version finds its baseline tag."""
 
     def test_finds_baseline_tag(self) -> None:
-        version = _v("1.0.1.post0.dev0")
+        version = make_version("1.0.1.post0.dev0")
         assert version.state == VersionState.DEV0_POST
         repo = _FakeGitRepo({"mypkg/v1.0.1.post0.dev0-base": "abc123"})
         tag = find_baseline_tag("mypkg", version, repo)  # type: ignore[arg-type]
@@ -203,7 +201,7 @@ class TestPreviousReleaseOrdering:
     """find_baseline_tag picks the highest version below current."""
 
     def test_picks_highest(self) -> None:
-        version = _v("2.0.0.dev0")
+        version = make_version("2.0.0.dev0")
         repo = _FakeGitRepo(
             {
                 "mypkg/v0.9.0": "old1",

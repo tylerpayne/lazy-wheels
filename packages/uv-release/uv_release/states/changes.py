@@ -9,7 +9,7 @@ from packaging.version import Version as PkgVersion
 
 from diny import provider
 
-from ..git import GitRepo
+from ..utils.git import GitRepo
 from ..types import (
     Change,
     Package,

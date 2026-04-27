@@ -2,39 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import pytest
 
 from uv_release.intents.bump import BumpIntent
 from uv_release.commands import PinDepsCommand, SetVersionCommand, ShellCommand
-from uv_release.states.workspace import Workspace
 from uv_release.types import (
     BumpType,
-    Package,
     Plan,
-    Version,
 )
 
-
-def _version(raw: str) -> Version:
-    return Version.parse(raw)
-
-
-def _package(
-    name: str, version: str = "1.0.0.dev0", dependencies: list[str] | None = None
-) -> Package:
-    return Package(
-        name=name,
-        path=f"packages/{name}",
-        version=_version(version),
-        dependencies=dependencies or [],
-    )
-
-
-def _workspace(
-    packages: dict[str, Package],
-) -> Workspace:
-    return Workspace(root=Path("."), packages=packages)
+from ..conftest import make_package, make_workspace
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +51,7 @@ class TestBumpGuardPackageExists:
     """guard raises ValueError when requested packages do not exist."""
 
     def test_unknown_package_raises(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(
             bump_type=BumpType.MINOR, packages=frozenset({"nonexistent"})
         )
@@ -82,13 +59,13 @@ class TestBumpGuardPackageExists:
             intent.guard(workspace=ws)
 
     def test_known_package_passes(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(bump_type=BumpType.MINOR, packages=frozenset({"a"}))
         intent.guard(workspace=ws)  # should not raise
 
     def test_empty_packages_means_all(self) -> None:
         """Empty packages set means bump all. guard should pass."""
-        ws = _workspace({"a": _package("a"), "b": _package("b")})
+        ws = make_workspace({"a": make_package("a"), "b": make_package("b")})
         intent = BumpIntent(bump_type=BumpType.MINOR)
         intent.guard(workspace=ws)  # should not raise
 
@@ -116,15 +93,15 @@ class TestBumpGuardVersionTransition:
         ids=[f"{v}+{bt.name}" for v, bt in _GUARD_INVALID_BUMPS],
     )
     def test_invalid_bump_raises(self, version: str, bump_type: BumpType) -> None:
-        pkg = _package("a", version=version)
-        ws = _workspace({"a": pkg})
+        pkg = make_package("a", version=version)
+        ws = make_workspace({"a": pkg})
         intent = BumpIntent(bump_type=bump_type)
         with pytest.raises(ValueError):
             intent.guard(workspace=ws)
 
     def test_valid_bump_passes(self) -> None:
-        pkg = _package("a", version="1.0.0.dev0")
-        ws = _workspace({"a": pkg})
+        pkg = make_package("a", version="1.0.0.dev0")
+        ws = make_workspace({"a": pkg})
         intent = BumpIntent(bump_type=BumpType.MINOR)
         intent.guard(workspace=ws)  # should not raise
 
@@ -138,25 +115,25 @@ class TestBumpPlanReturnsCorrectPlan:
     """plan() returns a Plan with bump job containing correct commands."""
 
     def test_returns_plan(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(bump_type=BumpType.MINOR)
         result = intent.plan(workspace=ws)
         assert isinstance(result, Plan)
 
     def test_plan_has_one_job(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(bump_type=BumpType.MINOR)
         result = intent.plan(workspace=ws)
         assert len(result.jobs) == 1
 
     def test_job_is_named_bump(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(bump_type=BumpType.MINOR)
         result = intent.plan(workspace=ws)
         assert result.jobs[0].name == "bump"
 
     def test_single_package_has_set_version(self) -> None:
-        ws = _workspace({"a": _package("a", version="1.0.0.dev0")})
+        ws = make_workspace({"a": make_package("a", version="1.0.0.dev0")})
         intent = BumpIntent(bump_type=BumpType.MINOR)
         result = intent.plan(workspace=ws)
         job = result.jobs[0]
@@ -165,10 +142,10 @@ class TestBumpPlanReturnsCorrectPlan:
         assert set_cmds[0].version.raw == "1.1.0.dev0"
 
     def test_two_packages_have_two_set_versions(self) -> None:
-        ws = _workspace(
+        ws = make_workspace(
             {
-                "a": _package("a", version="1.0.0.dev0"),
-                "b": _package("b", version="2.0.0.dev0"),
+                "a": make_package("a", version="1.0.0.dev0"),
+                "b": make_package("b", version="2.0.0.dev0"),
             }
         )
         intent = BumpIntent(bump_type=BumpType.MINOR)
@@ -179,10 +156,10 @@ class TestBumpPlanReturnsCorrectPlan:
 
     def test_restrict_to_specific_packages(self) -> None:
         """When packages is set, only bump those packages."""
-        ws = _workspace(
+        ws = make_workspace(
             {
-                "a": _package("a", version="1.0.0.dev0"),
-                "b": _package("b", version="2.0.0.dev0"),
+                "a": make_package("a", version="1.0.0.dev0"),
+                "b": make_package("b", version="2.0.0.dev0"),
             }
         )
         intent = BumpIntent(bump_type=BumpType.MINOR, packages=frozenset({"a"}))
@@ -197,7 +174,7 @@ class TestBumpPlanCommitBehavior:
     """commit flag controls whether git commit is included."""
 
     def test_commit_true_has_git_commit(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(bump_type=BumpType.MINOR, commit=True)
         result = intent.plan(workspace=ws)
         job = result.jobs[0]
@@ -206,7 +183,7 @@ class TestBumpPlanCommitBehavior:
         assert len(commit_cmds) == 1
 
     def test_commit_false_no_git_commit(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(bump_type=BumpType.MINOR, commit=False)
         result = intent.plan(workspace=ws)
         job = result.jobs[0]
@@ -219,9 +196,9 @@ class TestBumpPlanPinBehavior:
     """pin flag controls whether internal deps are pinned."""
 
     def test_pin_true_has_pin_commands(self) -> None:
-        alpha = _package("a", version="1.0.0.dev0")
-        beta = _package("b", version="1.0.0.dev0", dependencies=["a"])
-        ws = _workspace({"a": alpha, "b": beta})
+        alpha = make_package("a", version="1.0.0.dev0")
+        beta = make_package("b", version="1.0.0.dev0", dependencies=["a"])
+        ws = make_workspace({"a": alpha, "b": beta})
         intent = BumpIntent(bump_type=BumpType.MINOR, pin=True)
         result = intent.plan(workspace=ws)
         job = result.jobs[0]
@@ -229,9 +206,9 @@ class TestBumpPlanPinBehavior:
         assert len(pin_cmds) > 0
 
     def test_pin_false_no_pin_commands(self) -> None:
-        alpha = _package("a", version="1.0.0.dev0")
-        beta = _package("b", version="1.0.0.dev0", dependencies=["a"])
-        ws = _workspace({"a": alpha, "b": beta})
+        alpha = make_package("a", version="1.0.0.dev0")
+        beta = make_package("b", version="1.0.0.dev0", dependencies=["a"])
+        ws = make_workspace({"a": alpha, "b": beta})
         intent = BumpIntent(bump_type=BumpType.MINOR, pin=False)
         result = intent.plan(workspace=ws)
         job = result.jobs[0]
@@ -243,7 +220,7 @@ class TestBumpPlanCallsGuard:
     """guard() raises on invalid state. Called by planner before plan()."""
 
     def test_guard_raises_on_unknown_package(self) -> None:
-        ws = _workspace({"a": _package("a")})
+        ws = make_workspace({"a": make_package("a")})
         intent = BumpIntent(
             bump_type=BumpType.MINOR, packages=frozenset({"nonexistent"})
         )
@@ -251,8 +228,8 @@ class TestBumpPlanCallsGuard:
             intent.guard(workspace=ws)
 
     def test_guard_raises_on_invalid_bump(self) -> None:
-        pkg = _package("a", version="1.0.1.dev0")
-        ws = _workspace({"a": pkg})
+        pkg = make_package("a", version="1.0.1.dev0")
+        ws = make_workspace({"a": pkg})
         intent = BumpIntent(bump_type=BumpType.POST)
         with pytest.raises(ValueError):
             intent.guard(workspace=ws)

@@ -7,12 +7,9 @@ from pathlib import Path
 import pytest
 
 from uv_release.intents.clean import CleanIntent
-from uv_release.states.workspace import Workspace
 from uv_release.types import Plan
 
-
-def _workspace() -> Workspace:
-    return Workspace(root=Path("."), packages={})
+from ..conftest import make_workspace
 
 
 class TestCleanIntent:
@@ -20,14 +17,14 @@ class TestCleanIntent:
         assert CleanIntent().type == "clean"
 
     def test_guard_always_passes(self) -> None:
-        CleanIntent().guard(workspace=_workspace())
+        CleanIntent().guard(workspace=make_workspace())
 
     def test_plan_returns_plan(self) -> None:
-        result = CleanIntent().plan(workspace=_workspace())
+        result = CleanIntent().plan(workspace=make_workspace())
         assert isinstance(result, Plan)
 
     def test_plan_has_job(self) -> None:
-        result = CleanIntent().plan(workspace=_workspace())
+        result = CleanIntent().plan(workspace=make_workspace())
         assert len(result.jobs) == 1
         assert result.jobs[0].name == "clean"
 
@@ -39,7 +36,7 @@ class TestCleanIntent:
         cache.mkdir(parents=True)
         (cache / "somefile").write_text("data")
 
-        plan = CleanIntent().plan(workspace=_workspace())
+        plan = CleanIntent().plan(workspace=make_workspace())
         for cmd in plan.jobs[0].commands:
             cmd.execute()
 

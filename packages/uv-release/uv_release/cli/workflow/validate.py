@@ -9,8 +9,7 @@ from pathlib import Path
 
 import tomlkit
 
-from .._args import CommandArgs
-from ...planner import compute_plan
+from .._args import CommandArgs, compute_plan_or_exit
 from ...intents.validate_workflow import ValidateWorkflowIntent
 
 
@@ -30,11 +29,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
         show_diff=parsed.diff,
     )
 
-    try:
-        plan = compute_plan(intent)
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
+    plan = compute_plan_or_exit(intent)
 
     errors = plan.validation_errors
     warnings = plan.validation_warnings

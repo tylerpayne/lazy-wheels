@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
-from ._args import CommandArgs
+from ._args import CommandArgs, compute_plan_or_exit
 from ..intents.download import DownloadIntent
-from ..planner import compute_plan
 from ..execute import execute_plan
 
 
@@ -34,10 +32,5 @@ def cmd_download(args: argparse.Namespace) -> None:
         output=parsed.output,
     )
 
-    try:
-        plan = compute_plan(intent)
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
-
+    plan = compute_plan_or_exit(intent)
     execute_plan(plan, hooks=None)

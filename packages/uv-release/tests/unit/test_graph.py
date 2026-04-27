@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from uv_release.graph import topo_layers, topo_sort
+from uv_release.utils.graph import topo_layers, topo_sort
 from uv_release.types import Package, Version
 
 

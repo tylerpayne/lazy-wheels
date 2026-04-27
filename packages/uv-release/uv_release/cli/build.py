@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
 from diny import provide
 
-from ._args import CommandArgs
+from ._args import CommandArgs, compute_plan_or_exit
 from ..intents.build import BuildIntent
-from ..planner import compute_plan
 from ..execute import execute_plan
 from ..types import PlanParams
 
@@ -30,12 +28,8 @@ def cmd_build(args: argparse.Namespace) -> None:
         packages=frozenset(parsed.packages or []),
     )
     intent = BuildIntent()
-    try:
-        with provide(params):
-            plan = compute_plan(intent)
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
+    with provide(params):
+        plan = compute_plan_or_exit(intent)
 
     if not plan.jobs or not plan.jobs[0].commands:
         print("Nothing to build. No packages have changed since last release.")

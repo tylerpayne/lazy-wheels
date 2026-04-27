@@ -6,7 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from ..commands import PinDepsCommand, SetVersionCommand, ShellCommand
+from ..commands import SetVersionCommand, ShellCommand
+from .shared.dep_pins import compute_dep_pins
+from .shared.packages import format_version_body
 from .shared.versioning import compute_bumped_version
 from ..states.workspace import Workspace
 from ..types import (
@@ -52,12 +54,7 @@ class BumpIntent(BaseModel):
         # 1. Compute bumped versions and add SetVersionCommand for each
         for name, pkg in targets.items():
             bumped = compute_bumped_version(pkg.version, self.bump_type)
-            bumped_packages[name] = Package(
-                name=pkg.name,
-                path=pkg.path,
-                version=bumped,
-                dependencies=pkg.dependencies,
-            )
+            bumped_packages[name] = pkg.with_version(bumped)
             commands.append(
                 SetVersionCommand(
                     label=f"Bump {name} to {bumped.raw}",
@@ -68,20 +65,7 @@ class BumpIntent(BaseModel):
 
         # 2. Pin internal deps
         if self.pin:
-            for name, pkg in targets.items():
-                pkg_pins = {
-                    dep: bumped_packages[dep]
-                    for dep in pkg.dependencies
-                    if dep in bumped_packages
-                }
-                if pkg_pins:
-                    commands.append(
-                        PinDepsCommand(
-                            label=f"Pin deps for {name}",
-                            package=pkg,
-                            pins=pkg_pins,
-                        )
-                    )
+            commands.extend(compute_dep_pins(targets.values(), bumped_packages))
 
         # 3. Sync lockfile
         commands.append(
@@ -94,9 +78,8 @@ class BumpIntent(BaseModel):
 
         # 4. Commit
         if self.commit:
-            body = "\n".join(
-                f"{name} {bumped_packages[name].version.raw}"
-                for name in sorted(bumped_packages)
+            body = format_version_body(
+                {name: pkg.version.raw for name, pkg in bumped_packages.items()}
             )
             commands.append(
                 ShellCommand(

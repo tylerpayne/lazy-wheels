@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from uv_release.intents.validate_workflow import ValidateWorkflowIntent
 from uv_release.states.workflow import WorkflowState
-from uv_release.states.workspace import Workspace
 from uv_release.types import Plan
 
-
-def _workspace() -> Workspace:
-    return Workspace(root=Path("."), packages={})
+from ..conftest import make_workspace
 
 
 def _workflow_state(
@@ -37,12 +32,12 @@ class TestValidateWorkflowIntent:
         intent = ValidateWorkflowIntent()
         wfs = _workflow_state(file_exists=False)
         with pytest.raises(ValueError, match="No workflow"):
-            intent.guard(workspace=_workspace(), workflow_state=wfs)
+            intent.guard(workspace=make_workspace(), workflow_state=wfs)
 
     def test_guard_valid_workflow_passes(self) -> None:
         intent = ValidateWorkflowIntent()
         wfs = _workflow_state(file_exists=True, file_content="name: test\n")
-        intent.guard(workspace=_workspace(), workflow_state=wfs)
+        intent.guard(workspace=make_workspace(), workflow_state=wfs)
 
     def test_plan_returns_plan(self) -> None:
         content = (

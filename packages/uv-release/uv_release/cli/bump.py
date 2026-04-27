@@ -5,11 +5,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-from ._args import CommandArgs
+from ._args import CommandArgs, compute_plan_or_exit
 from ._display import print_bump_summary
 from ..intents.bump import BumpIntent
 from ..intents.shared.versioning import compute_bumped_version
-from ..planner import compute_plan
 from ..execute import execute_plan
 from ..types import BumpType
 
@@ -43,11 +42,7 @@ def cmd_bump(args: argparse.Namespace) -> None:
         pin=not parsed.no_pin,
         commit=True,
     )
-    try:
-        plan = compute_plan(intent)
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
+    plan = compute_plan_or_exit(intent)
 
     if not plan.jobs or not plan.jobs[0].commands:
         print("No packages to bump.")

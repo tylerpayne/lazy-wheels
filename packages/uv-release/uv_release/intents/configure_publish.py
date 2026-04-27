@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..commands import WriteUvrSectionCommand
+from .shared.lists import apply_list_mutations
 from ..states.uvr_state import UvrState
 from ..states.workspace import Workspace
 from ..types import Command, Job, Plan
@@ -70,21 +71,13 @@ class ConfigurePublishIntent(BaseModel):
             if self.trusted_publishing is not None:
                 data["trusted-publishing"] = self.trusted_publishing
 
-            include: list[str] = list(data["include"])
-            exclude: list[str] = list(data["exclude"])
-
-            for pkg in self.add_include:
-                if pkg not in include:
-                    include.append(pkg)
-            for pkg in self.add_exclude:
-                if pkg not in exclude:
-                    exclude.append(pkg)
-            for pkg in self.remove_packages:
-                if pkg in include:
-                    include.remove(pkg)
-                if pkg in exclude:
-                    exclude.remove(pkg)
-
+            include, exclude = apply_list_mutations(
+                list(data["include"]),
+                list(data["exclude"]),
+                add_include=self.add_include,
+                add_exclude=self.add_exclude,
+                remove=self.remove_packages,
+            )
             data["include"] = include
             data["exclude"] = exclude
 
