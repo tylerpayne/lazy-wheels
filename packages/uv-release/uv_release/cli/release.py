@@ -58,21 +58,10 @@ def cmd_release(args: argparse.Namespace) -> None:
     # Compute skip set from --skip and --skip-to
     skipped = set(parsed.skip or [])
     if parsed.skip_to:
-        _JOB_ORDER = [
-            "validate",
-            "build",
-            "release",
-            "publish",
-            "bump",
-        ]
-        if parsed.skip_to not in _JOB_ORDER:
-            print(
-                f"ERROR: Unknown job '{parsed.skip_to}' for --skip-to.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        idx = _JOB_ORDER.index(parsed.skip_to)
-        skipped |= {j for j in _JOB_ORDER[:idx] if j != "validate"}
+        skipped |= _resolve_skip_to(
+            parsed.skip_to,
+            Path.cwd() / ".github/workflows/release.yml",
+        )
 
     params = PlanParams(
         all_packages=parsed.all_packages,
@@ -102,6 +91,12 @@ def cmd_release(args: argparse.Namespace) -> None:
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
+
+    # Merge skipped custom CI jobs into plan.skip so the workflow
+    # ``if: !contains(...)`` condition can gate them.
+    extra_skip = skipped - {j.name for j in plan.jobs} - {"validate"}
+    if extra_skip and plan.jobs:
+        plan = plan.model_copy(update={"skip": sorted(set(plan.skip) | extra_skip)})
 
     if not plan.jobs:
         if parsed.json_output:
@@ -173,6 +168,67 @@ def _parse_release_notes(raw: list[list[str]] | None) -> dict[str, str]:
         else:
             result[pkg_name] = notes_value
     return result
+
+
+_DEFAULT_JOB_ORDER = ["validate", "build", "release", "publish", "bump"]
+
+
+def _read_workflow_job_dag(workflow_path: Path) -> dict[str, list[str]]:
+    """Parse ``release.yml`` into a job dependency DAG.
+
+    Returns a mapping of ``{job_name: [dependency_names]}`` derived from the
+    ``needs:`` field of each job. Returns an empty dict when the file is
+    missing or cannot be parsed.
+    """
+    if not workflow_path.exists():
+        return {}
+    try:
+        import yaml
+
+        content = yaml.safe_load(workflow_path.read_text())
+    except Exception:
+        return {}
+    if not content or "jobs" not in content:
+        return {}
+
+    dag: dict[str, list[str]] = {}
+    for name, config in content["jobs"].items():
+        needs = config.get("needs", [])
+        if isinstance(needs, str):
+            needs = [needs]
+        dag[name] = needs
+    return dag
+
+
+def _resolve_skip_to(skip_to: str, workflow_path: Path) -> set[str]:
+    """Resolve ``--skip-to`` into a set of job names to skip.
+
+    Reads the workflow YAML, builds the job dependency DAG, and returns all
+    ancestors of *skip_to* (except ``validate``). Falls back to the default
+    linear order when no workflow file is available.
+    """
+    dag = _read_workflow_job_dag(workflow_path)
+
+    if dag:
+        if skip_to not in dag:
+            print(
+                f"ERROR: Unknown job '{skip_to}' for --skip-to.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        from ..utils.graph import compute_ancestors
+
+        return compute_ancestors(dag, skip_to) - {"validate"}
+
+    # Fallback: no workflow file, use default linear order
+    if skip_to not in _DEFAULT_JOB_ORDER:
+        print(
+            f"ERROR: Unknown job '{skip_to}' for --skip-to.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    idx = _DEFAULT_JOB_ORDER.index(skip_to)
+    return {j for j in _DEFAULT_JOB_ORDER[:idx] if j != "validate"}
 
 
 def _dispatch_to_ci(plan: Plan) -> None:

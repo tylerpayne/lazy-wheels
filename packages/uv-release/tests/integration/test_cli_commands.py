@@ -24,6 +24,42 @@ def _ns(**kwargs: object) -> argparse.Namespace:
     return argparse.Namespace(**kwargs)
 
 
+def _write_workflow_with_checks(workspace: Path) -> None:
+    """Write a release.yml that has a custom 'checks' job before build and commit it."""
+    workflow_dir = workspace / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True, exist_ok=True)
+    (workflow_dir / "release.yml").write_text(
+        "name: Release\n"
+        "on: workflow_dispatch\n"
+        "jobs:\n"
+        "  validate:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+        "  checks:\n"
+        "    needs: [validate]\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+        "  build:\n"
+        "    needs: [validate, checks]\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+        "  release:\n"
+        "    needs: [build]\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+        "  publish:\n"
+        "    needs: [release]\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+        "  bump:\n"
+        "    needs: [publish]\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+    )
+    _git(workspace, "add", "-A")
+    _git(workspace, "commit", "-m", "add release workflow")
+
+
 def _release_ns(**overrides: object) -> argparse.Namespace:
     """Build a release Namespace with sensible defaults."""
     defaults: dict[str, object] = {
@@ -187,6 +223,28 @@ class TestCmdRelease:
         assert "Pipeline" in out
 
     def test_skip_to_unknown_job_exits(self, workspace: Path) -> None:
+        with pytest.raises(SystemExit):
+            cmd_release(_release_ns(skip_to="nonexistent-job"))
+
+    def test_skip_to_with_custom_workflow_job(
+        self, workspace: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _write_workflow_with_checks(workspace)
+        cmd_release(_release_ns(skip_to="build", json_output=True, dry_run=False))
+        out = capsys.readouterr().out
+        parsed = json.loads(out)
+        assert "checks" in parsed["skip"]
+
+    def test_skip_to_targets_custom_job(
+        self, workspace: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _write_workflow_with_checks(workspace)
+        cmd_release(_release_ns(skip_to="checks"))
+        out = capsys.readouterr().out
+        assert "Pipeline" in out
+
+    def test_skip_to_unknown_job_exits_with_workflow(self, workspace: Path) -> None:
+        _write_workflow_with_checks(workspace)
         with pytest.raises(SystemExit):
             cmd_release(_release_ns(skip_to="nonexistent-job"))
 

@@ -86,3 +86,29 @@ def topo_layers(packages: dict[str, Package]) -> dict[str, int]:
         raise RuntimeError(msg)
 
     return layers
+
+
+def compute_ancestors(dag: dict[str, list[str]], target: str) -> set[str]:
+    """Return the set of strict ancestors of *target* in a dependency DAG.
+
+    An ancestor is any node reachable by walking backward through
+    dependency (``needs``) edges. *target* itself is not included.
+
+    Args:
+        dag: mapping of node name to its dependencies (names it depends ON).
+        target: the node whose ancestors to compute.
+
+    Raises:
+        KeyError: if *target* is not a key in *dag*.
+    """
+    if target not in dag:
+        raise KeyError(target)
+
+    ancestors: set[str] = set()
+    queue = list(dag[target])
+    while queue:
+        node = queue.pop(0)
+        if node not in ancestors and node in dag:
+            ancestors.add(node)
+            queue.extend(dag[node])
+    return ancestors
