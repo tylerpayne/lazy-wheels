@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from uv_release.intents.build import BuildIntent
-from uv_release.commands import BuildCommand, ShellCommand
+from uv_release.commands import BuildCommand, DownloadWheelsCommand, ShellCommand
 from uv_release.states.changes import Changes
 from uv_release.states.release_tags import ReleaseTags
 from uv_release.types import (
@@ -128,3 +128,65 @@ class TestBuildPlanNoChanges:
             release_tags=ReleaseTags(),
         )
         assert result.jobs == []
+
+
+# ---------------------------------------------------------------------------
+# Build-only dependencies
+# ---------------------------------------------------------------------------
+
+
+class TestBuildOnlyDeps:
+    """Workspace deps without release tags are built but not released."""
+
+    def test_unreleased_dep_gets_build_command(self) -> None:
+        dep = make_package("dep")
+        app = make_package("app", dependencies=["dep"])
+        ws = make_workspace({"app": app, "dep": dep})
+        changes = make_changes_for({"app": app})
+        intent = BuildIntent()
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=make_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
+        job = result.jobs[0]
+        build_cmds = [c for c in job.commands if isinstance(c, BuildCommand)]
+        built_names = {c.package.name for c in build_cmds}
+        assert built_names == {"app", "dep"}
+
+    def test_released_dep_gets_download_not_build(self) -> None:
+        dep = make_package("dep", version="1.0.0")
+        app = make_package("app", dependencies=["dep"])
+        ws = make_workspace({"app": app, "dep": dep})
+        changes = make_changes_for({"app": app})
+        intent = BuildIntent()
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=make_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(tags={"dep": "dep/v1.0.0"}),
+        )
+        job = result.jobs[0]
+        build_cmds = [c for c in job.commands if isinstance(c, BuildCommand)]
+        dl_cmds = [c for c in job.commands if isinstance(c, DownloadWheelsCommand)]
+        built_names = {c.package.name for c in build_cmds}
+        assert built_names == {"app"}
+        assert len(dl_cmds) == 1
+
+    def test_build_only_dep_ordered_before_release(self) -> None:
+        dep = make_package("dep")
+        app = make_package("app", dependencies=["dep"])
+        ws = make_workspace({"app": app, "dep": dep})
+        changes = make_changes_for({"app": app})
+        intent = BuildIntent()
+        result = intent.plan(
+            workspace=ws,
+            uvr_state=make_uvr_state(),
+            changes=Changes(items=tuple(changes)),
+            release_tags=ReleaseTags(),
+        )
+        job = result.jobs[0]
+        build_cmds = [c for c in job.commands if isinstance(c, BuildCommand)]
+        labels = [c.label for c in build_cmds]
+        assert labels.index("Build dep (layer 0)") < labels.index("Build app (layer 1)")

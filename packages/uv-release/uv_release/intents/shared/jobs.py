@@ -26,8 +26,12 @@ def compute_build_job(
     if not releases:
         return Job(name="build")
 
-    release_packages = {name: releases[name].package for name in releases}
-    layers = topo_layers(release_packages)
+    build_only = _find_build_only_deps(workspace.packages, releases, release_tags)
+    all_build_packages: dict[str, Package] = {
+        **{name: releases[name].package for name in releases},
+        **build_only,
+    }
+    layers = topo_layers(all_build_packages)
 
     by_layer: dict[int, list[str]] = defaultdict(list)
     for name, layer in layers.items():
@@ -44,7 +48,7 @@ def compute_build_job(
     dep_tag_map: dict[str, str] = {}
     dep_packages: list[Package] = []
     for name, pkg in workspace.packages.items():
-        if name in releases:
+        if name in releases or name in build_only:
             continue
         tag = release_tags.tags.get(name)
         if tag:
@@ -61,17 +65,40 @@ def compute_build_job(
 
     for layer_idx in sorted(by_layer.keys()):
         for pkg_name in sorted(by_layer[layer_idx]):
-            release = releases[pkg_name]
+            if pkg_name in releases:
+                package = releases[pkg_name].package
+            else:
+                package = build_only[pkg_name]
             pkg_runners = runners.get(pkg_name, [])
             commands.append(
                 BuildCommand(
                     label=f"Build {pkg_name} (layer {layer_idx})",
-                    package=release.package,
+                    package=package,
                     runners=pkg_runners,
                 )
             )
 
     return Job(name="build", commands=commands)
+
+
+def _find_build_only_deps(
+    packages: dict[str, Package],
+    releases: dict[str, Release],
+    release_tags: ReleaseTags,
+) -> dict[str, Package]:
+    """Find transitive workspace deps that must be built but not released."""
+    needed: set[str] = set()
+    queue = list(releases.keys())
+    while queue:
+        current = queue.pop(0)
+        pkg = packages.get(current)
+        if pkg is None:
+            continue
+        for dep in pkg.dependencies:
+            if dep in packages and dep not in needed and dep not in releases:
+                needed.add(dep)
+                queue.append(dep)
+    return {name: packages[name] for name in needed if name not in release_tags.tags}
 
 
 def compute_download_commands(*, reuse_run: str = "") -> list[Command]:
