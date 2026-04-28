@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from uv_release.utils.graph import topo_layers, topo_sort
+from uv_release.utils.graph import compute_ancestors, topo_layers, topo_sort
 from uv_release.types import Package, Version
 
 
@@ -80,3 +80,56 @@ class TestTopoSort:
     def test_cycle_raises(self) -> None:
         with pytest.raises(RuntimeError, match="cycle"):
             topo_sort({"a": ["b"], "b": ["a"]})
+
+
+class TestComputeAncestors:
+    """Tests for compute_ancestors (strict ancestor set via BFS)."""
+
+    def test_linear_chain(self) -> None:
+        dag = {
+            "validate": [],
+            "build": ["validate"],
+            "release": ["build"],
+            "publish": ["release"],
+            "bump": ["publish"],
+        }
+        assert compute_ancestors(dag, "release") == {"validate", "build"}
+
+    def test_custom_job_in_chain(self) -> None:
+        dag = {
+            "validate": [],
+            "checks": ["validate"],
+            "build": ["validate", "checks"],
+            "release": ["build"],
+        }
+        assert compute_ancestors(dag, "build") == {"validate", "checks"}
+
+    def test_root_node_has_no_ancestors(self) -> None:
+        dag = {"validate": [], "build": ["validate"]}
+        assert compute_ancestors(dag, "validate") == set()
+
+    def test_target_not_in_dag_raises(self) -> None:
+        dag = {"validate": [], "build": ["validate"]}
+        with pytest.raises(KeyError):
+            compute_ancestors(dag, "nonexistent")
+
+    def test_diamond_dag(self) -> None:
+        dag = {
+            "validate": [],
+            "build": ["validate"],
+            "scan": ["validate"],
+            "release": ["build", "scan"],
+        }
+        assert compute_ancestors(dag, "release") == {"validate", "build", "scan"}
+
+    def test_parallel_branch_not_included(self) -> None:
+        """A job on a parallel branch is not an ancestor of the target."""
+        dag = {
+            "validate": [],
+            "build": ["validate"],
+            "scan": ["build"],
+            "release": ["build"],
+            "publish": ["release"],
+        }
+        assert compute_ancestors(dag, "release") == {"validate", "build"}
+        assert "scan" not in compute_ancestors(dag, "release")
