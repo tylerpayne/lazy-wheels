@@ -191,11 +191,12 @@ uvr workflow install [options]
 
 | Flag | Description |
 |---|---|
-| `--force` | Overwrite existing workflow. |
-| `--upgrade` | Upgrade existing workflow via three-way merge. |
-| `--base-only` | Only update baseline copy. |
+| `--force` | Overwrite existing workflow with the bundled template. Records the new `workflow-version`. |
+| `--upgrade` | Upgrade existing workflow via three-way merge against the previously-recorded `workflow-version`. |
 | `--workflow-dir PATH` | Workflow directory (default: `.github/workflows`). |
 | `--editor CMD` | Editor for conflict resolution. |
+
+Without flags, `install` scaffolds the workflow if missing and errors if it already exists. `--upgrade` requires `[tool.uvr.config].workflow-version` to be set (recorded automatically by previous `install` runs).
 
 ## `uvr skill install`
 
@@ -207,10 +208,11 @@ uvr skill install [options]
 
 | Flag | Description |
 |---|---|
-| `--force` | Overwrite existing skills. |
-| `--upgrade` | Upgrade via three-way merge. |
-| `--base-only` | Only update baseline copy. |
+| `--force` | Overwrite existing skill files with the bundled templates. Records the new `skill-version`. |
+| `--upgrade` | Three-way merge each existing skill file against the previously-recorded `skill-version`. |
 | `--editor CMD` | Editor for conflict resolution. |
+
+Without flags, `install` scaffolds any missing skill files. Files that already exist are left untouched unless `--upgrade` or `--force` is passed. `--upgrade` requires `[tool.uvr.config].skill-version` to be set.
 
 ## `uvr clean`
 

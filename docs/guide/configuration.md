@@ -228,7 +228,13 @@ uvr workflow validate --diff         # also show the diff against the template
 uvr workflow install                              # scaffold the workflow
 uvr workflow install --upgrade                    # three-way merge with your customizations
 uvr workflow install --upgrade --editor code      # resolve conflicts in VS Code
-uvr workflow install --base-only                  # inspect merge bases without merging
+uvr workflow install --force                      # overwrite with the bundled template
 ```
 
-The three-way merge compares the merge base (defaults from the `uvr` version that generated the file), your current customized file, and the new defaults from the current `uvr` version. Your custom jobs survive upgrades because the merge preserves user additions.
+The three-way merge compares three sources:
+
+1. **Base** — the bundled template from the `uvr` version recorded in `[tool.uvr.config].workflow-version` (the version you last accepted). Fetched on demand via `uvx --from uv-release=={version}`.
+2. **Current** — your current customized file on disk.
+3. **Incoming** — the bundled template from the `uvr` version you have installed now.
+
+Your custom jobs survive upgrades because the merge preserves user additions. `workflow-version` is updated only after a successful merge.

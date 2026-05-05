@@ -12,19 +12,38 @@ For first-time setup, scaffold the workflow with `uvr workflow init` (see `refer
 
 If the project has existing CI checks (tests, linting, etc.) that aren't yet wired into the release workflow, see `references/custom-jobs.md` before your first release.
 
-## 1. Branch
+## 1. Preview from main
 
-You must not be on main. If you are, create a release branch and switch to it.
+Before branching, run a read-only preview to see what would be released. This tells you which packages changed and helps you pick a meaningful branch name.
+
+```bash
+uvr release --dry-run
+```
+
+`--dry-run` exits without prompting and never modifies state. (It also short-circuits the strip-dev fixup, so if you see "Dev versions need .devN stripped" you'll need to wait until step 3 to see the full plan.)
 
 The working tree must be clean. Run `git status`. If dirty, ask the user whether to stash, commit, or abort.
 
-## 2. Preview Changes
+## 2. Branch
+
+Create a release branch named after **what's in the release**, not the version. The version isn't known until the release plan resolves, and content-named branches read better in git history (`release/parser-fix` over `release/0.4.2`).
+
+```bash
+git checkout -b release/<contentful-name>
+git push -u origin release/<contentful-name>
+```
+
+Push immediately so the local-vs-remote check in step 3 passes.
+
+## 3. Plan and Bump
 
 ```bash
 uvr release
 ```
 
 This prints the plan and prompts `Proceed? [y/N]`. Decline (`N`) to preview without dispatching. See `references/cmd-release.md` for all flags.
+
+If `uvr release` says "Dev versions need .devN stripped before release" it will offer to apply the strip-dev fix. Accept (`y`) — the fix bumps to the release version, syncs the lockfile, commits, and pushes. The plan re-resolves and shows the actual proceed prompt.
 
 Present the output to the user. For each changed package, show:
 - The package name and its new version
@@ -36,7 +55,7 @@ Ask the user whether any packages need a minor bump instead of patch. Patch is t
 uvr bump --packages <package-name> --minor
 ```
 
-## 3. Review
+## 4. Review
 
 For each changed package, verify its public API against its docs:
 
@@ -46,7 +65,7 @@ For each changed package, verify its public API against its docs:
    - Do all docs (READMEs, docs/, etc) accurately reflect the public API and internal functionality of the package? Audit natural language descriptions, code examples, and references.
 3. Fix any discrepancies before continuing
 
-## 4. Release Notes
+## 5. Release Notes
 
 For each changed package, write release notes to `.uvr/release-notes/<pkg>/<version>.md`. This directory is gitignored — notes are ephemeral and consumed at release time.
 
@@ -84,7 +103,7 @@ uvr release \
 
 If no `--release-notes` flag is provided, the release gets a minimal header only.
 
-## 5. Dispatch
+## 6. Dispatch
 
 ```bash
 git add -A
@@ -104,7 +123,7 @@ git push
 uvr release
 ```
 
-## 6. Monitor
+## 7. Monitor
 
 ```bash
 gh run list --workflow=release.yml --limit=1
@@ -128,7 +147,7 @@ uvr release
 
 If a later job failed but earlier jobs succeeded, use `--skip-to` and `--reuse-*` flags to resume without re-running what already passed. See `references/troubleshooting.md#resuming-a-partially-failed-release` for the full decision tree.
 
-## 7. Verify
+## 8. Verify
 
 ```bash
 gh release list --limit 15       # confirm per-package releases exist
@@ -136,7 +155,7 @@ gh release list --limit 15       # confirm per-package releases exist
 
 If something goes wrong, see `references/troubleshooting.md`.
 
-## 8. Merge
+## 9. Merge
 
 **ALWAYS** merge stable release branches back to main:
 
@@ -163,16 +182,17 @@ rm -rf .uvr/release-notes/
 
 User says: "Let's release the new changes"
 
-1. Verify not on main, create a release branch
-2. Run `uvr release`, decline the prompt — shows `my-lib` is dirty (2 commits: added export, fixed parser)
-3. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
-4. User says "yes, bump minor" — run `uvr bump --packages my-lib --minor`
-5. Review docstrings and docs against current API — new `Parser` class exported but not documented. Fix docs.
-6. Draft release notes: "Added `Parser` class for structured input handling. Fixed crash on empty input." Present to user for approval.
-7. Write approved notes to `.uvr/release-notes/my-lib/0.3.0.md`
-8. Commit, push, run `uvr release --release-notes my-lib @.uvr/release-notes/my-lib/0.3.0.md` and confirm
-9. Monitor workflow, verify GitHub releases
-10. Merge release branch back to main, clean up `.uvr/release-notes/`
+1. Run `uvr release --dry-run` from main — shows `my-lib` is dirty (2 commits: added export, fixed parser)
+2. Create branch `release/parser-export` and push it
+3. Run `uvr release`, decline the prompt
+4. Present to user: "my-lib will bump 0.2.1 -> 0.2.2 (patch). It has a new public export — should this be a minor bump instead?"
+5. User says "yes, bump minor" — run `uvr bump --packages my-lib --minor`
+6. Review docstrings and docs against current API — new `Parser` class exported but not documented. Fix docs.
+7. Draft release notes: "Added `Parser` class for structured input handling. Fixed crash on empty input." Present to user for approval.
+8. Write approved notes to `.uvr/release-notes/my-lib/0.3.0.md`
+9. Commit, push, run `uvr release --release-notes my-lib @.uvr/release-notes/my-lib/0.3.0.md` and confirm
+10. Monitor workflow, verify GitHub releases
+11. Merge release branch back to main, clean up `.uvr/release-notes/`
 
 ## References
 
