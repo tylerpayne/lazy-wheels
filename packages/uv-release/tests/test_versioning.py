@@ -188,13 +188,18 @@ class TestComputeBumpedVersion:
         with pytest.raises(ValueError, match="Cannot bump a from post-release"):
             compute_bumped_version(Version.parse("1.0.0.post1"), BumpKind.ALPHA)
 
-    def test_promote_strips_dev_from_alpha(self) -> None:
-        v = compute_bumped_version(Version.parse("0.1.0a2.dev0"), BumpKind.PROMOTE)
-        assert v.raw == "0.1.0a2"
+    # --- Promote: advance to next release stage ---
+    def test_promote_dev_to_alpha(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0.dev3"), BumpKind.PROMOTE)
+        assert v.raw == "1.0.0a0.dev0"
 
-    def test_promote_strips_dev_from_stable(self) -> None:
-        v = compute_bumped_version(Version.parse("1.0.0.dev0"), BumpKind.PROMOTE)
-        assert v.raw == "1.0.0"
+    def test_promote_dev0_to_alpha(self) -> None:
+        v = compute_bumped_version(Version.parse("0.1.0.dev0"), BumpKind.PROMOTE)
+        assert v.raw == "0.1.0a0.dev0"
+
+    def test_promote_alpha_dev_to_beta(self) -> None:
+        v = compute_bumped_version(Version.parse("0.1.0a2.dev0"), BumpKind.PROMOTE)
+        assert v.raw == "0.1.0b0.dev0"
 
     def test_promote_alpha_to_beta(self) -> None:
         v = compute_bumped_version(Version.parse("0.1.0a2"), BumpKind.PROMOTE)
@@ -204,13 +209,58 @@ class TestComputeBumpedVersion:
         v = compute_bumped_version(Version.parse("0.1.0b1"), BumpKind.PROMOTE)
         assert v.raw == "0.1.0rc0.dev0"
 
+    def test_promote_beta_dev_to_rc(self) -> None:
+        v = compute_bumped_version(Version.parse("0.1.0b1.dev5"), BumpKind.PROMOTE)
+        assert v.raw == "0.1.0rc0.dev0"
+
     def test_promote_rc_to_final(self) -> None:
         v = compute_bumped_version(Version.parse("0.1.0rc1"), BumpKind.PROMOTE)
+        assert v.raw == "0.1.0"
+
+    def test_promote_rc_dev_to_final(self) -> None:
+        v = compute_bumped_version(Version.parse("0.1.0rc1.dev0"), BumpKind.PROMOTE)
         assert v.raw == "0.1.0"
 
     def test_promote_final_errors(self) -> None:
         with pytest.raises(ValueError, match="already a final release"):
             compute_bumped_version(Version.parse("1.0.0"), BumpKind.PROMOTE)
+
+    def test_promote_post_errors(self) -> None:
+        with pytest.raises(ValueError, match="Cannot promote post-release"):
+            compute_bumped_version(Version.parse("1.0.0.post1"), BumpKind.PROMOTE)
+
+    # --- Auto: increment last section ---
+    def test_auto_dev(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0.dev3"), BumpKind.AUTO)
+        assert v.raw == "1.0.0.dev4"
+
+    def test_auto_pre_dev(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0a2.dev0"), BumpKind.AUTO)
+        assert v.raw == "1.0.0a2.dev1"
+
+    def test_auto_alpha(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0a2"), BumpKind.AUTO)
+        assert v.raw == "1.0.0a3"
+
+    def test_auto_beta(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0b1"), BumpKind.AUTO)
+        assert v.raw == "1.0.0b2"
+
+    def test_auto_rc(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0rc2"), BumpKind.AUTO)
+        assert v.raw == "1.0.0rc3"
+
+    def test_auto_post(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0.post1"), BumpKind.AUTO)
+        assert v.raw == "1.0.0.post2"
+
+    def test_auto_stable(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0"), BumpKind.AUTO)
+        assert v.raw == "1.0.1"
+
+    def test_auto_post_dev(self) -> None:
+        v = compute_bumped_version(Version.parse("1.0.0.post1.dev3"), BumpKind.AUTO)
+        assert v.raw == "1.0.0.post1.dev4"
 
 
 class TestComputeDependencyPins:

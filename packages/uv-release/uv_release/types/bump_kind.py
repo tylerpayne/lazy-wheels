@@ -1,10 +1,10 @@
-"""The 9 version bump strategies."""
+"""Version bump strategies."""
 
 from enum import Enum
 
 
 class BumpKind(Enum):
-    """The 9 version bump strategies."""
+    """Version bump strategies."""
 
     MAJOR = "major"
     MINOR = "minor"
@@ -16,5 +16,7 @@ class BumpKind(Enum):
     DEV = "dev"
     # Strips pre/dev suffix to produce a clean release.
     STABLE = "stable"
-    # Advance to the next release stage: dev->strip, a->b, b->rc, rc->final.
+    # Advance to the next release stage: dev->a, a->b, b->rc, rc->final.
     PROMOTE = "promote"
+    # Auto-detect the last version section and increment its number.
+    AUTO = "auto"

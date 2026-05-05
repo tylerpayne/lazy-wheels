@@ -111,7 +111,9 @@ def parse_args() -> ParsedArgs:
     ver_mode.add_argument("--set", default="", dest="version_set")
     ver_mode.add_argument(
         "--bump",
-        choices=["dev", "patch", "minor", "major", "post"],
+        nargs="?",
+        const="auto",
+        choices=["auto", "dev", "patch", "minor", "major", "post"],
         default="",
         dest="bump_kind",
     )

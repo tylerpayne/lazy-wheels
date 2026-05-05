@@ -16,7 +16,7 @@ class TestVersion:
             (["--bump", "minor"], "0.2.0.dev0"),
             (["--bump", "patch"], "0.1.1.dev0"),
             (["--bump", "dev"], "0.1.0.dev1"),
-            (["--promote"], "0.1.0"),
+            (["--promote"], "0.1.0a0.dev0"),
             (["--promote", "a"], "0.1.0a0.dev0"),
             (["--promote", "b"], "0.1.0b0.dev0"),
             (["--promote", "rc"], "0.1.0rc0.dev0"),
@@ -41,9 +41,9 @@ class TestVersion:
         assert "Cannot bump post" in capsys.readouterr().err
 
     def test_pins_internal_deps(self, workspace: Path) -> None:
-        """Non-dev versions get pinned. Promote strips .dev0 -> 0.1.0."""
+        """Non-dev versions get pinned. Promote final strips .dev0 -> 0.1.0."""
         with diny.provide():
-            run_cli("version", "--promote", "--no-commit", "--no-push")
+            run_cli("version", "--promote", "final", "--no-commit", "--no-push")
         deps = read_toml(workspace / "packages" / "pkg-b" / "pyproject.toml")[
             "project"
         ]["dependencies"]
