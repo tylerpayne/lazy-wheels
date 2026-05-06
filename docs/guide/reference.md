@@ -46,7 +46,7 @@ uvr build [--all-packages] [--packages PKG [...]]
 
 ## `uvr version`
 
-Read, set, bump, or promote package versions. With no flags, displays current versions.
+Read, set, or bump package versions. With no flags, displays current versions.
 
 ```
 uvr version [options]
@@ -58,8 +58,7 @@ uvr version [options]
 |---|---|
 | *(none)* | Display current package versions. |
 | `--set VERSION` | Set all targeted packages to an explicit version string. |
-| `--bump [AXIS]` | Increment a version number. With no argument, auto-detects the last section (dev, pre-release, post, or patch) and increments it. Explicit axes: `dev`, `patch`, `minor`, `major`, `post`. |
-| `--promote [TARGET]` | Advance to the next version type. With no argument, follows: dev → alpha → beta → rc → final. Explicit targets: `a`, `alpha`, `b`, `beta`, `rc`, `final`. |
+| `--bump [AXIS]` | Increment a version number. With no argument, auto-detects the last section (dev, pre-release, post, or patch) and increments it. Explicit axes: `dev`, `patch`, `minor`, `major`, `post`, `stable`. `stable` strips pre-release and dev suffixes. |
 
 **Scope:**
 

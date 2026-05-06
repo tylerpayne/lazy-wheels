@@ -93,42 +93,8 @@ def compute_bumped_version(version: Version, bump_kind: BumpKind) -> Version:
                 msg = f"Cannot bump post from dev version: {version.raw}"
                 raise ValueError(msg)
             return Version.build(version.base, post_number=0, dev_number=0)
-        case BumpKind.ALPHA:
-            return _bump_pre(version, "a")
-        case BumpKind.BETA:
-            return _bump_pre(version, "b")
-        case BumpKind.RC:
-            return _bump_pre(version, "rc")
-        case BumpKind.PROMOTE:
-            return _promote(version)
         case BumpKind.AUTO:
             return _auto_bump(version)
-
-
-def _promote(version: Version) -> Version:
-    """Advance to the next release stage.
-
-    dev -> alpha    (0.1.0.dev3 -> 0.1.0a0.dev0)
-    alpha -> beta   (0.1.0a2 -> 0.1.0b0.dev0, 0.1.0a2.dev0 -> 0.1.0b0.dev0)
-    beta -> rc      (0.1.0b1 -> 0.1.0rc0.dev0)
-    rc -> final     (0.1.0rc1 -> 0.1.0)
-    """
-    # Check pre-release kind first so that dev-suffixed pre-releases
-    # (e.g. 0.1.0a2.dev0) promote by stage, not by stripping dev.
-    if version.pre_kind == "a":
-        return Version.build(version.base, pre_kind="b", pre_number=0, dev_number=0)
-    if version.pre_kind == "b":
-        return Version.build(version.base, pre_kind="rc", pre_number=0, dev_number=0)
-    if version.pre_kind == "rc":
-        return Version.build(version.base)
-    # Pure dev version (no pre-release): advance to alpha.
-    if version.is_dev:
-        return Version.build(version.base, pre_kind="a", pre_number=0, dev_number=0)
-    if version.post_number is not None:
-        msg = f"Cannot promote post-release {version.raw}. Bump first, then promote."
-        raise ValueError(msg)
-    msg = f"Cannot promote: {version.raw} is already a final release"
-    raise ValueError(msg)
 
 
 def _auto_bump(version: Version) -> Version:
@@ -150,38 +116,6 @@ def _auto_bump(version: Version) -> Version:
             version.base, pre_kind=version.pre_kind, pre_number=version.pre_number + 1
         )
     return Version.build(f"{version.major}.{version.minor}.{version.patch + 1}")
-
-
-def _bump_pre(version: Version, target_kind: str) -> Version:
-    # Rank order: a < b < rc. Regression (e.g. rc -> a) is forbidden.
-    _PRE_ORDER = {"a": 0, "b": 1, "rc": 2}
-
-    if version.post_number is not None:
-        msg = f"Cannot bump {target_kind} from post-release: {version.raw}"
-        raise ValueError(msg)
-
-    current_kind = version.pre_kind
-    if current_kind is not None:
-        current_rank = _PRE_ORDER.get(current_kind, -1)
-        target_rank = _PRE_ORDER[target_kind]
-        if target_rank < current_rank:
-            msg = f"Cannot go from {current_kind} to {target_kind}: {version.raw}"
-            raise ValueError(msg)
-        if target_rank == current_rank:
-            assert version.pre_number is not None
-            return Version.build(
-                version.base,
-                pre_kind=target_kind,
-                pre_number=version.pre_number + 1,
-                dev_number=0,
-            )
-        # Higher kind: reset pre number to 0.
-        return Version.build(
-            version.base, pre_kind=target_kind, pre_number=0, dev_number=0
-        )
-
-    # No existing pre: start from 0.
-    return Version.build(version.base, pre_kind=target_kind, pre_number=0, dev_number=0)
 
 
 def compute_dependency_pins(

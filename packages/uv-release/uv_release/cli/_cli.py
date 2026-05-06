@@ -97,9 +97,7 @@ def parse_args() -> ParsedArgs:
     build_p.add_argument("--packages", nargs="*")
 
     # -- version --
-    ver_p = sub.add_parser(
-        "version", help="Read, set, bump, or promote package versions."
-    )
+    ver_p = sub.add_parser("version", help="Read, set, or bump package versions.")
     ver_p.add_argument("--all-packages", action="store_true")
     ver_p.add_argument("--packages", nargs="*")
     ver_p.add_argument("--not-packages", nargs="*", default=[])
@@ -113,17 +111,9 @@ def parse_args() -> ParsedArgs:
         "--bump",
         nargs="?",
         const="auto",
-        choices=["auto", "dev", "patch", "minor", "major", "post"],
+        choices=["auto", "dev", "patch", "minor", "major", "post", "stable"],
         default="",
         dest="bump_kind",
-    )
-    ver_mode.add_argument(
-        "--promote",
-        nargs="?",
-        const="next",
-        choices=["next", "a", "alpha", "b", "beta", "rc", "final"],
-        default="",
-        dest="promote_target",
     )
 
     # -- status --
@@ -253,19 +243,6 @@ def provide_bump_type(args: ParsedArgs) -> BumpType:
     bump_kind = args.values.get("bump_kind", "") or ""
     if bump_kind:
         return BumpType(value=BumpKind(bump_kind))
-    # --promote maps to PROMOTE (auto) or a specific pre-release kind.
-    promote = args.values.get("promote_target", "") or ""
-    if promote:
-        promote_map = {
-            "next": "promote",
-            "a": "alpha",
-            "alpha": "alpha",
-            "b": "beta",
-            "beta": "beta",
-            "rc": "rc",
-            "final": "stable",
-        }
-        return BumpType(value=BumpKind(promote_map[promote]))
     # --set has no bump kind, defaults to DEV for release pipeline usage.
     return BumpType(value=BumpKind.DEV)
 
@@ -281,8 +258,6 @@ def provide_version_mode(args: ParsedArgs) -> VersionMode:
         return VersionMode(value=VersionOp.SET)
     if args.values.get("bump_kind", ""):
         return VersionMode(value=VersionOp.BUMP)
-    if args.values.get("promote_target", ""):
-        return VersionMode(value=VersionOp.PROMOTE)
     return VersionMode(value=VersionOp.READ)
 
 

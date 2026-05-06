@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Fix `ModuleNotFoundError: No module named 'yaml'` on every `uvr` invocation by declaring `pyyaml` as a runtime dependency (#20)
 
+## [uv-release v0.34.0] - 2026-05-06
+
+### Changed
+- `uvr version --bump` now accepts `stable`, which strips pre-release and dev suffixes (e.g., `1.2.3a2.dev0` to `1.2.3`). Replaces `uvr version --promote final`.
+
+### Removed
+- **BREAKING**: `uvr version --promote` and all of its targets (`a`, `alpha`, `b`, `beta`, `rc`, `final`, and no-arg auto-advance). Use `--bump stable` to finalize a pre-release; use `--set <version>` to enter or advance a pre-release cycle.
+
 ## [v0.22.0] - 2026-04-02
 
 ### Added

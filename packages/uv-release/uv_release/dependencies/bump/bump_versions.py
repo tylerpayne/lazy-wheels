@@ -14,7 +14,7 @@ from ...utils.versioning import compute_bumped_version
 
 @singleton
 class BumpVersions(Frozen):
-    """Package name -> target version (from --set, --bump, or --promote)."""
+    """Package name -> target version (from --set or --bump)."""
 
     items: dict[str, Version]
 
@@ -29,7 +29,7 @@ def provide_bump_versions(
     if version_set.value:
         target = Version.parse(version_set.value)
         return BumpVersions(items={name: target for name in build_packages.items})
-    # --bump or --promote: compute from current version and bump kind.
+    # --bump: compute from current version and bump kind.
     items: dict[str, Version] = {}
     for name, pkg in build_packages.items.items():
         items[name] = compute_bumped_version(pkg.version, bump_type.value)

@@ -1,4 +1,4 @@
-"""uvr version: read, set, bump, or promote package versions."""
+"""uvr version: read, set, or bump package versions."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def cmd_version(
     version_mode: VersionMode,
     hooks: Hooks,
 ) -> None:
-    # Read-only mode: no --set, --bump, or --promote.
+    # Read-only mode: no --set or --bump.
     if version_mode.value == VersionOp.READ:
         print()
         print("Packages")

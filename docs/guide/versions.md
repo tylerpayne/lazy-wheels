@@ -28,11 +28,9 @@ If other packages also have unreleased changes, `uvr` errors to prevent accident
 uvr version --packages pkg-alpha --bump major --force
 ```
 
-## Bump and promote
+## Bump
 
-`--bump` and `--promote` do different things. `--bump` increments a number within the current version type. `--promote` advances to the next version type.
-
-### Bump (increment N)
+`--bump` increments a section of the version.
 
 | Flag | Example | Description |
 |---|---|---|
@@ -44,23 +42,9 @@ uvr version --packages pkg-alpha --bump major --force
 | `--bump patch` | `1.2.3.dev0` → `1.2.4.dev0` | Next patch version |
 | `--bump dev` | `1.3.0.dev0` → `1.3.0.dev1` | Increment the dev number |
 | `--bump post` | `1.2.3` → `1.2.3.post0.dev0` | Enter [post-release](https://peps.python.org/pep-0440/#post-releases) cycle |
+| `--bump stable` | `1.3.0a2.dev0` → `1.3.0` | Strip pre-release and dev suffixes |
 
 With no argument, `--bump` detects the last section of the version and increments it. If the version ends in `.devN`, it bumps dev. If it ends in a pre-release like `a2`, it bumps the pre-release number. Otherwise it bumps patch.
-
-### Promote (advance type)
-
-| Flag | Example | Description |
-|---|---|---|
-| `--promote` | `1.3.0.dev0` → `1.3.0a0.dev0` | Advance to the next type (dev → alpha) |
-| `--promote` | `1.3.0a2.dev0` → `1.3.0b0.dev0` | Advance to the next type (alpha → beta) |
-| `--promote` | `1.3.0b1` → `1.3.0rc0.dev0` | Advance to the next type (beta → rc) |
-| `--promote` | `1.3.0rc1` → `1.3.0` | Advance to the next type (rc → final) |
-| `--promote a` | `1.3.0.dev0` → `1.3.0a0.dev0` | Enter alpha [pre-release](https://peps.python.org/pep-0440/#pre-releases) cycle |
-| `--promote b` | `1.3.0a2.dev0` → `1.3.0b0.dev0` | Enter beta pre-release cycle |
-| `--promote rc` | `1.3.0b1.dev0` → `1.3.0rc0.dev0` | Enter release candidate cycle |
-| `--promote final` | `1.3.0a2.dev0` → `1.3.0` | Strip pre-release markers |
-
-With no argument, `--promote` follows the chain: dev → alpha → beta → rc → final.
 
 ## Skip dependency pinning
 
@@ -98,13 +82,13 @@ Pin detection is pure. No files are modified during plan generation. If pins nee
 
 ```bash
 uvr version --bump minor          # 1.3.0.dev0
-uvr version --promote             # 1.3.0a0.dev0 (dev → alpha)
+uvr version --set 1.3.0a0.dev0    # enter alpha cycle
 uvr release                       # publishes 1.3.0a0, CI bumps to 1.3.0a1.dev0
 uvr version --bump                # 1.3.0a2.dev0 (increment dev)
 uvr release                       # publishes 1.3.0a2, CI bumps to 1.3.0a3.dev0
-uvr version --promote             # 1.3.0b0.dev0 (alpha → beta)
+uvr version --set 1.3.0b0.dev0    # advance to beta
 uvr release                       # publishes 1.3.0b0, CI bumps to 1.3.0b1.dev0
-uvr version --promote final       # 1.3.0
+uvr version --bump stable         # 1.3.0
 uvr release                       # publishes 1.3.0, CI bumps to 1.3.1.dev0
 ```
 

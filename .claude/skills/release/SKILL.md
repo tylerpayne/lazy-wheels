@@ -172,7 +172,7 @@ After merging, clean up release notes:
 rm -rf .uvr/release-notes/
 ```
 
-**DO NOT** merge pre-release branches back to main. Stay on the branch through the alpha → beta → rc → stable cycle, then merge after the stable release. See `references/pre-releases.md`.
+**DO NOT** merge pre-release branches back to main. Stay on the branch through the pre-release cycle, then merge after the stable release.
 
 **TAKE CARE** merging post-release branches back to main — they branch from an old tag, so pyproject.toml versions will conflict. You may need to accept main's versions or cherry-pick just the fix commits. See `references/post-releases.md`.
 
@@ -209,6 +209,5 @@ User says: "Let's release the new changes"
 - `references/release-plan.md` — what the release plan JSON contains
 - `references/custom-jobs.md` — how to add your own jobs to the workflow
 - `references/dev-releases.md` — publishing `.devN` versions for testing
-- `references/pre-releases.md` — alpha, beta, and release candidate versions
 - `references/post-releases.md` — correcting an already-released version
 - `references/troubleshooting.md` — common problems and fixes

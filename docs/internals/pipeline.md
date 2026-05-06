@@ -62,7 +62,7 @@ flowchart LR
 
 ### Pre-release cycle
 
-Enter a pre-release track with `uvr version --promote alpha`, iterate with `uvr release` (auto-detected as pre-release from the version string), graduate to the next kind with `uvr version --promote beta` or `--promote rc`, and exit to stable with `uvr release` from an rc version (which strips the pre-release suffix).
+Enter a pre-release track by setting an explicit version with `uvr version --set 1.0.0a0.dev0`, iterate with `uvr release` (auto-detected as pre-release from the version string), advance to the next kind with another `--set`, and exit to stable with `uvr version --bump stable` followed by `uvr release`.
 
 ```mermaid
 flowchart LR
@@ -80,18 +80,16 @@ flowchart LR
     stable("1.0.0"):::transient
     next("1.0.1.dev0"):::rest
 
-    dev0 -->|"uvr version --promote alpha"| adev
+    dev0 -->|"uvr version --set 1.0.0a0.dev0"| adev
     adev -->|"uvr release"| a0
     a0 -->|"CI bump"| a1dev
-    a1dev -->|"uvr version --promote beta"| bdev
+    a1dev -->|"uvr version --set 1.0.0b0.dev0"| bdev
     bdev -->|"uvr release"| b0
     b0 -->|"CI bump"| b1dev
-    b1dev -->|"uvr version --promote rc"| rcdev
+    b1dev -->|"uvr version --set 1.0.0rc0.dev0"| rcdev
     rcdev -->|"uvr release<br/>(stable)"| stable
     stable -->|"CI bump"| next
 ```
-
-Pre-release kind can only move forward. `a` to `b` and `b` to `rc` are valid. `rc` to `a` is rejected by `compute_bumped_version()`.
 
 ### Post-release cycle
 

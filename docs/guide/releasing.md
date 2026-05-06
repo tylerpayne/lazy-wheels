@@ -31,7 +31,7 @@ uvr version --bump minor
 uvr release
 ```
 
-Available bump types are `--bump minor`, `--bump major`, `--bump patch`, `--bump dev`, `--bump post`, `--promote alpha`, `--promote beta`, `--promote rc`, and `--promote final`. See [Managing Versions](versions.md) for the full version lifecycle.
+Available bump types are `--bump minor`, `--bump major`, `--bump patch`, `--bump dev`, `--bump post`, and `--bump stable`. See [Managing Versions](versions.md) for the full version lifecycle.
 
 ## Publish dev versions
 

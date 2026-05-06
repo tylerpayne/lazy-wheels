@@ -13,7 +13,6 @@ class VersionOp(Enum):
     READ = "read"
     SET = "set"
     BUMP = "bump"
-    PROMOTE = "promote"
 
 
 @singleton
