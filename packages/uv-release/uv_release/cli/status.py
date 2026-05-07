@@ -42,16 +42,13 @@ def cmd_status(
         # users can still tell *why* a package changed.
         if reason is None:
             status_cell = ui.badge_markup("unchanged")
-            name_cell = f"[uvr.dim]{name}[/]"
+            name_cell = name
         else:
             status_cell = ui.badge_markup("changed")
-            name_cell = f"[uvr.accent]{name}[/] [uvr.dim]({reason})[/]"
+            name_cell = f"[uvr.accent]{name}[/] ({reason})"
         rows.append([status_cell, name_cell, pkg.version.raw, diff_from])
     ui.print_table(["status", "package", "version", "diff from"], rows)
 
     if not changed_packages.reasons:
         ui.console.print()
         ui.hint("Nothing changed since last release.")
-    else:
-        ui.console.print()
-        ui.hint("Next:", "uvr release --dry-run")

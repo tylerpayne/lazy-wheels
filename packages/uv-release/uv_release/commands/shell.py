@@ -39,7 +39,7 @@ class CreateTagCommand(Command):
         )
         if check.stdout.strip() == self.tag_name:
             if self.label:
-                console.print(f"  {self.label} [uvr.dim](already exists, skipping)[/]")
+                console.print(f"  {self.label} (already exists, skipping)")
             return 0
         if self.label:
             console.print(f"  {self.label}")

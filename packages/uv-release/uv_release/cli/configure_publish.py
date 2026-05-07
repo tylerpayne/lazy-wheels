@@ -16,12 +16,11 @@ def cmd_configure_publish(publishing: UvrPublishing, job: ConfigurePublishJob) -
         ui.section("Publishing configuration ([tool.uvr.publish])")
         ui.kv(
             {
-                "index": publishing.index or "[uvr.dim](not set)[/]",
-                "environment": publishing.environment or "[uvr.dim](not set)[/]",
+                "index": publishing.index or "(not set)",
+                "environment": publishing.environment or "(not set)",
                 "trusted-publishing": str(publishing.trusted_publishing),
-                "include": ", ".join(sorted(publishing.include)) or "[uvr.dim](all)[/]",
-                "exclude": ", ".join(sorted(publishing.exclude))
-                or "[uvr.dim](none)[/]",
+                "include": ", ".join(sorted(publishing.include)) or "(all)",
+                "exclude": ", ".join(sorted(publishing.exclude)) or "(none)",
             }
         )
         return

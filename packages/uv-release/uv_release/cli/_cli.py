@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from typing import Any
@@ -64,10 +63,11 @@ class Params(Frozen):
 
 @provider(ParsedArgs)
 def parse_args() -> ParsedArgs:
-    parser = argparse.ArgumentParser(
-        prog="uvr", description="Pure DI release pipeline."
-    )
-    sub = parser.add_subparsers(dest="command")
+    from ._help import UvrArgumentParser
+
+    parser = UvrArgumentParser(prog="uvr", description="Pure DI release pipeline.")
+    # All subparsers also use the ui-rendered help via parser_class.
+    sub = parser.add_subparsers(dest="command", parser_class=UvrArgumentParser)
 
     # -- release --
     release_p = sub.add_parser("release", help="Plan and execute a release.")
@@ -474,7 +474,7 @@ def cli(params: Params, hooks: Hooks, workspace: WorkspacePackages) -> None:
             sys.exit(1)
         error(
             str(exc),
-            fixes=[cmd.label for cmd in exc.fix_job.commands if cmd.label],
+            fixes=[cmd.to_shell() for cmd in exc.fix_job.commands],
         )
         if not params.yes:
             print()

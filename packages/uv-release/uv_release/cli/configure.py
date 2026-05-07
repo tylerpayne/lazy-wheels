@@ -16,10 +16,10 @@ def cmd_configure(config: UvrConfig, job: ConfigureJob) -> None:
         ui.section("Configuration ([tool.uvr.config])")
         ui.kv(
             {
-                "latest": config.latest_package or "[uvr.dim](not set)[/]",
+                "latest": config.latest_package or "(not set)",
                 "python_version": config.python_version,
-                "include": ", ".join(sorted(config.include)) or "[uvr.dim](all)[/]",
-                "exclude": ", ".join(sorted(config.exclude)) or "[uvr.dim](none)[/]",
+                "include": ", ".join(sorted(config.include)) or "(all)",
+                "exclude": ", ".join(sorted(config.exclude)) or "(none)",
             }
         )
         return

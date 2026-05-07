@@ -84,7 +84,7 @@ class CreateReleaseCommand(Command):
 
         if not missing:
             if self.label:
-                console.print(f"  {self.label} [uvr.dim](already exists, skipping)[/]")
+                console.print(f"  {self.label} (already exists, skipping)")
             return 0
 
         if self.label:

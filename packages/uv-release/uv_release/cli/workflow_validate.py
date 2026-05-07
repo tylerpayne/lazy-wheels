@@ -23,7 +23,6 @@ def cmd_workflow_validate(
         ui.error(
             "Workflow file does not exist.",
             detail={"expected": state.file_path},
-            fixes=["uvr workflow install"],
         )
         return
 

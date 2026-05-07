@@ -1,8 +1,9 @@
-"""ErrorBlock: red `error:` summary, indented detail rows, and fix commands.
+"""ErrorBlock: red `error:` summary, indented detail rows, and a Fix section.
 
-For *expected* failures the user can act on. Always end with a `fix →`
-block so the user can copy-paste the next command. Don't use this for
-crashes — uncaught exceptions get Rich's default traceback.
+For *expected* failures the user can act on. The Fix section uses the same
+section grammar as the rest of the CLI (`Fix\\n---\\n  cmd`) so users can
+copy-paste the next commands. Don't use this for crashes — uncaught
+exceptions get Rich's default traceback.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ def error(
 
     `detail` is a key/value mapping (e.g. `{"expected": "...", "got": "..."}`)
     rendered as aligned indented pairs. `fixes` is a list of copy-pasteable
-    commands; the first gets the `fix →` lead, the rest are aligned under it.
+    commands shown under a `Fix` section header.
     """
     console.print(f"[uvr.err]error:[/] {summary}")
     if detail:
@@ -32,6 +33,10 @@ def error(
             console.print(f"  {k:<{w}}  {v}")
     if fixes:
         console.print()
-        for i, cmd in enumerate(fixes):
-            lead = "  fix" if i == 0 else "     "
-            console.print(f"{lead} [uvr.accent]→[/] {cmd}")
+        # Inline section header — we can't import ui.section() because that
+        # writes to stdout, while errors must stay on stderr.
+        title = "Fix"
+        console.print(title, style="uvr.title")
+        console.print("-" * len(title), style="uvr.rule")
+        for cmd in fixes:
+            console.print(f"  [uvr.cmd]{cmd}[/]")

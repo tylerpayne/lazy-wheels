@@ -162,9 +162,12 @@ If something goes wrong, see `references/troubleshooting.md`.
 ```bash
 git checkout main
 git pull --rebase
-git merge --no-ff <release-branch> -m "Merge <release-branch>"
+git fetch origin <release-branch>
+git merge --no-ff origin/<release-branch> -m "Merge <release-branch>"
 git push
 ```
+
+**Why `git fetch` and `origin/<release-branch>`:** the post-release bump job runs in CI and pushes a `chore: bump to next dev versions` commit (and creates the `-base` baseline tag) on the remote release branch *after* `uvr release` returns. Your local copy of the branch does not have that commit. Merging your local tip leaves main stuck at the released version instead of the next dev version, and `uvr status` will then resolve `DIFF FROM` to the previous release tag instead of the new baseline. Fetch and merge the remote tip.
 
 After merging, clean up release notes:
 

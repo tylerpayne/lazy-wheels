@@ -26,3 +26,6 @@ class SyncLockfileCommand(Command):
             console.print(f"  {self.label}")
         result = subprocess.run(["uv", "lock"])
         return result.returncode
+
+    def to_shell(self) -> str:
+        return "uv lock"

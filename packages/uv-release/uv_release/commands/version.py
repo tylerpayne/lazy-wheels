@@ -28,6 +28,9 @@ class SetVersionCommand(Command):
         path.write_text(tomlkit.dumps(doc))
         return 0
 
+    def to_shell(self) -> str:
+        return f"uv version {self.version} --directory {self.package_path}"
+
 
 class PinDepsCommand(Command):
     """Pin internal dependency versions in a package's pyproject.toml."""
@@ -54,3 +57,11 @@ class PinDepsCommand(Command):
         doc["project"]["dependencies"] = new_deps  # type: ignore[index]
         path.write_text(tomlkit.dumps(doc))
         return 0
+
+    def to_shell(self) -> str:
+        # No single shell command pins specific deps in a pyproject.toml
+        # without rewriting the table. Show a comment with the resulting pins
+        # so the user can spot what would change without us pretending it's
+        # a one-liner.
+        pins = ", ".join(self.pins.values())
+        return f"# pin in {self.package_path}/pyproject.toml: {pins}"

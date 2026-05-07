@@ -71,17 +71,19 @@ class TestErrorBlock:
         b_pos = lines[2].rindex("b")
         assert a_pos == b_pos
 
-    def test_fixes_lead_then_continuation(
+    def test_fixes_under_section_header(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         from uv_release.ui.error import error
 
         error("x", fixes=["one", "two"])
         out = capsys.readouterr().err
-        assert "  fix" in out
-        lines = [ln for ln in out.splitlines() if "→" in ln]
-        assert len(lines) == 2
-        assert "fix" not in lines[1]
+        # Fix lives under a `Fix\n---` section header; commands sit indented
+        # below as plain lines (no per-line lead).
+        assert "Fix\n---" in out
+        cmd_lines = [ln for ln in out.splitlines() if ln.startswith("  ")]
+        assert "  one" in cmd_lines
+        assert "  two" in cmd_lines
 
 
 class TestPipeline:

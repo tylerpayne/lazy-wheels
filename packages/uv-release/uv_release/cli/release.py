@@ -70,7 +70,7 @@ def cmd_release(
                 pkg.version.raw,
                 f"[b]{rel_ver.raw}[/]",
                 next_ver.raw if next_ver else "",
-                baseline.raw if baseline else "[uvr.dim](initial)[/]",
+                baseline.raw if baseline else "(initial)",
             ]
         )
     ui.print_table(["package", "current", "release", "next", "diff from"], rows)
@@ -137,7 +137,7 @@ def _print_jobs(plan: Plan, workflow_state: WorkflowState) -> None:
 
 def _print_job_status(name: str, job: Job | None, plan: Plan) -> None:
     if name in plan.skip:
-        ui.console.print(f"  {name}: [uvr.dim](skip)[/]")
+        ui.console.print(f"  {name}: (skip)")
         return
     ui.console.print(f"  [uvr.value]{name}[/]")
     if job and job.commands:
@@ -165,7 +165,7 @@ def _print_job_detail(job: Job, plan: Plan) -> None:
                 ui.console.print("      [uvr.dim]deps:[/]")
                 for b in build_deps:
                     name = b.label.removeprefix("Build ")
-                    ui.console.print(f"        {name} [uvr.dim](build)[/]")
+                    ui.console.print(f"        {name} (build)")
                 for d in downloaded_deps:
                     ui.console.print(f"        {d.tag_name}")
     elif job.name == "release":

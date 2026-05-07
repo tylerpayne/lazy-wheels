@@ -31,7 +31,7 @@ class BuildCommand(Command):
         # Skip this build if the current runner is not in the package's runner list.
         if self.runners and not self._runner_matches():
             if self.label:
-                console.print(f"  {self.label} [uvr.dim](skipped, wrong runner)[/]")
+                console.print(f"  {self.label} (skipped, wrong runner)")
             return 0
         # On a runner where this package is only a dependency (not a target),
         # output to deps/ instead of dist/.
@@ -41,7 +41,7 @@ class BuildCommand(Command):
         existing = list(Path(out_dir).glob(f"{dist_name}-*.whl"))
         if existing:
             if self.label:
-                console.print(f"  {self.label} [uvr.dim](wheel exists, skipping)[/]")
+                console.print(f"  {self.label} (wheel exists, skipping)")
             return 0
         if self.label:
             console.print(f"  {self.label}")

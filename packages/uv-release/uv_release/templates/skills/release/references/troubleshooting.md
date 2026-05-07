@@ -130,6 +130,22 @@ After merging, verify the version bumps from the bump job landed cleanly. Check 
 
 **If the merge is too messy**, an alternative is to skip the merge and cherry-pick only your pre-release commits onto main, then let the next release pick up the changes naturally.
 
+## After merging release branch, `uvr status` shows the wrong DIFF FROM
+
+After a successful release you merge the release branch back to main and `uvr status` reports `DIFF FROM` as the *previous* release tag (e.g. `v0.34.0`) instead of the new baseline (e.g. `v0.34.2.dev0-base`). Every package looks "changed" even though nothing has been touched.
+
+This happens when you merge your *local* copy of the release branch instead of fetching the remote tip first. The post-release bump job runs in CI and pushes a `chore: bump to next dev versions` commit (and creates the `-base` baseline tag) on the remote release branch *after* `uvr release` returns control to your terminal. Your local branch never sees that commit, so the merge lands the released version into main and the new baseline tag has no commit to diff against.
+
+Fix: fetch and merge the remote tip.
+
+```bash
+git fetch origin <release-branch>
+git merge --no-ff origin/<release-branch> -m "Merge post-release bump"
+git push
+```
+
+If you already merged the local tip and pushed, do the same fetch + merge after the fact — it will fast-forward or auto-merge the missing bump commit cleanly because it only touches `pyproject.toml` and `uv.lock`.
+
 ## Package shows "changed" with +0 / -0, 0 commits
 
 A package can be marked changed even with no file changes. This happens for two reasons.
