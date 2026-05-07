@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Fix `ModuleNotFoundError: No module named 'yaml'` on every `uvr` invocation by declaring `pyyaml` as a runtime dependency (#20)
+- Fix post-release bump pipeline. Baseline (`-base`) tags are now annotated so `git push --follow-tags` actually pushes them. `uv.lock` regeneration uses `uv lock` (lockfile-only) and aborts the bump on failure instead of silently committing pyproject.toml changes without the matching lock. `git pull --rebase` runs before tagging so tag refs cannot be orphaned by a rebase.
 
 ## [uv-release v0.34.0] - 2026-05-06
 
