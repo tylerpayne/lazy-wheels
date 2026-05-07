@@ -6,6 +6,7 @@ import sys
 
 from diny import inject
 
+from .. import ui
 from ..dependencies.params.workflow_params import WorkflowParams
 
 
@@ -21,5 +22,5 @@ def cmd_workflow(params: WorkflowParams) -> None:
 
             cmd_workflow_upgrade()
         case _:
-            print("Usage: uvr workflow {validate,install}")
+            ui.error("Usage: uvr workflow {validate,install}")
             sys.exit(1)

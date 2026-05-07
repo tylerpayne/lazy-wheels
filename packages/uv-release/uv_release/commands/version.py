@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
+from ..ui.console import console
 from .base import Command
 from ..utils.deps import parse_dep_name
 
@@ -20,7 +21,7 @@ class SetVersionCommand(Command):
         import tomlkit
 
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         path = Path(self.package_path) / "pyproject.toml"
         doc = tomlkit.loads(path.read_text())
         doc["project"]["version"] = self.version  # type: ignore[index]
@@ -39,7 +40,7 @@ class PinDepsCommand(Command):
         import tomlkit
 
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         path = Path(self.package_path) / "pyproject.toml"
         doc = tomlkit.loads(path.read_text())
         deps = doc["project"].get("dependencies", [])  # type: ignore[union-attr]

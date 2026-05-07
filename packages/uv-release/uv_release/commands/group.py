@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -18,12 +19,12 @@ class CommandGroup(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         if self.needs_confirmation:
             try:
                 answer = input("    Execute? [y/N] ").strip().lower()
             except (EOFError, KeyboardInterrupt):
-                print()
+                console.print()
                 return 0
             if answer != "y":
                 return 0

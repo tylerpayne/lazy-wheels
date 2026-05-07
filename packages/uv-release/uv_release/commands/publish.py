@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -19,12 +20,14 @@ class PublishToIndexCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         # Glob for wheels matching this package in the dist directory.
         dist_name = self.package_name.replace("-", "_")
         wheels = list(Path(self.dist_dir).glob(f"{dist_name}-*.whl"))
         if not wheels:
-            print(f"    No wheels found for {self.package_name} in {self.dist_dir}")
+            console.print(
+                f"    No wheels found for {self.package_name} in {self.dist_dir}"
+            )
             return 1
         args = ["uv", "publish"]
         if self.index:
@@ -35,11 +38,11 @@ class PublishToIndexCommand(Command):
             stderr = result.stderr or ""
             # PyPI rejects duplicate uploads. Treat as success on re-run.
             if "already exists" in stderr or "File already exists" in stderr:
-                print("    Already published, skipping")
+                console.print("    Already published, skipping")
                 return 0
             # Print stderr for real failures.
             if stderr:
-                print(stderr, end="")
+                console.print(stderr, end="")
         if result.stdout:
-            print(result.stdout, end="")
+            console.print(result.stdout, end="")
         return result.returncode

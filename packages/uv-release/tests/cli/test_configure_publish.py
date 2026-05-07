@@ -15,7 +15,8 @@ class TestConfigurePublish:
         with diny.provide():
             run_cli("configure", "publish")
         out = capsys.readouterr().out
-        assert "index: (not set)" in out
+        # KV grammar: "key  value" (space-aligned, no colon).
+        assert "index" in out and "(not set)" in out
 
     def test_set_index(self, workspace: Path) -> None:
         with diny.provide():

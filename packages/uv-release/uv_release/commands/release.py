@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -32,7 +33,7 @@ class CreateReleaseCommand(Command):
             return self._upload_missing_assets()
 
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         args = [
             "gh",
             "release",
@@ -83,11 +84,11 @@ class CreateReleaseCommand(Command):
 
         if not missing:
             if self.label:
-                print(f"  {self.label} (already exists, skipping)")
+                console.print(f"  {self.label} [uvr.dim](already exists, skipping)[/]")
             return 0
 
         if self.label:
-            print(f"  {self.label} (uploading {len(missing)} missing assets)")
+            console.print(f"  {self.label} (uploading {len(missing)} missing assets)")
         args = ["gh", "release", "upload", self.tag_name, "--clobber", *missing]
         result = subprocess.run(args)
         return result.returncode

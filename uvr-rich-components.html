@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>uvr — Rich components</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink:        #1a1815;
+    --ink-2:      #2c2925;
+    --paper:      #f5f1e8;
+    --paper-2:    #ebe5d6;
+    --paper-3:    #ddd5c0;
+    --muted:      #6b6357;
+    --uv:         #8b5cf6;
+    --uv-deep:    #6d28d9;
+    --uv-soft:    #ddd6fe;
+    --hl:         #facc15;
+    --hl-deep:    #ca8a04;
+    --hl-soft:    #fef9c3;
+
+    --term-bg:    #0d0c0a;
+    --term-fg:    #d6d0c1;
+    --term-mute:  #6b6357;
+    --term-dim:   #4a4640;
+
+    --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+    --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 64px 120px;
+  }
+
+  /* corner labels like the design system */
+  header.head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 32px;
+  }
+  header .right { text-align: right; color: var(--muted); }
+
+  h1.title {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 42px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  h1.title .accent { color: var(--uv-deep); }
+  h1.title .hl { background: var(--hl-soft); border-bottom: 2px solid var(--hl-deep); padding: 0 4px; }
+  .lede {
+    max-width: 760px;
+    font-size: 16px; line-height: 1.55;
+    color: var(--ink-2);
+    margin: 0 0 32px;
+  }
+
+  hr.ascii {
+    border: none;
+    height: 14px;
+    background-image: repeating-linear-gradient(to right, var(--ink) 0 6px, transparent 6px 12px);
+    background-size: 12px 1px;
+    background-repeat: repeat-x;
+    background-position: 0 50%;
+    margin: 36px 0;
+  }
+
+  /* ─── component card ─── */
+  .card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    margin-bottom: 28px;
+  }
+  .card .hd {
+    grid-column: 1 / -1;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--ink);
+    background: var(--paper-2);
+    display: flex; align-items: baseline; gap: 14px;
+    font-family: var(--mono);
+  }
+  .card .hd .num {
+    font-size: 11px; font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+  }
+  .card .hd .name {
+    font-size: 18px; font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .card .hd .rich {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+  .card .hd .rich code {
+    color: var(--uv-deep);
+    background: var(--paper);
+    padding: 1px 5px;
+    border: 1px solid var(--paper-3);
+  }
+
+  .card .preview {
+    background: var(--term-bg);
+    color: var(--term-fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    padding: 18px 22px;
+    border-right: 1px solid var(--ink);
+    white-space: pre-wrap;
+    overflow: auto;
+  }
+
+  .card .meta {
+    padding: 18px 22px;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    background: var(--paper);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .card .meta h4 {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink);
+    margin: 0 0 6px;
+    font-weight: 500;
+  }
+  .card .meta .api {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: #161310;
+    color: #d6d0c1;
+    padding: 12px 14px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    border: 1px solid var(--ink);
+  }
+  .card .meta .api .kw   { color: #c4b5fd; }
+  .card .meta .api .fn   { color: #facc15; }
+  .card .meta .api .str  { color: #67e8f9; }
+  .card .meta .api .com  { color: #6b6357; }
+  .card .meta .api .num  { color: #f8c177; }
+  .card .meta ul { margin: 0; padding-left: 18px; }
+  .card .meta li { margin: 2px 0; }
+  .card .meta b  { color: var(--ink); font-weight: 600; }
+
+  /* ANSI substitutes inside .preview */
+  .a-uv     { color: #c4b5fd; }
+  .a-uv-d   { color: #8b5cf6; }
+  .a-hl     { color: #facc15; }
+  .a-hl-d   { color: #eab308; }
+  .a-fg     { color: var(--term-fg); }
+  .a-mute   { color: var(--term-mute); }
+  .a-dim    { color: var(--term-dim); }
+  .a-ok     { color: #4ade80; }
+  .a-err    { color: #f87171; }
+  .a-info   { color: #93c5fd; }
+  .a-cyan   { color: #67e8f9; }
+  .a-bold   { font-weight: 700; }
+
+  /* section heading */
+  h2.sec {
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink);
+    margin: 48px 0 16px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 12px;
+  }
+  h2.sec::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-image: repeating-linear-gradient(to right, var(--ink) 0 4px, transparent 4px 8px);
+  }
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin: 24px 0 12px;
+  }
+  .summary .row {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--paper-3);
+    background: var(--paper);
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  .summary .row .n  { color: var(--muted); width: 28px; }
+  .summary .row .nm { color: var(--ink); font-weight: 600; }
+  .summary .row .by { margin-left: auto; color: var(--uv-deep); font-size: 11px; }
+
+  /* full release flow */
+  .flow {
+    background: var(--term-bg);
+    color: var(--term-fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    padding: 22px 26px;
+    border: 1px solid var(--ink);
+    white-space: pre-wrap;
+  }
+  .flow .step-mark {
+    display: inline-block;
+    background: var(--hl);
+    color: var(--ink);
+    padding: 0 6px;
+    margin-right: 8px;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .flow-grid {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 0;
+    border: 1px solid var(--ink);
+    margin: 16px 0 0;
+  }
+  .flow-grid .annot {
+    background: var(--paper);
+    padding: 22px 20px;
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    border-left: 1px solid var(--ink);
+  }
+  .flow-grid .annot .step {
+    display: flex; gap: 10px; margin-bottom: 14px;
+  }
+  .flow-grid .annot .step .mk {
+    background: var(--hl);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .flow-grid .annot .step b { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+
+  /* status pill table */
+  .status-tbl {
+    display: grid;
+    grid-template-columns: 140px 1fr 140px;
+    border: 1px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    margin-top: 8px;
+  }
+  .status-tbl > div {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--paper-3);
+  }
+  .status-tbl .h {
+    background: var(--paper-2);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--ink);
+  }
+  .pill {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 1px 8px;
+    background: var(--term-bg);
+    display: inline-block;
+  }
+  .pill.changed   { color: #facc15; }
+  .pill.unchanged { color: #6b6357; }
+  .pill.stale     { color: #f87171; }
+  .pill.clean     { color: #4ade80; }
+  .pill.created   { color: #4ade80; }
+  .pill.updated   { color: #4ade80; }
+
+  /* footnote */
+  .foot {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 28px;
+    border-top: 1px solid var(--paper-3);
+    padding-top: 14px;
+  }
+  .foot b { color: var(--ink); font-weight: 600; }
+
+  /* a small "what rich gives you" callout */
+  .callout {
+    background: var(--uv-soft);
+    border: 1px solid var(--uv);
+    padding: 14px 18px;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink);
+    margin: 16px 0 0;
+  }
+  .callout b { color: var(--uv-deep); }
+  .callout code {
+    font-family: var(--mono);
+    background: white;
+    padding: 1px 5px;
+    border: 1px solid var(--paper-3);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="head">
+    <div>uvr · component library</div>
+    <div class="right">v0.1 sketch · python + rich</div>
+  </header>
+
+  <h1 class="title">Build it from a small <span class="accent">vocabulary</span> <span class="hl">of primitives.</span></h1>
+  <p class="lede">
+    Everything in the uvr terminal is composed of ~10 reusable components. Most map to a Rich primitive you'll
+    style; two or three are worth writing yourself so the visual grammar (the bold-magenta header + hyphen rule,
+    the ASCII progress bar) stays consistent across every command. Below: each primitive in isolation, its API
+    shape, and what Rich gives you for free.
+  </p>
+
+  <div class="callout">
+    <b>The big idea:</b> wrap Rich's <code>Console</code> in your own <code>uvr.ui</code> module that exposes these
+    components as functions. Every command (<code>plan</code>, <code>release</code>, <code>pin</code>) calls only your wrappers — never
+    Rich directly. That way the design stays consistent and you can swap Rich out later if needed.
+  </div>
+
+  <!-- summary index -->
+  <h2 class="sec">Inventory</h2>
+  <div class="summary">
+    <div class="row"><span class="n">01</span><span class="nm">Section</span><span class="by">custom · text + Rule</span></div>
+    <div class="row"><span class="n">02</span><span class="nm">ProgressLine</span><span class="by">rich.progress</span></div>
+    <div class="row"><span class="n">03</span><span class="nm">Table</span><span class="by">rich.table (no box)</span></div>
+    <div class="row"><span class="n">04</span><span class="nm">StatusBadge</span><span class="by">styled Text</span></div>
+    <div class="row"><span class="n">05</span><span class="nm">Confirm</span><span class="by">rich.prompt</span></div>
+    <div class="row"><span class="n">06</span><span class="nm">Pipeline</span><span class="by">custom · indent + arrow</span></div>
+    <div class="row"><span class="n">07</span><span class="nm">ErrorBlock</span><span class="by">styled Text</span></div>
+    <div class="row"><span class="n">08</span><span class="nm">KV (aligned pairs)</span><span class="by">rich.columns / pad</span></div>
+    <div class="row"><span class="n">09</span><span class="nm">Hint / Footer</span><span class="by">styled Text · dim</span></div>
+    <div class="row"><span class="n">10</span><span class="nm">Banner</span><span class="by">custom · one-liner</span></div>
+    <div class="row"><span class="n">11</span><span class="nm">Spinner</span><span class="by">rich.status · custom glyphs</span></div>
+  </div>
+
+  <hr class="ascii" />
+
+  <!-- ─────────────────────── 01. Section ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">01</span><span class="name">Section</span>
+      <span class="rich">rich: <code>Text</code> + manual hyphen rule</span>
+    </div>
+    <div class="preview"><span class="a-uv-d a-bold">Planning</span>
+<span class="a-mute">--------</span>
+  Discovered 4 packages
+  Resolved 4 baselines</div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        The signature uvr move: <b>bold magenta title</b>, then a hyphen rule the same length on the next line, then
+        body text indented two spaces. Used to open every distinct phase of a command.
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">section</span>(title: <span class="kw">str</span>) -> <span class="kw">None</span>:
+    console.print(title, style=<span class="str">"bold bright_magenta"</span>)
+    console.print(<span class="str">"-"</span> * <span class="fn">len</span>(title), style=<span class="str">"dim"</span>)</div>
+      <div>
+        <h4>Why custom</h4>
+        Rich's <code>Rule</code> uses Unicode box characters by default. We want a <b>literal hyphen</b>, equal-length to
+        the title — that's what makes it look like <code>--help</code> output.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 02. ProgressLine ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">02</span><span class="name">ProgressLine</span>
+      <span class="rich">rich: <code>Progress</code> w/ custom columns</span>
+    </div>
+    <div class="preview">  |<span class="a-uv">##########</span>| Discovered 3 packages    <span class="a-mute">9ms</span>
+  |<span class="a-uv">##########</span>| Resolved 3 baselines     <span class="a-mute">57µs</span>
+  |<span class="a-uv">#####</span><span class="a-dim">-----</span>| Detected 2 changed       <span class="a-mute">4ms</span>
+  |<span class="a-uv">###</span><span class="a-dim">-------</span>| Computed versions        <span class="a-mute">2ms</span>
+  |<span class="a-dim">----------</span>| Generated 2 release notes <span class="a-mute">625ns</span></div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Fixed-10-cell ASCII bar (<code>|##---|</code>), label, then a right-aligned timing in dim. Use one per discrete unit
+        of work; let them stack vertically inside a <b>Section</b>.
+      </div>
+      <div class="api"><span class="kw">from</span> rich.progress <span class="kw">import</span> Progress, BarColumn, TextColumn, TimeElapsedColumn
+
+bar = BarColumn(
+    bar_width=<span class="num">10</span>,
+    complete_style=<span class="str">"bright_magenta"</span>,
+    finished_style=<span class="str">"bright_magenta"</span>,
+)
+
+<span class="kw">with</span> Progress(
+    TextColumn(<span class="str">"  |"</span>), bar, TextColumn(<span class="str">"|"</span>),
+    TextColumn(<span class="str">"{task.description}"</span>),
+    TimeElapsedColumn(),
+    console=console, transient=<span class="kw">False</span>,
+) <span class="kw">as</span> p:
+    t = p.add_task(<span class="str">"Discovered 3 packages"</span>, total=<span class="num">3</span>)
+    <span class="com"># ... advance as work happens</span></div>
+      <div>
+        <h4>Tip</h4>
+        Override <code>BarColumn</code>'s glyphs to <code>#</code> and <code>-</code> via subclass — Rich's default is Unicode blocks (▰▱).
+        That single override is what makes uvr's bars look like uvr's bars.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 03. Table ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">03</span><span class="name">Table</span>
+      <span class="rich">rich: <code>Table(box=None, pad_edge=False)</code></span>
+    </div>
+    <div class="preview">  STATUS     PACKAGE  VERSION       PREVIOUS  CHANGES   COMMITS
+  <span class="a-hl">changed</span>    <span class="a-uv">my-core</span>  0.1.0 → <span class="a-bold">0.2.0</span>  0.1.0     feat,fix      12
+  <span class="a-hl">changed</span>    <span class="a-uv">my-auth</span>  0.1.0 → <span class="a-bold">0.1.1</span>  0.1.0     fix            4
+  <span class="a-mute">unchanged</span>  <span class="a-mute">my-api</span>   0.4.2         0.4.2     —              —
+  <span class="a-mute">unchanged</span>  <span class="a-mute">my-cli</span>   1.0.0         1.0.0     —              —</div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Fixed-width column table, <b>no borders</b>, header row in dim caps. Padding is spaces only. Rich does
+        column sizing for you — just make sure to disable the box.
+      </div>
+      <div class="api"><span class="kw">from</span> rich.table <span class="kw">import</span> Table
+
+t = Table(box=<span class="kw">None</span>, pad_edge=<span class="kw">False</span>, show_edge=<span class="kw">False</span>,
+          header_style=<span class="str">"dim"</span>, padding=(<span class="num">0</span>, <span class="num">2</span>))
+t.add_column(<span class="str">"STATUS"</span>)
+t.add_column(<span class="str">"PACKAGE"</span>)
+t.add_column(<span class="str">"VERSION"</span>)
+
+t.add_row(badge(<span class="str">"changed"</span>), <span class="str">"my-core"</span>, <span class="str">"0.1.0 → [b]0.2.0[/b]"</span>)
+console.print(t)</div>
+      <div>
+        <h4>Don't</h4>
+        Don't enable any box style. Even <code>SIMPLE</code> adds dividers that fight the hyphen-rule grammar.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 04. StatusBadge ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">04</span><span class="name">StatusBadge</span>
+      <span class="rich">rich: <code>Text</code> with style</span>
+    </div>
+    <div class="preview">  <span class="a-hl">changed</span>    <span class="a-uv">my-core</span>
+  <span class="a-mute">unchanged</span>  <span class="a-mute">my-api</span>
+  <span class="a-err">stale</span>      <span class="a-uv-d">my-auth/pyproject.toml</span>
+  <span class="a-ok">clean</span>      branch <span class="a-cyan">main</span>
+  <span class="a-ok">created</span>    .uvr.toml
+  <span class="a-ok">updated</span>    my-auth/pyproject.toml
+  <span class="a-err">error</span>      stale pin in my-auth/pyproject.toml</div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Single-word state token, padded to the widest known badge so columns align. Color carries the meaning;
+        the word carries the meaning even without color (TTY-stripping safe).
+      </div>
+      <div class="status-tbl">
+        <div class="h">badge</div><div class="h">meaning</div><div class="h">style</div>
+        <div><span class="pill changed">changed</span></div><div>has commits since baseline</div><div>bright_yellow</div>
+        <div><span class="pill unchanged">unchanged</span></div><div>no diff vs baseline</div><div>dim</div>
+        <div><span class="pill stale">stale</span></div><div>pin out of date</div><div>red</div>
+        <div><span class="pill clean">clean</span></div><div>working tree clean</div><div>green</div>
+        <div><span class="pill created">created</span></div><div>file written by uvr</div><div>green</div>
+        <div><span class="pill updated">updated</span></div><div>file rewritten by uvr</div><div>green</div>
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">badge</span>(kind: <span class="kw">str</span>) -> Text:
+    style = {
+        <span class="str">"changed"</span>:   <span class="str">"bright_yellow"</span>,
+        <span class="str">"unchanged"</span>: <span class="str">"dim"</span>,
+        <span class="str">"stale"</span>:     <span class="str">"red"</span>,
+        <span class="str">"clean"</span>:     <span class="str">"green"</span>,
+        <span class="str">"created"</span>:   <span class="str">"green"</span>,
+        <span class="str">"updated"</span>:   <span class="str">"green"</span>,
+        <span class="str">"error"</span>:     <span class="str">"red"</span>,
+    }[kind]
+    <span class="kw">return</span> Text(<span class="fn">f</span><span class="str">"{kind:&lt;9}"</span>, style=style)</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 05. Confirm ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">05</span><span class="name">Confirm</span>
+      <span class="rich">rich: <code>Confirm.ask</code></span>
+    </div>
+    <div class="preview"><span class="a-fg a-bold">Dispatch release?</span> <span class="a-uv">[y/N]</span> <span class="a-uv">█</span></div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        The interactive yes/no prompt. Bold question, magenta <code>[y/N]</code> hint, magenta cursor. Rich's
+        <code>Confirm.ask</code> handles the loop and parsing — you only style the prompt string.
+      </div>
+      <div class="api"><span class="kw">from</span> rich.prompt <span class="kw">import</span> Confirm
+
+ok = Confirm.ask(
+    <span class="str">"[bold]Dispatch release?[/bold] [bright_magenta]"</span>,
+    default=<span class="kw">False</span>,
+    console=console,
+)
+<span class="kw">if</span> ok:
+    dispatch()</div>
+      <div>
+        <h4>Tip</h4>
+        Set <code>default=False</code> so a bare <kbd>Enter</kbd> aborts. Add <code>--yes</code> on the command to skip the prompt
+        entirely (for CI).
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 06. Pipeline ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">06</span><span class="name">Pipeline</span>
+      <span class="rich">custom · indent + arrow</span>
+    </div>
+    <div class="preview">  run   <span class="a-cyan">uvr-build</span>
+  run   <span class="a-cyan">uvr-publish</span>
+        my-core <span class="a-uv">→</span> pypi
+        my-auth <span class="a-uv">→</span> pypi
+        my-api  <span class="a-uv">→</span> ghcr.io</div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Two-level indented list with magenta <code>→</code> arrows for routing. Use any time something flows from A to B
+        (package → registry, version → version, baseline → head).
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">pipeline</span>(steps: <span class="kw">list</span>[Step]) -> <span class="kw">None</span>:
+    <span class="kw">for</span> s <span class="kw">in</span> steps:
+        console.print(<span class="fn">f</span><span class="str">"  run   [cyan]{s.name}[/cyan]"</span>)
+        <span class="kw">for</span> route <span class="kw">in</span> s.routes:
+            console.print(
+                <span class="fn">f</span><span class="str">"        {route.src} [bright_magenta]→[/] {route.dst}"</span>
+            )</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 07. ErrorBlock ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">07</span><span class="name">ErrorBlock</span>
+      <span class="rich">styled <code>Text</code> · no traceback panel</span>
+    </div>
+    <div class="preview"><span class="a-err a-bold">error:</span> stale pin in <span class="a-uv-d">my-auth/pyproject.toml</span>
+  expected <span class="a-fg">my-core ^0.2</span>
+  got      <span class="a-fg">my-core ^0.1</span>
+
+  fix <span class="a-uv">→</span> uvr pin --update
+       <span class="a-uv">→</span> git commit -am 'pin my-core'</div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Red <code>error:</code> prefix, one-line summary, indented body with expected/got, then a <code>fix →</code> block of
+        copy-pasteable next commands. Always end with the fix.
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">error</span>(summary: <span class="kw">str</span>, *,
+          detail: <span class="kw">dict</span>[<span class="kw">str</span>, <span class="kw">str</span>] | <span class="kw">None</span> = <span class="kw">None</span>,
+          fixes:  <span class="kw">list</span>[<span class="kw">str</span>] | <span class="kw">None</span> = <span class="kw">None</span>) -> <span class="kw">None</span>:
+    console.print(<span class="fn">f</span><span class="str">"[bold red]error:[/] {summary}"</span>)
+    <span class="kw">if</span> detail:
+        w = <span class="fn">max</span>(<span class="fn">map</span>(<span class="fn">len</span>, detail))
+        <span class="kw">for</span> k, v <span class="kw">in</span> detail.items():
+            console.print(<span class="fn">f</span><span class="str">"  {k:&lt;{w}}  {v}"</span>)
+    <span class="kw">if</span> fixes:
+        console.print()
+        <span class="kw">for</span> i, cmd <span class="kw">in</span> <span class="fn">enumerate</span>(fixes):
+            lead = <span class="str">"  fix"</span> <span class="kw">if</span> i == <span class="num">0</span> <span class="kw">else</span> <span class="str">"     "</span>
+            console.print(<span class="fn">f</span><span class="str">"{lead} [bright_magenta]→[/] {cmd}"</span>)</div>
+      <div>
+        <h4>Don't</h4>
+        Don't use Rich's <code>install_rich_traceback</code> for expected errors — that's for crashes. Tracebacks should
+        only fire on uncaught exceptions; user-facing failures get this block.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 08. KV ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">08</span><span class="name">KV (aligned pairs)</span>
+      <span class="rich">custom · format strings</span>
+    </div>
+    <div class="preview">  <span class="a-mute">baseline</span>     <span class="a-cyan">v0.4.1</span>
+  <span class="a-mute">strategy</span>     conventional
+  <span class="a-mute">branch</span>       <span class="a-cyan">main</span> · 3 ahead of <span class="a-cyan">origin/main</span>
+  <span class="a-mute">tagged</span>       2d ago
+  <span class="a-mute">packages</span>     4 (<span class="a-bold">2 changed</span>)</div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Two-column aligned key/value pairs. Keys are dim, padded to the widest key. Used for status summaries
+        and config display.
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">kv</span>(pairs: <span class="kw">dict</span>[<span class="kw">str</span>, <span class="kw">str</span>]) -> <span class="kw">None</span>:
+    w = <span class="fn">max</span>(<span class="fn">map</span>(<span class="fn">len</span>, pairs))
+    <span class="kw">for</span> k, v <span class="kw">in</span> pairs.items():
+        console.print(<span class="fn">f</span><span class="str">"  [dim]{k:&lt;{w}}[/]  {v}"</span>)</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 09. Hint ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">09</span><span class="name">Hint / Footer</span>
+      <span class="rich">styled <code>Text</code> · dim</span>
+    </div>
+    <div class="preview"><span class="a-mute">  Next: </span><span class="a-uv">uvr release</span><span class="a-mute"> to dispatch.</span>
+<span class="a-mute">  See </span><span class="a-uv">uvr pin --check</span><span class="a-mute"> to verify.</span>
+<span class="a-mute">  Hint: pass </span><span class="a-uv">-y</span><span class="a-mute"> to skip the prompt.</span></div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Dim trailing line that points at the next thing. Always include the literal command in magenta so the
+        user can copy-paste it. <b>Every successful command should end with a hint or a blank line.</b>
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">hint</span>(text: <span class="kw">str</span>, cmd: <span class="kw">str</span> | <span class="kw">None</span> = <span class="kw">None</span>) -> <span class="kw">None</span>:
+    <span class="kw">if</span> cmd:
+        console.print(<span class="fn">f</span><span class="str">"  [dim]{text}[/] [bright_magenta]{cmd}[/]"</span>)
+    <span class="kw">else</span>:
+        console.print(<span class="fn">f</span><span class="str">"  [dim]{text}[/]"</span>)</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 10. Banner ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">10</span><span class="name">Banner</span>
+      <span class="rich">custom · one line, no figlet</span>
+    </div>
+    <div class="preview"><span class="a-uv-d a-bold">uvr</span> <span class="a-fg">0.4.2</span> <span class="a-mute">·</span> a release planner for python monorepos
+<span class="a-mute">type </span><span class="a-uv">help</span><span class="a-mute"> for commands · </span><span class="a-uv">uvr release</span><span class="a-mute"> for the demo</span></div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        Two-line opener for <code>uvr</code> with no args, or <code>--help</code>. <b>One bold word + a tagline.</b> No ASCII art logo,
+        no figlet, no color block — those age badly and make the tool feel hobbyist.
+      </div>
+      <div class="api"><span class="kw">def</span> <span class="fn">banner</span>() -> <span class="kw">None</span>:
+    console.print(
+        <span class="str">"[bold bright_magenta]uvr[/] "</span>
+        <span class="fn">f</span><span class="str">"{__version__} [dim]·[/] a release planner "</span>
+        <span class="str">"for python monorepos"</span>
+    )
+    console.print(
+        <span class="str">"[dim]type[/] [bright_magenta]help[/] [dim]for "</span>
+        <span class="str">"commands · [/][bright_magenta]uvr release[/]"</span>
+        <span class="str">" [dim]for the demo[/]"</span>
+    )</div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────── 11. Spinner ─────────────────────── -->
+  <div class="card">
+    <div class="hd">
+      <span class="num">11</span><span class="name">Spinner</span>
+      <span class="rich">rich: <code>Status</code> · custom frames</span>
+    </div>
+    <div class="preview"><span class="a-uv">|</span> <span class="a-fg">Fetching baseline tags</span>     <span class="a-mute">git ls-remote origin</span>
+
+<span class="a-mute">// frames cycle: </span><span class="a-uv">|</span> <span class="a-uv">/</span> <span class="a-uv">-</span> <span class="a-uv">\</span><span class="a-mute"> at ~80ms</span>
+
+<span class="a-uv">/</span> <span class="a-fg">Resolving from PyPI</span>        <span class="a-mute">my-core, my-auth</span>
+<span class="a-uv">-</span> <span class="a-fg">Pushing tags to origin</span>     <span class="a-mute">2 tags</span>
+<span class="a-uv">\</span> <span class="a-fg">Awaiting GitHub release</span>    <span class="a-mute">workflow run #4821</span>
+
+<span class="a-ok">✓</span> <span class="a-fg">Fetched baseline tags</span>      <span class="a-mute">214ms</span></div>
+    <div class="meta">
+      <div>
+        <h4>What it is</h4>
+        For genuinely <b>indeterminate</b> work — network calls, git fetch, polling a CI run. Single ASCII frame
+        cycling <code>| / - \</code> in magenta, label in default fg, optional dim subtitle. On completion, the frame
+        is replaced with a green <code>✓</code> and an elapsed time. <b>Not a substitute for ProgressLine</b> — use only
+        when you can't measure progress.
+      </div>
+      <div class="api"><span class="kw">from</span> rich.status <span class="kw">import</span> Status
+
+<span class="com"># custom spinner registered once at import time</span>
+<span class="kw">from</span> rich.spinner <span class="kw">import</span> SPINNERS
+SPINNERS[<span class="str">"uvr"</span>] = {
+    <span class="str">"interval"</span>: <span class="num">80</span>,
+    <span class="str">"frames"</span>: [<span class="str">"|"</span>, <span class="str">"/"</span>, <span class="str">"-"</span>, <span class="str">"\\\\"</span>],
+}
+
+<span class="kw">def</span> <span class="fn">spinner</span>(label: <span class="kw">str</span>, subtitle: <span class="kw">str</span> | <span class="kw">None</span> = <span class="kw">None">):
+    text = label <span class="kw">if not</span> subtitle <span class="kw">else</span> (
+        <span class="fn">f</span><span class="str">"{label}     [dim]{subtitle}[/]"</span>
+    )
+    <span class="kw">return</span> Status(
+        text, console=console,
+        spinner=<span class="str">"uvr"</span>,
+        spinner_style=<span class="str">"bright_magenta"</span>,
+    )
+
+<span class="com"># usage — context manager, auto-clears on exit</span>
+<span class="kw">with</span> <span class="fn">spinner</span>(<span class="str">"Fetching baseline tags"</span>,
+             <span class="str">"git ls-remote origin"</span>) <span class="kw">as</span> s:
+    tags = git.ls_remote()
+    s.update(<span class="str">"Resolving from PyPI"</span>)   <span class="com"># swap label live</span>
+    pypi.fetch(tags)
+
+console.print(<span class="fn">f</span><span class="str">"[green]✓[/] Fetched baseline tags  [dim]{ms}ms[/]"</span>)</div>
+      <div>
+        <h4>When to reach for this vs. ProgressLine</h4>
+        <ul>
+          <li><b>ProgressLine</b> when you know the unit count (<code>4 packages</code>, <code>2 baselines</code>).</li>
+          <li><b>Spinner</b> when the duration is opaque — network, subprocess, polling.</li>
+          <li><b>Never both at once.</b> A spinner inside a Section breaks the line-per-step rhythm; only one
+              spinner is live at a time, and it sits between Sections.</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Don't</h4>
+        Don't use Rich's default <code>dots</code> spinner (Unicode braille). It's beautiful but off-brand — it can't
+        appear inside a hyphen-rule grammar. Stick to ASCII <code>| / - \</code> so the spinner can be screenshotted,
+        pasted into a README code block, or rendered in a CI log without box-drawing artifacts.
+      </div>
+    </div>
+  </div>
+
+  <hr class="ascii" />
+
+  <!-- composition: full release flow -->
+  <h2 class="sec">Composition · the full release flow</h2>
+  <p class="lede" style="margin-bottom: 16px;">
+    Every component above stacks. Here's <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border:1px solid var(--paper-3);">uvr release</code>
+    annotated to show which primitive renders each block.
+  </p>
+
+  <div class="flow-grid">
+    <div class="flow"><span class="a-mute">$</span> uvr release
+
+<span class="a-uv-d a-bold">Planning</span>
+<span class="a-mute">--------</span>
+  |<span class="a-uv">##########</span>| Discovered 4 packages           <span class="a-mute">9ms</span>
+  |<span class="a-uv">##########</span>| Resolved 4 baselines            <span class="a-mute">57µs</span>
+  |<span class="a-uv">#####</span><span class="a-dim">-----</span>| Detected 2 changed, 2 unchanged <span class="a-mute">4ms</span>
+  |<span class="a-uv">###</span><span class="a-dim">-------</span>| Computed versions               <span class="a-mute">2ms</span>
+  Planned 2 releases in <span class="a-bold">16ms</span>
+
+<span class="a-uv-d a-bold">Packages</span>
+<span class="a-mute">--------</span>
+  STATUS     PACKAGE  VERSION       PREVIOUS
+  <span class="a-hl">changed</span>    <span class="a-uv">my-core</span>  0.1.0 → <span class="a-bold">0.2.0</span>  0.1.0
+  <span class="a-hl">changed</span>    <span class="a-uv">my-auth</span>  0.1.0 → <span class="a-bold">0.1.1</span>  0.1.0
+  <span class="a-mute">unchanged</span>  <span class="a-mute">my-api</span>   0.4.2         0.4.2
+  <span class="a-mute">unchanged</span>  <span class="a-mute">my-cli</span>   1.0.0         1.0.0
+
+<span class="a-uv-d a-bold">Pipeline</span>
+<span class="a-mute">--------</span>
+  run   <span class="a-cyan">uvr-build</span>
+  run   <span class="a-cyan">uvr-publish</span>
+        my-core <span class="a-uv">→</span> pypi
+        my-auth <span class="a-uv">→</span> pypi
+
+<span class="a-fg a-bold">Dispatch release?</span> <span class="a-uv">[y/N]</span> <span class="a-uv">█</span></div>
+
+    <div class="annot">
+      <div class="step"><span class="mk">01</span><div><b>Section</b><br/>"Planning" header + hyphen rule.</div></div>
+      <div class="step"><span class="mk">02</span><div><b>ProgressLine</b> ×N<br/>One per stage. Animate via <code style="font-family:var(--mono);font-size:11px;">Progress.advance</code>.</div></div>
+      <div class="step"><span class="mk">03</span><div><b>Section</b> + <b>Table</b><br/>"Packages" header, then no-box table of <b>StatusBadge</b> rows.</div></div>
+      <div class="step"><span class="mk">04</span><div><b>Section</b> + <b>Pipeline</b><br/>"Pipeline" header, two-level steps with magenta arrows.</div></div>
+      <div class="step"><span class="mk">05</span><div><b>Confirm</b><br/>Bold question, <code style="font-family:var(--mono);font-size:11px;">[y/N]</code>, magenta cursor. Bare Enter = no.</div></div>
+    </div>
+  </div>
+
+  <hr class="ascii" />
+
+  <!-- Project structure -->
+  <h2 class="sec">Suggested project structure</h2>
+
+  <div class="flow" style="font-size: 12.5px;"><span class="a-mute">uvr/
+├── __init__.py
+├── cli.py            </span><span class="a-uv">// click / typer command tree</span><span class="a-mute">
+├── commands/
+│   ├── plan.py       </span><span class="a-uv">// each command thin — calls planner + ui</span><span class="a-mute">
+│   ├── release.py
+│   ├── pin.py
+│   ├── bump.py
+│   └── status.py
+├── planner.py        </span><span class="a-uv">// the actual logic. zero printing.</span><span class="a-mute">
+├── git.py
+├── pypi.py
+└── </span><span class="a-uv-d a-bold">ui/</span><span class="a-mute">               </span><span class="a-uv">// EVERYTHING in this folder is the design system</span><span class="a-mute">
+    ├── __init__.py   </span><span class="a-uv">// re-exports section, table, badge, progress, …</span><span class="a-mute">
+    ├── console.py    </span><span class="a-uv">// the singleton Console + theme</span><span class="a-mute">
+    ├── section.py    </span><span class="a-uv">// 01</span><span class="a-mute">
+    ├── progress.py   </span><span class="a-uv">// 02</span><span class="a-mute">
+    ├── table.py      </span><span class="a-uv">// 03 — no-box wrapper around rich.table</span><span class="a-mute">
+    ├── badge.py      </span><span class="a-uv">// 04</span><span class="a-mute">
+    ├── confirm.py    </span><span class="a-uv">// 05</span><span class="a-mute">
+    ├── pipeline.py   </span><span class="a-uv">// 06</span><span class="a-mute">
+    ├── error.py      </span><span class="a-uv">// 07</span><span class="a-mute">
+    ├── kv.py         </span><span class="a-uv">// 08</span><span class="a-mute">
+    ├── hint.py       </span><span class="a-uv">// 09</span><span class="a-mute">
+    ├── banner.py     </span><span class="a-uv">// 10</span><span class="a-mute">
+    └── spinner.py    </span><span class="a-uv">// 11</span></div>
+
+  <div class="callout" style="margin-top: 18px;">
+    <b>Discipline:</b> command modules import from <code>uvr.ui</code> only — never from <code>rich</code> directly. If you find
+    yourself reaching for <code>rich.panel</code> or <code>rich.markdown</code> from a command, that's a sign you need a new
+    primitive in <code>uvr.ui</code> first. The whole point of this layer is that the design grammar lives in one place.
+  </div>
+
+  <div class="foot">
+    <b>What I left out:</b> no <b>Panel</b> / <b>Box</b> components, deliberately — boxes fight the hyphen-rule grammar.
+    If you ever need to set something apart, use a Section instead. Also no <b>Markdown</b> renderer; uvr never prints
+    Markdown to a terminal (the README is for GitHub, the terminal is for plain text).
+  </div>
+
+</div>
+
+</body>
+</html>

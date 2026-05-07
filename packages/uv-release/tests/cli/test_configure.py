@@ -16,8 +16,9 @@ class TestConfigure:
         with diny.provide():
             run_cli("configure")
         out = capsys.readouterr().out
-        assert "latest: pkg-a" in out
-        assert "python_version: 3.12" in out
+        # KV grammar: "key  value" (space-aligned, no colon).
+        assert "latest" in out and "pkg-a" in out
+        assert "python_version" in out and "3.12" in out
 
     def test_set_latest(self, workspace: Path) -> None:
         with diny.provide():

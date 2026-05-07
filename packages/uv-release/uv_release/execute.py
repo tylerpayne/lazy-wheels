@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from .types.job import Job
 from .dependencies.release.plan import Plan
+from .ui import error as ui_error, section
 
 if TYPE_CHECKING:
     from .dependencies.shared.hooks import Hooks
@@ -32,7 +33,8 @@ def execute_job(job: Job, hooks: Hooks | None = None) -> None:
     if pre_hook:
         pre_hook()
 
-    print(f"\n--- {job.name} ---")
+    print()
+    section(job.name)
     for cmd in job.commands:
         if hooks:
             hooks.pre_command(job.name, cmd)
@@ -40,7 +42,7 @@ def execute_job(job: Job, hooks: Hooks | None = None) -> None:
         if hooks:
             hooks.post_command(job.name, cmd, returncode)
         if cmd.check and returncode != 0:
-            print(f"ERROR: Command failed with exit code {returncode}", file=sys.stderr)
+            ui_error(f"Command failed with exit code {returncode}")
             sys.exit(returncode)
 
     if post_hook:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -19,7 +20,7 @@ class UpdateTomlCommand(Command):
         import tomlkit
 
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         path = Path("pyproject.toml")
         doc = tomlkit.loads(path.read_text())
         tool = doc.setdefault("tool", {})
@@ -41,7 +42,7 @@ class WriteUvrSectionCommand(Command):
         import tomlkit
 
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         path = Path("pyproject.toml")
         doc = tomlkit.loads(path.read_text())
         tool = doc.setdefault("tool", {})

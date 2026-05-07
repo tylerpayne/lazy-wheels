@@ -90,13 +90,13 @@ def provide_release_guard(
             if dep_pkg.version.is_dev:
                 warnings.append(f"{name} depends on {dep} ({dep_pkg.version.raw})")
     if warnings:
-        import sys
+        from ...ui.console import err_console
 
-        print(
-            "WARNING: Build targets depend on unreleased dev versions:", file=sys.stderr
+        err_console.print(
+            "[uvr.changed]warning:[/] Build targets depend on unreleased dev versions:"
         )
         for w in warnings:
-            print(f"  {w}", file=sys.stderr)
-        print("These deps may not be installable from PyPI.", file=sys.stderr)
-        print(file=sys.stderr)
+            err_console.print(f"  {w}")
+        err_console.print("These deps may not be installable from PyPI.")
+        err_console.print()
     return ReleaseGuard()

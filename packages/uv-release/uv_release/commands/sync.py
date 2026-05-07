@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -22,6 +23,6 @@ class SyncLockfileCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(["uv", "lock"])
         return result.returncode

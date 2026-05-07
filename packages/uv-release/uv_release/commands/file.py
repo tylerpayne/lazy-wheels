@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -17,7 +18,7 @@ class WriteFileCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         p = Path(self.path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(self.content)
@@ -32,7 +33,7 @@ class MakeDirectoryCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         Path(self.path).mkdir(parents=True, exist_ok=True)
         return 0
 
@@ -47,7 +48,7 @@ class RemoveDirectoryCommand(Command):
         import shutil
 
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         p = Path(self.path)
         if p.exists():
             shutil.rmtree(p)

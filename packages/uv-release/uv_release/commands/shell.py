@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -16,7 +17,7 @@ class ShellCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(self.args)
         return result.returncode
 
@@ -38,10 +39,10 @@ class CreateTagCommand(Command):
         )
         if check.stdout.strip() == self.tag_name:
             if self.label:
-                print(f"  {self.label} (already exists, skipping)")
+                console.print(f"  {self.label} [uvr.dim](already exists, skipping)[/]")
             return 0
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(
             ["git", "tag", "-a", "-m", self.tag_name, self.tag_name]
         )

@@ -23,7 +23,8 @@ class TestInstall:
         with pytest.raises(SystemExit):
             with diny.provide():
                 run_cli("install", "pkg-a")
-        assert "ERROR:" in capsys.readouterr().err
+        # ui.error renders as "error: <summary>" on stderr.
+        assert "error:" in capsys.readouterr().err
 
     def test_dist_nonexistent_errors(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]

@@ -7,6 +7,7 @@ import subprocess
 import time
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -18,14 +19,14 @@ class DispatchWorkflowCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         branch = subprocess.run(
             ["git", "branch", "--show-current"],
             capture_output=True,
             text=True,
         ).stdout.strip()
         if not branch:
-            print("    Could not determine current branch.")
+            console.print("    Could not determine current branch.")
             return 1
         result = subprocess.run(
             [
@@ -68,5 +69,5 @@ class DispatchWorkflowCommand(Command):
             return
         if runs:
             run = runs[0]
-            print(f"    Run: {run.get('url', 'unknown')}")
-            print(f"    Status: {run.get('status', 'unknown')}")
+            console.print(f"    Run: {run.get('url', 'unknown')}")
+            console.print(f"    Status: {run.get('status', 'unknown')}")

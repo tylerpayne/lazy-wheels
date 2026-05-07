@@ -7,6 +7,7 @@ import sys
 
 from diny import inject
 
+from .. import ui
 from ..dependencies.params.skill_params import SkillParams
 from ..dependencies.shared.skill_template import SkillTemplate
 from ..dependencies.skill.upgrade_job import SkillUpgradeJob
@@ -20,7 +21,8 @@ def cmd_skill_upgrade(
     upgrade_job: SkillUpgradeJob,
 ) -> None:
     # --print-template short-circuits, dumping every bundled skill file as JSON.
-    # Consumed by --upgrade via uvx to fetch bases for three-way merge.
+    # Consumed by --upgrade via uvx; MUST stay byte-exact (no Rich) so the
+    # downstream JSON parser works.
     if params.print_template:
         payload = {
             name: [{"rel_path": f.rel_path, "content": f.content} for f in files]
@@ -30,7 +32,7 @@ def cmd_skill_upgrade(
         return
 
     if not upgrade_job.commands:
-        print("Skills are already up to date.")
+        ui.console.print("Skills are already up to date.")
         return
 
     execute_job(upgrade_job)

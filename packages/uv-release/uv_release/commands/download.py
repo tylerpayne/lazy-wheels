@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -23,7 +24,7 @@ class DownloadWheelsCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         args = [
             "gh",
             "release",
@@ -75,10 +76,10 @@ class DownloadRunArtifactsCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         run_id = os.environ.get("RUN_ID", "")
         if not run_id:
-            print("    RUN_ID not set, skipping artifact download")
+            console.print("    RUN_ID not set, skipping artifact download")
             return 0
         args = [
             "gh",

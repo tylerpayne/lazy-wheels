@@ -16,7 +16,8 @@ class TestWorkflowValidate:
         (workspace / ".github" / "workflows" / "release.yml").unlink()
         with diny.provide():
             run_cli("workflow", "validate")
-        assert "does not exist" in capsys.readouterr().out
+        # ui.error writes to stderr.
+        assert "does not exist" in capsys.readouterr().err
 
     def test_has_all_required_jobs(
         self, workspace: Path, capsys: pytest.CaptureFixture[str]

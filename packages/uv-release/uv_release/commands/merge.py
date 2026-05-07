@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 from ..utils.merge import merge_texts
 
@@ -29,7 +30,7 @@ class MergeUpgradeCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         current_path = Path(self.file_path)
         base = Path(self.base_path)
         # Missing base means we have no common ancestor to compare against.
@@ -40,7 +41,7 @@ class MergeUpgradeCommand(Command):
             current, base_content, self.incoming_content
         )
         if merged == current:
-            print(f"    {self.file_path}: already up to date")
+            console.print(f"    {self.file_path}: already up to date")
             return 0
         current_path.write_text(merged, encoding="utf-8")
         if has_conflicts:
@@ -55,7 +56,9 @@ class MergeUpgradeCommand(Command):
         after this command will not run, leaving workflow-version unchanged.
         """
         if not self.editor:
-            print(f"    {self.file_path}: merged with conflicts (resolve manually)")
+            console.print(
+                f"    {self.file_path}: merged with conflicts (resolve manually)"
+            )
             return 0
         try:
             answer = (
@@ -64,7 +67,7 @@ class MergeUpgradeCommand(Command):
                 .lower()
             )
         except (EOFError, KeyboardInterrupt):
-            print()
+            console.print()
             return 0
         if answer == "n":
             return 0
@@ -76,11 +79,11 @@ class MergeUpgradeCommand(Command):
                     input("    Unresolved conflicts. Revert? [Y/n] ").strip().lower()
                 )
             except (EOFError, KeyboardInterrupt):
-                print()
+                console.print()
                 return 1
             if revert != "n":
                 path.write_text(original, encoding="utf-8")
-                print(f"    Reverted {self.file_path}")
+                console.print(f"    Reverted {self.file_path}")
             return 1
-        print(f"    Conflicts resolved in {self.file_path}")
+        console.print(f"    Conflicts resolved in {self.file_path}")
         return 0

@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -30,7 +31,7 @@ class FetchWorkflowBaseCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(
             [
                 "uvx",
@@ -47,7 +48,7 @@ class FetchWorkflowBaseCommand(Command):
             check=False,
         )
         if result.returncode != 0:
-            print(
+            console.print(
                 f"    Failed to fetch workflow base for uv-release"
                 f" {self.from_version}: {result.stderr.strip()}"
             )
@@ -72,7 +73,7 @@ class FetchSkillBasesCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(
             [
                 "uvx",
@@ -89,7 +90,7 @@ class FetchSkillBasesCommand(Command):
             check=False,
         )
         if result.returncode != 0:
-            print(
+            console.print(
                 f"    Failed to fetch skill bases for uv-release"
                 f" {self.from_version}: {result.stderr.strip()}"
             )
@@ -97,7 +98,7 @@ class FetchSkillBasesCommand(Command):
         try:
             payload = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
-            print(f"    Could not parse skill template payload: {exc}")
+            console.print(f"    Could not parse skill template payload: {exc}")
             return 1
         root = Path(self.output_root)
         for skill_name, files in payload.items():

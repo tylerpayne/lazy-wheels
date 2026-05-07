@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from diny import inject, resolve
 
-from ..commands import DispatchWorkflowCommand
+from .. import ui
+from ..commands import (
+    BuildCommand,
+    CreateReleaseCommand,
+    DispatchWorkflowCommand,
+    DownloadWheelsCommand,
+    PublishToIndexCommand,
+)
 from ..dependencies.params.release_target import ReleaseTarget
 from ..dependencies.release.plan import Plan
 from ..dependencies.release.release_bump_versions import ReleaseBumpVersions
@@ -17,7 +24,6 @@ from ..dependencies.shared.workspace_packages import WorkspacePackages
 from ..execute import execute_job, execute_plan
 from ..types.job import Job
 from ._cli import Params
-from ._display import format_table
 
 
 @inject
@@ -40,61 +46,57 @@ def cmd_release(
 
     plan = hooks.post_plan(workspace.root, "release", plan)
 
-    # --json: print the plan as JSON and exit.
+    # --json: print the plan as JSON and exit. Byte-exact, no Rich.
     if params.json_output:
         print(plan.model_dump_json(indent=2))
         return
 
     if not any(j.commands for j in plan.jobs):
-        print("Nothing changed since last release.")
+        ui.console.print("Nothing changed since last release.")
         return
 
     # Packages table.
-    print()
-    print("Packages")
-    print("--------")
-    headers = ("PACKAGE", "CURRENT", "RELEASE", "NEXT", "DIFF FROM")
-    rows: list[tuple[str, ...]] = []
+    ui.console.print()
+    ui.section("Packages")
+    rows: list[list[str]] = []
     for name in sorted(release_versions.items):
         pkg = workspace.items[name]
         rel_ver = release_versions.items[name]
         next_ver = bump_versions.items.get(name)
         baseline = baseline_tags.items.get(name)
         rows.append(
-            (
-                name,
+            [
+                f"[uvr.accent]{name}[/]",
                 pkg.version.raw,
-                rel_ver.raw,
+                f"[b]{rel_ver.raw}[/]",
                 next_ver.raw if next_ver else "",
-                baseline.raw if baseline else "(initial)",
-            )
+                baseline.raw if baseline else "[uvr.dim](initial)[/]",
+            ]
         )
-    for line in format_table(headers, rows):
-        print(line)
-    print()
+    ui.print_table(["package", "current", "release", "next", "diff from"], rows)
 
-    print("Pipeline")
-    print("--------")
+    ui.console.print()
+    ui.section("Pipeline")
     _print_jobs(plan, workflow_state)
 
     if release_notes.items:
-        print("\nRelease notes:")
+        ui.console.print()
+        ui.section("Release notes")
         for name, notes in sorted(release_notes.items.items()):
-            print(f"  {name}:")
+            ui.console.print(f"  [uvr.accent]{name}[/]:")
             for line in notes.splitlines()[:5]:
-                print(f"    {line}")
+                ui.console.print(f"    {line}")
 
     if params.dry_run:
         return
 
     if not params.yes:
-        print()
+        ui.console.print()
         try:
-            answer = input("Proceed? [y/N] ").strip().lower()
+            if not ui.confirm("Proceed?"):
+                return
         except (EOFError, KeyboardInterrupt):
             print()
-            return
-        if answer != "y":
             return
 
     # --where ci: dispatch to GitHub Actions.
@@ -134,24 +136,15 @@ def _print_jobs(plan: Plan, workflow_state: WorkflowState) -> None:
 
 
 def _print_job_status(name: str, job: Job | None, plan: Plan) -> None:
-    """Print a single job's status line."""
     if name in plan.skip:
-        print(f"  {name}: (skip)")
+        ui.console.print(f"  {name}: [uvr.dim](skip)[/]")
         return
-    print(f"  {name}")
+    ui.console.print(f"  [uvr.value]{name}[/]")
     if job and job.commands:
         _print_job_detail(job, plan)
 
 
 def _print_job_detail(job: Job, plan: Plan) -> None:
-    """Print structured detail lines under a job."""
-    from ..commands import (
-        BuildCommand,
-        CreateReleaseCommand,
-        DownloadWheelsCommand,
-        PublishToIndexCommand,
-    )
-
     if job.name == "build":
         all_builds = [c for c in job.commands if isinstance(c, BuildCommand)]
         downloaded_deps = [
@@ -162,22 +155,24 @@ def _print_job_detail(job: Job, plan: Plan) -> None:
             runner_builds = [b for b in all_builds if b.runs_on(runner)]
             targets = [b for b in runner_builds if b.is_target_on(runner)]
             build_deps = [b for b in runner_builds if not b.is_target_on(runner)]
-            print(f"    {label}")
+            ui.console.print(f"    {label}")
             if targets:
-                print("      targets:")
+                ui.console.print("      [uvr.dim]targets:[/]")
                 for t in targets:
-                    print(f"        {t.label.removeprefix('Build ')}")
+                    name = t.label.removeprefix("Build ")
+                    ui.console.print(f"        [uvr.accent]{name}[/]")
             if build_deps or downloaded_deps:
-                print("      deps:")
+                ui.console.print("      [uvr.dim]deps:[/]")
                 for b in build_deps:
-                    print(f"        {b.label.removeprefix('Build ')} (build)")
+                    name = b.label.removeprefix("Build ")
+                    ui.console.print(f"        {name} [uvr.dim](build)[/]")
                 for d in downloaded_deps:
-                    print(f"        {d.tag_name}")
+                    ui.console.print(f"        {d.tag_name}")
     elif job.name == "release":
         releases = [c for c in job.commands if isinstance(c, CreateReleaseCommand)]
         for rel in releases:
-            print(f"    {rel.title}")
+            ui.console.print(f"    [uvr.accent]{rel.title}[/]")
     elif job.name == "publish":
         publishes = [c for c in job.commands if isinstance(c, PublishToIndexCommand)]
         for pub in publishes:
-            print(f"    {pub.package_name}")
+            ui.console.print(f"    [uvr.accent]{pub.package_name}[/]")

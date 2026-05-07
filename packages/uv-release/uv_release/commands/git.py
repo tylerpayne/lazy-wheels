@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Literal
 
+from ..ui.console import console
 from .base import Command
 
 
@@ -15,7 +16,7 @@ class ConfigureGitIdentityCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(["git", "config", "user.name", "github-actions[bot]"])
         if result.returncode != 0:
             return result.returncode
@@ -45,10 +46,12 @@ class CommitCommand(Command):
         )
         if not status.stdout.strip():
             if self.label:
-                print(f"  {self.label} (nothing to commit, skipping)")
+                console.print(
+                    f"  {self.label} [uvr.dim](nothing to commit, skipping)[/]"
+                )
             return 0
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         args = ["git", "commit", "-am", self.message]
         if self.body:
             args.extend(["-m", self.body])
@@ -64,7 +67,7 @@ class PushCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         args = ["git", "push"]
         if self.follow_tags:
             args.append("--follow-tags")
@@ -82,6 +85,6 @@ class PullRebaseCommand(Command):
 
     def execute(self) -> int:
         if self.label:
-            print(f"  {self.label}")
+            console.print(f"  {self.label}")
         result = subprocess.run(["git", "pull", "--rebase"])
         return result.returncode

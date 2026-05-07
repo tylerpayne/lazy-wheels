@@ -196,6 +196,9 @@ def parse_args() -> ParsedArgs:
     jobs_p = sub.add_parser("jobs", help="Execute a job from a plan (CI).")
     jobs_p.add_argument("job_name", nargs="?", default="")
 
+    # -- ui-demo (visual showcase of the design system) --
+    sub.add_parser("ui-demo", help="Render every uv_release.ui primitive.")
+
     ns = parser.parse_args()
     return ParsedArgs(values=vars(ns), command=ns.command or "")
 
@@ -457,31 +460,38 @@ def cli(params: Params, hooks: Hooks, workspace: WorkspacePackages) -> None:
                 from .jobs import cmd_jobs
 
                 cmd_jobs()
+            case "ui-demo":
+                from .ui_demo import cmd_ui_demo
+
+                cmd_ui_demo()
             case _:
                 sys.exit(1)
     except UserRecoverableError as exc:
+        from ..ui import confirm, error
+
         if params.dry_run:
-            print(f"ERROR: {exc}", file=sys.stderr)
+            error(str(exc))
             sys.exit(1)
-        print(f"\n{exc}")
-        print("\nThe following commands will fix this:\n")
-        for cmd in exc.fix_job.commands:
-            print(f"  {cmd.label}")
+        error(
+            str(exc),
+            fixes=[cmd.label for cmd in exc.fix_job.commands if cmd.label],
+        )
         if not params.yes:
             print()
             try:
-                answer = input("Apply fix? [y/N] ").strip().lower()
+                if not confirm("Apply fix?"):
+                    sys.exit(1)
             except (EOFError, KeyboardInterrupt):
                 print()
-                sys.exit(1)
-            if answer != "y":
                 sys.exit(1)
         from ..execute import execute_job
 
         execute_job(exc.fix_job, hooks)
         os.execvp(sys.argv[0], sys.argv)
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        from ..ui import error
+
+        error(str(exc))
         sys.exit(1)
 
 

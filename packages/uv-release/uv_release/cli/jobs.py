@@ -7,6 +7,7 @@ import sys
 
 from diny import inject
 
+from .. import ui
 from ..dependencies.release.plan import Plan
 from ..dependencies.shared.hooks import Hooks
 from ..execute import execute_job
@@ -17,12 +18,12 @@ from ._cli import ParsedArgs
 def cmd_jobs(args: ParsedArgs, hooks: Hooks) -> None:
     job_name = args.values.get("job_name", "")
     if not job_name:
-        print("Usage: uvrd jobs <job_name>", file=sys.stderr)
+        ui.error("Usage: uvr jobs <job_name>")
         sys.exit(1)
 
     plan_json = os.environ.get("UVR_PLAN", "")
     if not plan_json:
-        print("ERROR: UVR_PLAN environment variable not set.", file=sys.stderr)
+        ui.error("UVR_PLAN environment variable not set.")
         sys.exit(1)
 
     plan = Plan.model_validate_json(plan_json)
@@ -35,14 +36,14 @@ def cmd_jobs(args: ParsedArgs, hooks: Hooks) -> None:
 
     if job is None:
         available = [j.name for j in plan.jobs]
-        print(
-            f"ERROR: Job '{job_name}' not found. Available: {', '.join(available)}",
-            file=sys.stderr,
+        ui.error(
+            f"Job {job_name!r} not found.",
+            detail={"available": ", ".join(available)},
         )
         sys.exit(1)
 
     if job.name in plan.skip:
-        print(f"Job '{job_name}' is skipped.")
+        ui.console.print(f"Job [uvr.value]{job_name}[/] is skipped.")
         return
 
     execute_job(job, hooks)

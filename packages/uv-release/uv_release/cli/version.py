@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from diny import inject
 
+from .. import ui
 from ..dependencies.bump.bump_job import BumpJob
 from ..dependencies.params.version_mode import VersionMode, VersionOp
 from ..dependencies.shared.hooks import Hooks
 from ..dependencies.shared.workspace_packages import WorkspacePackages
 from ..execute import execute_job
-from ._display import format_table
 
 
 @inject
@@ -21,20 +21,18 @@ def cmd_version(
 ) -> None:
     # Read-only mode: no --set or --bump.
     if version_mode.value == VersionOp.READ:
-        print()
-        print("Packages")
-        print("--------")
-        headers = ("PACKAGE", "VERSION")
+        ui.console.print()
+        ui.section("Packages")
         rows = [
-            (name, pkg.version.raw) for name, pkg in sorted(workspace.items.items())
+            [f"[uvr.accent]{name}[/]", pkg.version.raw]
+            for name, pkg in sorted(workspace.items.items())
         ]
-        for line in format_table(headers, rows):
-            print(line)
-        print()
+        ui.print_table(["package", "version"], rows)
+        ui.console.print()
         return
 
     if not bump_job.commands:
-        print("Nothing to update.")
+        ui.console.print("Nothing to update.")
         return
 
     execute_job(bump_job, hooks)
