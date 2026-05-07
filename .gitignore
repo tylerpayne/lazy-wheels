@@ -40,3 +40,4 @@ docs/.vitepress/dist/
 Thumbs.db
 .uvr/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
