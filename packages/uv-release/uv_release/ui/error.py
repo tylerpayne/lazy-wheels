@@ -39,4 +39,7 @@ def error(
         console.print(title, style="uvr.title")
         console.print("-" * len(title), style="uvr.rule")
         for cmd in fixes:
-            console.print(f"  [uvr.cmd]{cmd}[/]")
+            # Plain default fg — too much brand magenta turns the fix
+            # block into noise. The `Fix` section header already says
+            # "these are the commands"; the words don't need recoloring.
+            console.print(f"  {cmd}")

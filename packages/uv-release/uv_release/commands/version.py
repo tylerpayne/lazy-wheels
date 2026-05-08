@@ -29,7 +29,15 @@ class SetVersionCommand(Command):
         return 0
 
     def to_shell(self) -> str:
-        return f"uv version {self.version} --directory {self.package_path}"
+        # Use our own `uvr version --set` so the fix block speaks uvr's
+        # vocabulary. `--no-commit --no-push --no-pin` keeps this command
+        # to a single concern (set the version) — the surrounding fix-job
+        # commands handle pinning and committing on their own lines.
+        package_name = Path(self.package_path).name
+        return (
+            f"uvr version --set {self.version} --packages {package_name} "
+            "--no-commit --no-push --no-pin"
+        )
 
 
 class PinDepsCommand(Command):
