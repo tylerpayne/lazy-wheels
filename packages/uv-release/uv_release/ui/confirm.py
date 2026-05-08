@@ -18,9 +18,10 @@ def confirm(question: str, *, default: bool = False) -> bool:
     Bare Enter returns the default; everything other than `y`/`yes`
     (case-insensitive) is treated as no.
     """
-    # Capitalize the default in the hint so `[y/N]` reads as "no by default"
-    # the way every CLI does. Only the bracketed token gets brand color.
-    choices = "[Y/n]" if default else "[y/N]"
+    # Capitalize the default in the hint so `(y/N)` reads as "no by default"
+    # the way every CLI does. Parens (not square brackets) so Rich's markup
+    # parser doesn't try to read them as a style tag.
+    choices = "(Y/n)" if default else "(y/N)"
     prompt = f"[bold]{question}[/] [uvr.cmd]{choices}[/]: "
     while True:
         try:
