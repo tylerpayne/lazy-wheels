@@ -282,7 +282,7 @@ def mock_builds(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     calls: list[list[str]] = []
     _real = subprocess.run
 
-    def _patched(args: str | list[str], **kwargs):  # type: ignore[no-untyped-def]
+    def _patched(args: str | list[str], **kwargs):
         if (
             isinstance(args, list)
             and len(args) >= 2

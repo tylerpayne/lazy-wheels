@@ -21,6 +21,10 @@ class ShellCommand(Command):
         result = subprocess.run(self.args)
         return result.returncode
 
+    def to_shell(self) -> str:
+        # Literal: this is exactly what subprocess.run will execute.
+        return " ".join(self.args)
+
 
 class CreateTagCommand(Command):
     """Create an annotated git tag. Skips if the tag already exists.

@@ -67,4 +67,4 @@ def provide_configure_job(
                 label="Update [tool.uvr.config]", section="config", data=data
             )
         ],
-    )  # type: ignore[arg-type]
+    )

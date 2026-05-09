@@ -20,6 +20,7 @@ from pathlib import Path
 from diny import singleton, provider
 
 from ...commands import (
+    AnyCommand,
     FetchSkillBasesCommand,
     MergeUpgradeCommand,
     UpdateTomlCommand,
@@ -51,12 +52,7 @@ def provide_skill_upgrade_job(
         msg = "No skill templates found. Is uv-release installed correctly?"
         raise ValueError(msg)
 
-    commands: list[
-        WriteFileCommand
-        | FetchSkillBasesCommand
-        | MergeUpgradeCommand
-        | UpdateTomlCommand
-    ] = []
+    commands: list[AnyCommand] = []
 
     # Scaffold any missing skill files first. Missing files always get written,
     # regardless of mode, so the user picks up newly-added skill files.
@@ -85,7 +81,7 @@ def provide_skill_upgrade_job(
                 value=template.version,
             )
         )
-        return SkillUpgradeJob(name="skill-upgrade", commands=commands)  # type: ignore[arg-type]
+        return SkillUpgradeJob(name="skill-upgrade", commands=commands)
 
     # Some files exist. Bare `install` is an error: user must pick a mode.
     if not params.upgrade and not params.force:
@@ -155,4 +151,4 @@ def provide_skill_upgrade_job(
             value=template.version,
         )
     )
-    return SkillUpgradeJob(name="skill-upgrade", commands=commands)  # type: ignore[arg-type]
+    return SkillUpgradeJob(name="skill-upgrade", commands=commands)

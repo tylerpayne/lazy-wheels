@@ -60,7 +60,7 @@ def provide_configure_runners_job(
                 label="Update [tool.uvr.runners]", section="runners", data=matrix
             )
         ],
-    )  # type: ignore[arg-type]
+    )
 
 
 def _parse_runner_spec(spec: str) -> list[str]:

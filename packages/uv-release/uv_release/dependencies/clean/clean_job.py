@@ -28,4 +28,4 @@ def provide_clean_job(workspace_packages: WorkspacePackages) -> CleanJob:
         for d in cache_dirs
         if d.exists()
     ]
-    return CleanJob(name="clean", commands=commands)  # type: ignore[arg-type]
+    return CleanJob(name="clean", commands=commands)

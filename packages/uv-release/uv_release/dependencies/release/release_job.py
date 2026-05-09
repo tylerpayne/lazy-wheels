@@ -6,6 +6,7 @@ from diny import singleton, provider
 
 from ..build.build_packages import BuildPackages
 from ...commands import (
+    AnyCommand,
     ConfigureGitIdentityCommand,
     CreateReleaseCommand,
     CreateTagCommand,
@@ -41,14 +42,7 @@ def provide_release_job(
     if not build_packages.items or "release" in skip_jobs.value or reuse_releases.value:
         return ReleaseJob(name="release")
 
-    commands: list[
-        MakeDirectoryCommand
-        | DownloadRunArtifactsCommand
-        | ConfigureGitIdentityCommand
-        | CreateTagCommand
-        | ShellCommand
-        | CreateReleaseCommand
-    ] = []
+    commands: list[AnyCommand] = []
 
     is_ci = release_target.value == "ci"
 
@@ -94,4 +88,4 @@ def provide_release_job(
             )
         )
 
-    return ReleaseJob(name="release", commands=commands)  # type: ignore[arg-type]
+    return ReleaseJob(name="release", commands=commands)

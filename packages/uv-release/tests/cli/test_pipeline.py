@@ -507,7 +507,7 @@ class TestLocalRelease:
 
         created_tags: list[str] = []
 
-        def _patched(args: str | list[str], **kwargs):  # type: ignore[no-untyped-def]
+        def _patched(args: str | list[str], **kwargs):
             if not isinstance(args, list):
                 return _real(args, **kwargs)
             # Mock git tag (skip -l checks, only track creates).

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from diny import singleton, provider
 
-from ...commands import MakeDirectoryCommand, ShellCommand
+from ...commands import AnyCommand, MakeDirectoryCommand, ShellCommand
 from ...types.job import Job
 from ..params.download_params import DownloadParams
 from ..shared.github_repo import GitHubRepo
@@ -29,7 +29,7 @@ def provide_download_job(
     if not repo:
         raise ValueError("Could not determine GitHub repo from git remote.")
 
-    commands: list[MakeDirectoryCommand | ShellCommand] = []
+    commands: list[AnyCommand] = []
     commands.append(
         MakeDirectoryCommand(label=f"Create {params.output}", path=params.output)
     )
@@ -76,4 +76,4 @@ def provide_download_job(
             )
         )
 
-    return DownloadJob(name="download", commands=commands)  # type: ignore[arg-type]
+    return DownloadJob(name="download", commands=commands)

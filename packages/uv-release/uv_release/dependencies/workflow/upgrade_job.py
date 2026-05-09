@@ -18,6 +18,7 @@ from pathlib import Path
 from diny import singleton, provider
 
 from ...commands import (
+    AnyCommand,
     FetchWorkflowBaseCommand,
     MergeUpgradeCommand,
     UpdateTomlCommand,
@@ -46,12 +47,7 @@ def provide_workflow_upgrade_job(
         msg = "No workflow template found. Is uv-release installed correctly?"
         raise ValueError(msg)
 
-    commands: list[
-        WriteFileCommand
-        | FetchWorkflowBaseCommand
-        | MergeUpgradeCommand
-        | UpdateTomlCommand
-    ] = []
+    commands: list[AnyCommand] = []
     base_path = str(Path(".uvr") / "bases" / state.file_path)
 
     # Scaffold path: file missing, just write it and record the version.
@@ -70,7 +66,7 @@ def provide_workflow_upgrade_job(
                 value=template.version,
             )
         )
-        return WorkflowUpgradeJob(name="workflow-upgrade", commands=commands)  # type: ignore[arg-type]
+        return WorkflowUpgradeJob(name="workflow-upgrade", commands=commands)
 
     # File exists. Bare `install` is a no-op error; user must pick a mode.
     if not params.upgrade and not params.force:
@@ -116,7 +112,7 @@ def provide_workflow_upgrade_job(
                 value=template.version,
             )
         )
-        return WorkflowUpgradeJob(name="workflow-upgrade", commands=commands)  # type: ignore[arg-type]
+        return WorkflowUpgradeJob(name="workflow-upgrade", commands=commands)
 
     # --force: overwrite and record version.
     commands.append(
@@ -133,4 +129,4 @@ def provide_workflow_upgrade_job(
             value=template.version,
         )
     )
-    return WorkflowUpgradeJob(name="workflow-upgrade", commands=commands)  # type: ignore[arg-type]
+    return WorkflowUpgradeJob(name="workflow-upgrade", commands=commands)

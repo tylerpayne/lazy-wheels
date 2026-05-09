@@ -24,7 +24,7 @@ def _mock_one_command(
     """Mock a single command to fail. All others succeed."""
     _real = subprocess.run
 
-    def _patched(args: str | list[str], **kwargs):  # type: ignore[no-untyped-def]
+    def _patched(args: str | list[str], **kwargs):
         if not isinstance(args, list):
             return _real(args, **kwargs)
         if args[0] == fail_cmd:
@@ -74,7 +74,7 @@ class TestBuildFailures:
     ) -> None:
         _real = subprocess.run
 
-        def _patched(args: str | list[str], **kwargs):  # type: ignore[no-untyped-def]
+        def _patched(args: str | list[str], **kwargs):
             if isinstance(args, list) and args[0] == "uv":
                 return subprocess.CompletedProcess(args, 0)
             return _real(args, **kwargs)
@@ -131,7 +131,7 @@ class TestLocalReleaseFailures:
     def _mock_all_succeed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _real = subprocess.run
 
-        def _patched(args: str | list[str], **kwargs):  # type: ignore[no-untyped-def]
+        def _patched(args: str | list[str], **kwargs):
             if isinstance(args, list) and args[0] == "gh":
                 # gh release view should return 1 (not found) so create proceeds.
                 if len(args) >= 3 and args[1] == "release" and args[2] == "view":

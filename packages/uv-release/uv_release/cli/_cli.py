@@ -527,7 +527,7 @@ def provide_dev_release(args: ParsedArgs) -> DevRelease:
 
 @provider(ReleaseTarget)
 def provide_release_target(args: ParsedArgs) -> ReleaseTarget:
-    return ReleaseTarget(value=args.values.get("where", "local"))  # type: ignore[arg-type]
+    return ReleaseTarget(value=args.values.get("where", "local"))
 
 
 @provider(BumpType)

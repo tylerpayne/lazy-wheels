@@ -6,6 +6,7 @@ from diny import singleton, provider
 
 from .release_bump_versions import ReleaseBumpVersions
 from ...commands import (
+    AnyCommand,
     CommitCommand,
     ConfigureGitIdentityCommand,
     CreateTagCommand,
@@ -43,16 +44,7 @@ def provide_release_bump_job(
 
     is_local = release_target.value == "local"
 
-    commands: list[
-        ConfigureGitIdentityCommand
-        | PullRebaseCommand
-        | SetVersionCommand
-        | PinDepsCommand
-        | SyncLockfileCommand
-        | CommitCommand
-        | CreateTagCommand
-        | PushCommand
-    ] = []
+    commands: list[AnyCommand] = []
 
     if not is_local:
         commands.append(ConfigureGitIdentityCommand(label="Configure git identity"))
@@ -108,4 +100,4 @@ def provide_release_bump_job(
         if not skip_push:
             commands.append(PushCommand(label="Push", follow_tags=True))
 
-    return ReleaseBumpJob(name="bump", commands=commands)  # type: ignore[arg-type]
+    return ReleaseBumpJob(name="bump", commands=commands)

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from diny import singleton, provider
 
-from ...commands import InstallWheelsCommand, MakeDirectoryCommand, ShellCommand
+from ...commands import (
+    AnyCommand,
+    InstallWheelsCommand,
+    MakeDirectoryCommand,
+    ShellCommand,
+)
 from ...types.job import Job
 from ...utils.deps import parse_dep_name
 from ..params.install_params import InstallParams
@@ -26,7 +31,7 @@ def provide_install_job(
     if not params.packages and not params.dist:
         raise ValueError("Specify packages to install or --dist directory.")
 
-    commands: list[MakeDirectoryCommand | ShellCommand | InstallWheelsCommand] = []
+    commands: list[AnyCommand] = []
 
     if params.dist:
         commands.append(
@@ -71,4 +76,4 @@ def provide_install_job(
             InstallWheelsCommand(label="Install wheels", dist_dir=cache_dir)
         )
 
-    return InstallJob(name="install", commands=commands)  # type: ignore[arg-type]
+    return InstallJob(name="install", commands=commands)

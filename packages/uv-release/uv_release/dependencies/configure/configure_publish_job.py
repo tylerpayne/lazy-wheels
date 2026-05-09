@@ -75,4 +75,4 @@ def provide_configure_publish_job(
                 label="Update [tool.uvr.publish]", section="publish", data=data
             )
         ],
-    )  # type: ignore[arg-type]
+    )

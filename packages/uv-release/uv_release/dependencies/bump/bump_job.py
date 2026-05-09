@@ -7,6 +7,7 @@ from diny import singleton, provider
 from .bump_versions import BumpVersions
 from .dependency_pins import BumpDependencyPins
 from ...commands import (
+    AnyCommand,
     CommitCommand,
     PinDepsCommand,
     PushCommand,
@@ -37,13 +38,7 @@ def provide_bump_job(
     if not bump_versions.items:
         return BumpJob(name="bump")
 
-    commands: list[
-        SetVersionCommand
-        | PinDepsCommand
-        | SyncLockfileCommand
-        | CommitCommand
-        | PushCommand
-    ] = []
+    commands: list[AnyCommand] = []
 
     for name, new_version in bump_versions.items.items():
         pkg = workspace_packages.items[name]
@@ -79,4 +74,4 @@ def provide_bump_job(
         if not no_push.value:
             commands.append(PushCommand(label="Push", follow_tags=True))
 
-    return BumpJob(name="bump", commands=commands)  # type: ignore[arg-type]
+    return BumpJob(name="bump", commands=commands)

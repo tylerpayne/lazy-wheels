@@ -125,7 +125,7 @@ class TestMergeUpgradeCommand:
         )
         _real = subprocess.run
 
-        def _mock_editor_only(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock_editor_only(args, **kwargs):
             if isinstance(args, list) and args[0] == "fake-editor":
                 Path(args[1]).write_text("line1\nresolved\n")
                 return subprocess.CompletedProcess(args, 0)
@@ -151,7 +151,7 @@ class TestMergeUpgradeCommand:
         )
         _real = subprocess.run
 
-        def _mock_editor_only(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock_editor_only(args, **kwargs):
             if isinstance(args, list) and args[0] == "fake-editor":
                 return subprocess.CompletedProcess(args, 0)
             return _real(args, **kwargs)

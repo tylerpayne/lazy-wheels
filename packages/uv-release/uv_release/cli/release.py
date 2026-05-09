@@ -113,7 +113,7 @@ def cmd_release(
                     label="Dispatch to GitHub Actions", plan_json=plan_json
                 )
             ],
-        )  # type: ignore[arg-type]
+        )
         execute_job(dispatch_job, hooks)
         return
 

@@ -28,17 +28,6 @@ class SetVersionCommand(Command):
         path.write_text(tomlkit.dumps(doc))
         return 0
 
-    def to_shell(self) -> str:
-        # Use our own `uvr version --set` so the fix block speaks uvr's
-        # vocabulary. `--no-commit --no-push --no-pin` keeps this command
-        # to a single concern (set the version) — the surrounding fix-job
-        # commands handle pinning and committing on their own lines.
-        package_name = Path(self.package_path).name
-        return (
-            f"uvr version --set {self.version} --packages {package_name} "
-            "--no-commit --no-push --no-pin"
-        )
-
 
 class PinDepsCommand(Command):
     """Pin internal dependency versions in a package's pyproject.toml."""
@@ -65,11 +54,3 @@ class PinDepsCommand(Command):
         doc["project"]["dependencies"] = new_deps  # type: ignore[index]
         path.write_text(tomlkit.dumps(doc))
         return 0
-
-    def to_shell(self) -> str:
-        # No single shell command pins specific deps in a pyproject.toml
-        # without rewriting the table. Show a comment with the resulting pins
-        # so the user can spot what would change without us pretending it's
-        # a one-liner.
-        pins = ", ".join(self.pins.values())
-        return f"# pin in {self.package_path}/pyproject.toml: {pins}"

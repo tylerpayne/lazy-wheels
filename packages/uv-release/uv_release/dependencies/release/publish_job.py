@@ -5,6 +5,7 @@ from __future__ import annotations
 from diny import singleton, provider
 
 from ...commands import (
+    AnyCommand,
     DownloadWheelsCommand,
     MakeDirectoryCommand,
     PublishToIndexCommand,
@@ -36,9 +37,7 @@ def provide_publish_job(
 
     is_ci = release_target.value == "ci"
 
-    commands: list[
-        MakeDirectoryCommand | DownloadWheelsCommand | PublishToIndexCommand
-    ] = []
+    commands: list[AnyCommand] = []
 
     # In CI, download wheels from the GitHub releases created by the release job.
     # Locally, wheels are already in dist/ from the build job.
@@ -66,4 +65,4 @@ def provide_publish_job(
             )
         )
 
-    return PublishJob(name="publish", commands=commands)  # type: ignore[arg-type]
+    return PublishJob(name="publish", commands=commands)

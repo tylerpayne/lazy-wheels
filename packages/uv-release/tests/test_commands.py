@@ -25,7 +25,7 @@ class TestDispatchWorkflowCommand:
         cmd = DispatchWorkflowCommand(label="Dispatch", plan_json='{"jobs":[]}')
         calls: list[list[str]] = []
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             calls.append(list(args))
             if args[0] == "git":
                 return subprocess.CompletedProcess(args, 0, stdout="main\n")
@@ -42,7 +42,7 @@ class TestDispatchWorkflowCommand:
     def test_failure_returns_nonzero(self) -> None:
         cmd = DispatchWorkflowCommand(label="Dispatch", plan_json="{}")
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             if args[0] == "git":
                 return subprocess.CompletedProcess(args, 0, stdout="main\n")
             return subprocess.CompletedProcess(args, 1)
@@ -59,7 +59,7 @@ class TestDownloadWheelsCommand:
         )
         calls: list[list[str]] = []
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             calls.append(list(args))
             return subprocess.CompletedProcess(args, 0)
 
@@ -74,7 +74,7 @@ class TestDownloadWheelsCommand:
             label="Download", tag_name="pkg/v1.0.0", pattern="*.whl"
         )
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             return subprocess.CompletedProcess(args, 1)
 
         with patch("subprocess.run", side_effect=_mock):
@@ -92,7 +92,7 @@ class TestDownloadRunArtifactsCommand:
         cmd = DownloadRunArtifactsCommand(label="Download", output_dir=str(out))
         calls: list[list[str]] = []
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             calls.append(list(args))
             return subprocess.CompletedProcess(args, 0)
 
@@ -114,7 +114,7 @@ class TestDownloadRunArtifactsCommand:
         monkeypatch.setenv("RUN_ID", "99999")
         cmd = DownloadRunArtifactsCommand(label="Download")
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             return subprocess.CompletedProcess(args, 1)
 
         with patch("subprocess.run", side_effect=_mock):
@@ -134,7 +134,7 @@ class TestPublishToIndexCommand:
         )
         calls: list[list[str]] = []
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             calls.append(list(args))
             return subprocess.CompletedProcess(args, 0)
 
@@ -164,7 +164,7 @@ class TestPublishToIndexCommand:
             label="Publish", package_name="my-pkg", dist_dir=str(dist)
         )
 
-        def _mock(args, **kwargs):  # type: ignore[no-untyped-def]
+        def _mock(args, **kwargs):
             return subprocess.CompletedProcess(args, 1)
 
         with patch("subprocess.run", side_effect=_mock):
