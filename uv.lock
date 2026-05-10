@@ -842,7 +842,7 @@ wheels = [
 
 [[package]]
 name = "uv-release"
-version = "0.35.1"
+version = "0.35.2.dev0"
 source = { editable = "packages/uv-release" }
 dependencies = [
     { name = "diny" },
