@@ -52,6 +52,14 @@ def provide_skill_upgrade_job(
         msg = "No skill templates found. Is uv-release installed correctly?"
         raise ValueError(msg)
 
+    # --print-template is a pure stdout dump consumed by --upgrade in a newer
+    # uvr running us via uvx. Short-circuit here so we never touch the user's
+    # cwd state (existence checks, mode requirements, version records). Without
+    # this, fetching bases from any older uvr fails whenever the caller's repo
+    # already has skill files installed.
+    if params.print_template:
+        return SkillUpgradeJob(name="skill-upgrade", commands=[])
+
     commands: list[AnyCommand] = []
 
     # Scaffold any missing skill files first. Missing files always get written,

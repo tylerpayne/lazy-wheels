@@ -47,6 +47,14 @@ def provide_workflow_upgrade_job(
         msg = "No workflow template found. Is uv-release installed correctly?"
         raise ValueError(msg)
 
+    # --print-template is a pure stdout dump consumed by --upgrade in a newer
+    # uvr running us via uvx. Short-circuit here so we never touch the user's
+    # cwd state (existence checks, mode requirements, version records). Without
+    # this, fetching the base from any older uvr fails whenever the caller's
+    # repo already has the workflow file installed.
+    if params.print_template:
+        return WorkflowUpgradeJob(name="workflow-upgrade", commands=[])
+
     commands: list[AnyCommand] = []
     base_path = str(Path(".uvr") / "bases" / state.file_path)
 

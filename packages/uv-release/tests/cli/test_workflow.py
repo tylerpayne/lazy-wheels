@@ -72,3 +72,16 @@ class TestWorkflowUpgrade:
         assert "Write" in out or "workflow-upgrade" in out
         wf = workspace / ".github" / "workflows" / "release.yml"
         assert wf.exists()
+
+    def test_print_template_with_existing_file(
+        self, workspace: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # release.yml is scaffolded by the workspace fixture, so it exists.
+        # --print-template must short-circuit even without --upgrade/--force.
+        # The buggy provider previously raised "already exists..." breaking
+        # the uvx fetch path.
+        with diny.provide():
+            run_cli("workflow", "install", "--print-template")
+        out = capsys.readouterr().out
+        # Bundled template is YAML and includes the release workflow name.
+        assert "name:" in out
