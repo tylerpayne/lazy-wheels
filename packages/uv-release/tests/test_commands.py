@@ -85,6 +85,60 @@ class TestDownloadWheelsCommand:
             rc = cmd.execute()
         assert rc == 1
 
+    def test_filter_keeps_any_wheel_and_current_platform_wheel(
+        self, tmp_path: Path
+    ) -> None:
+        # Use the current interpreter's most-specific tag to guarantee one
+        # wheel is compatible regardless of where this test runs.
+        from packaging.tags import sys_tags
+
+        current = next(iter(sys_tags()))
+        keep_specific = (
+            f"pkg-1.0.0-{current.interpreter}-{current.abi}-{current.platform}.whl"
+        )
+        keep_any = "pkg-1.0.0-py3-none-any.whl"
+        drop_macos = "pkg-1.0.0-py3-none-macosx_10_13_x86_64.whl"
+        drop_linux = "pkg-1.0.0-py3-none-manylinux_2_17_x86_64.whl"
+        drop_windows = "pkg-1.0.0-py3-none-win_amd64.whl"
+        drop_macos_arm = "pkg-1.0.0-py3-none-macosx_11_0_arm64.whl"
+
+        for fname in (
+            keep_specific,
+            keep_any,
+            drop_macos,
+            drop_linux,
+            drop_windows,
+            drop_macos_arm,
+        ):
+            (tmp_path / fname).write_bytes(b"")
+
+        # Only the wheel(s) matching the current interpreter should survive.
+        # On macOS arm64 the linux/windows/macos-x86_64 wheels go; on Linux
+        # x86_64 the macOS/windows wheels go but manylinux survives. The
+        # always-keep candidates are the "-any" wheel and the wheel we built
+        # from the current sys_tags() entry.
+        cmd = DownloadWheelsCommand(
+            label="",
+            tag_name="pkg/v1.0.0",
+            pattern="*.whl",
+            output_dir=str(tmp_path),
+        )
+        cmd._filter_platform_wheels()
+
+        remaining = {p.name for p in tmp_path.iterdir()}
+        assert keep_any in remaining
+        assert keep_specific in remaining
+        # At least one of the explicit non-current-platform wheels must be
+        # dropped (on any platform the runner could be).
+        assert remaining != {
+            keep_specific,
+            keep_any,
+            drop_macos,
+            drop_linux,
+            drop_windows,
+            drop_macos_arm,
+        }
+
 
 class TestDownloadRunArtifactsCommand:
     def test_calls_gh_run_download(

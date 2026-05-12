@@ -7,6 +7,9 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from packaging.tags import sys_tags
+from packaging.utils import InvalidWheelFilename, parse_wheel_filename
+
 from ..ui.console import console
 from .base import Command
 
@@ -46,20 +49,22 @@ class DownloadWheelsCommand(Command):
         return 0
 
     def _filter_platform_wheels(self) -> None:
-        """Remove downloaded wheels that don't match the current platform."""
-        import sysconfig
+        """Remove downloaded wheels that don't match the current platform.
 
-        platform_tag = sysconfig.get_platform().replace("-", "_").replace(".", "_")
+        Uses packaging.tags.sys_tags(), the canonical compatibility check
+        (same as pip/uv). A wheel is kept if any of its embedded tags appear
+        in the current interpreter's supported tag set.
+        """
+        compatible = set(sys_tags())
         out = Path(self.output_dir)
         for whl in out.glob("*.whl"):
-            name = whl.name
-            if name.endswith("-none-any.whl"):
+            try:
+                _name, _version, _build, wheel_tags = parse_wheel_filename(whl.name)
+            except InvalidWheelFilename:
                 continue
-            parts = name[:-4].split("-")
-            if len(parts) >= 3:
-                wheel_platform = parts[-1]
-                if not _platform_compatible(wheel_platform, platform_tag):
-                    whl.unlink()
+            if not (wheel_tags & compatible):
+                console.print(f"    Removing incompatible wheel: {whl.name}")
+                whl.unlink()
 
 
 class DownloadRunArtifactsCommand(Command):
@@ -104,18 +109,3 @@ class DownloadRunArtifactsCommand(Command):
                     f.rename(out / f.name)
                 subdir.rmdir()
         return 0
-
-
-def _platform_compatible(wheel_platform: str, current_platform: str) -> bool:
-    """Check if a wheel's platform tag is compatible with the current platform."""
-    if wheel_platform == "any" or wheel_platform == current_platform:
-        return True
-    if "arm64" in current_platform and "x86_64" in wheel_platform:
-        return False
-    if "aarch64" in current_platform and "x86_64" in wheel_platform:
-        return False
-    if "x86_64" in current_platform and (
-        "arm64" in wheel_platform or "aarch64" in wheel_platform
-    ):
-        return False
-    return True
