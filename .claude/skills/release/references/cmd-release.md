@@ -25,6 +25,7 @@ To change what gets released, use `uvr version` before releasing:
 
 ```bash
 uvr version --bump minor         # prepare a minor release
+uvr version --bump alpha         # enter or advance alpha cycle (also beta, rc)
 uvr version --bump stable        # strip pre/dev suffixes
 uvr version --bump post          # advance post-release number
 ```

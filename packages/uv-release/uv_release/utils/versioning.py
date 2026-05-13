@@ -93,8 +93,50 @@ def compute_bumped_version(version: Version, bump_kind: BumpKind) -> Version:
                 msg = f"Cannot bump post from dev version: {version.raw}"
                 raise ValueError(msg)
             return Version.build(version.base, post_number=0, dev_number=0)
+        case BumpKind.ALPHA:
+            return _bump_pre(version, "a")
+        case BumpKind.BETA:
+            return _bump_pre(version, "b")
+        case BumpKind.RC:
+            return _bump_pre(version, "rc")
         case BumpKind.AUTO:
             return _auto_bump(version)
+
+
+# Pre-release rank. Regressions (e.g. rc -> a) are forbidden.
+_PRE_ORDER = {"a": 0, "b": 1, "rc": 2}
+
+
+def _bump_pre(version: Version, target_kind: str) -> Version:
+    if version.post_number is not None:
+        msg = f"Cannot bump {target_kind} from post-release: {version.raw}"
+        raise ValueError(msg)
+
+    current_kind = version.pre_kind
+    if current_kind is not None:
+        current_rank = _PRE_ORDER.get(current_kind, -1)
+        target_rank = _PRE_ORDER[target_kind]
+        if target_rank < current_rank:
+            msg = f"Cannot go from {current_kind} to {target_kind}: {version.raw}"
+            raise ValueError(msg)
+        if target_rank == current_rank:
+            # Same kind: advance the pre-number. dev_number=0 puts the new
+            # version into the dev cycle for the next release (matches the
+            # rest of the bump flow, where CI strips dev on release).
+            assert version.pre_number is not None
+            return Version.build(
+                version.base,
+                pre_kind=target_kind,
+                pre_number=version.pre_number + 1,
+                dev_number=0,
+            )
+        # Higher kind: reset pre-number to 0.
+        return Version.build(
+            version.base, pre_kind=target_kind, pre_number=0, dev_number=0
+        )
+
+    # No existing pre-release: enter the cycle at <kind>0.dev0.
+    return Version.build(version.base, pre_kind=target_kind, pre_number=0, dev_number=0)
 
 
 def _auto_bump(version: Version) -> Version:

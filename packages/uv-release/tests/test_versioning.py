@@ -174,6 +174,69 @@ class TestComputeBumpedVersion:
         v = compute_bumped_version(Version.parse("1.0.0.post1.dev3"), BumpKind.AUTO)
         assert v.raw == "1.0.0.post1.dev4"
 
+    # --- Pre-release (alpha/beta/rc) ---
+    def test_alpha_from_stable_enters_cycle(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0"), BumpKind.ALPHA).raw
+            == "1.0.0a0.dev0"
+        )
+
+    def test_alpha_same_kind_increments(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0a2"), BumpKind.ALPHA).raw
+            == "1.0.0a3.dev0"
+        )
+
+    def test_alpha_same_kind_from_dev(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0a2.dev0"), BumpKind.ALPHA).raw
+            == "1.0.0a3.dev0"
+        )
+
+    def test_beta_from_alpha_resets_number(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0a3"), BumpKind.BETA).raw
+            == "1.0.0b0.dev0"
+        )
+
+    def test_rc_from_beta_resets_number(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0b2"), BumpKind.RC).raw
+            == "1.0.0rc0.dev0"
+        )
+
+    def test_beta_same_kind_increments(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0b1"), BumpKind.BETA).raw
+            == "1.0.0b2.dev0"
+        )
+
+    def test_rc_same_kind_increments(self) -> None:
+        assert (
+            compute_bumped_version(Version.parse("1.0.0rc4"), BumpKind.RC).raw
+            == "1.0.0rc5.dev0"
+        )
+
+    def test_alpha_regression_from_beta_errors(self) -> None:
+        with pytest.raises(ValueError, match="Cannot go from b to a"):
+            compute_bumped_version(Version.parse("1.0.0b1"), BumpKind.ALPHA)
+
+    def test_alpha_regression_from_rc_errors(self) -> None:
+        with pytest.raises(ValueError, match="Cannot go from rc to a"):
+            compute_bumped_version(Version.parse("1.0.0rc0"), BumpKind.ALPHA)
+
+    def test_beta_regression_from_rc_errors(self) -> None:
+        with pytest.raises(ValueError, match="Cannot go from rc to b"):
+            compute_bumped_version(Version.parse("1.0.0rc0"), BumpKind.BETA)
+
+    def test_alpha_from_post_errors(self) -> None:
+        with pytest.raises(ValueError, match="Cannot bump a from post-release"):
+            compute_bumped_version(Version.parse("1.0.0.post1"), BumpKind.ALPHA)
+
+    def test_rc_from_post_errors(self) -> None:
+        with pytest.raises(ValueError, match="Cannot bump rc from post-release"):
+            compute_bumped_version(Version.parse("1.0.0.post1"), BumpKind.RC)
+
 
 class TestComputeDependencyPins:
     def test_pins_internal_dep(self) -> None:

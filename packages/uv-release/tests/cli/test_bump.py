@@ -17,6 +17,11 @@ class TestVersion:
             (["--bump", "patch"], "0.1.1.dev0"),
             (["--bump", "dev"], "0.1.0.dev1"),
             (["--bump", "stable"], "0.1.0"),
+            (["--bump", "alpha"], "0.1.0a0.dev0"),
+            (["--bump", "a"], "0.1.0a0.dev0"),
+            (["--bump", "beta"], "0.1.0b0.dev0"),
+            (["--bump", "b"], "0.1.0b0.dev0"),
+            (["--bump", "rc"], "0.1.0rc0.dev0"),
             (["--set", "2.0.0"], "2.0.0"),
         ],
     )

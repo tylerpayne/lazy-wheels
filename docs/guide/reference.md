@@ -58,7 +58,7 @@ uvr version [options]
 |---|---|
 | *(none)* | Display current package versions. |
 | `--set VERSION` | Set all targeted packages to an explicit version string. |
-| `--bump [AXIS]` | Increment a version number. With no argument, auto-detects the last section (dev, pre-release, post, or patch) and increments it. Explicit axes: `dev`, `patch`, `minor`, `major`, `post`, `stable`. `stable` strips pre-release and dev suffixes. |
+| `--bump [AXIS]` | Increment a version number. With no argument, auto-detects the last section (dev, pre-release, post, or patch) and increments it. Explicit axes: `dev`, `patch`, `minor`, `major`, `post`, `alpha` (alias `a`), `beta` (alias `b`), `rc`, `stable`. `alpha`, `beta`, and `rc` enter or advance a pre-release cycle. `stable` strips pre-release and dev suffixes. |
 
 **Scope:**
 

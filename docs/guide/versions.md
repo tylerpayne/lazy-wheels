@@ -42,6 +42,9 @@ uvr version --packages pkg-alpha --bump major --force
 | `--bump patch` | `1.2.3.dev0` → `1.2.4.dev0` | Next patch version |
 | `--bump dev` | `1.3.0.dev0` → `1.3.0.dev1` | Increment the dev number |
 | `--bump post` | `1.2.3` → `1.2.3.post0.dev0` | Enter [post-release](https://peps.python.org/pep-0440/#post-releases) cycle |
+| `--bump alpha` (alias `a`) | `1.3.0` → `1.3.0a0.dev0` | Enter or advance alpha cycle |
+| `--bump beta` (alias `b`) | `1.3.0a3` → `1.3.0b0.dev0` | Advance to beta (resets pre-number) |
+| `--bump rc` | `1.3.0b1` → `1.3.0rc0.dev0` | Advance to rc (resets pre-number) |
 | `--bump stable` | `1.3.0a2.dev0` → `1.3.0` | Strip pre-release and dev suffixes |
 
 With no argument, `--bump` detects the last section of the version and increments it. If the version ends in `.devN`, it bumps dev. If it ends in a pre-release like `a2`, it bumps the pre-release number. Otherwise it bumps patch.
@@ -82,15 +85,19 @@ Pin detection is pure. No files are modified during plan generation. If pins nee
 
 ```bash
 uvr version --bump minor          # 1.3.0.dev0
-uvr version --set 1.3.0a0.dev0    # enter alpha cycle
+uvr version --bump alpha          # 1.3.0a0.dev0 (enter alpha cycle)
 uvr release                       # publishes 1.3.0a0, CI bumps to 1.3.0a1.dev0
 uvr version --bump                # 1.3.0a2.dev0 (increment dev)
 uvr release                       # publishes 1.3.0a2, CI bumps to 1.3.0a3.dev0
-uvr version --set 1.3.0b0.dev0    # advance to beta
+uvr version --bump beta           # 1.3.0b0.dev0 (advance to beta)
 uvr release                       # publishes 1.3.0b0, CI bumps to 1.3.0b1.dev0
+uvr version --bump rc             # 1.3.0rc0.dev0 (advance to rc)
+uvr release                       # publishes 1.3.0rc0, CI bumps to 1.3.0rc1.dev0
 uvr version --bump stable         # 1.3.0
 uvr release                       # publishes 1.3.0, CI bumps to 1.3.1.dev0
 ```
+
+Regressions (`rc` to `alpha`) and bumping a pre-release from a post-release are rejected. Use `--set <version>` if you really need to start over from an unusual state.
 
 ## Post-release workflow
 

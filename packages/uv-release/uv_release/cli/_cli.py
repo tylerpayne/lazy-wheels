@@ -231,12 +231,26 @@ def parse_args() -> ParsedArgs:
         "--bump",
         nargs="?",
         const="auto",
-        choices=["auto", "dev", "patch", "minor", "major", "post", "stable"],
+        choices=[
+            "auto",
+            "dev",
+            "patch",
+            "minor",
+            "major",
+            "post",
+            "stable",
+            "alpha",
+            "a",
+            "beta",
+            "b",
+            "rc",
+        ],
         default="",
         dest="bump_kind",
         help=(
             "Bump the version. Without an argument, bumps the smallest sensible "
-            "axis. `stable` strips pre-release/dev suffixes."
+            "axis. `stable` strips pre-release/dev suffixes. `alpha`/`beta`/`rc` "
+            "(aliases `a`/`b`) enter or advance a pre-release cycle."
         ),
     )
 
@@ -550,12 +564,18 @@ def provide_release_target(args: ParsedArgs) -> ReleaseTarget:
     return ReleaseTarget(value=args.values.get("where", "local"))
 
 
+# Short-form pre-release aliases accepted on the CLI. The BumpKind enum
+# only knows the long names, so we normalize before constructing it.
+_BUMP_KIND_ALIASES = {"a": "alpha", "b": "beta"}
+
+
 @provider(BumpType)
 def provide_bump_type(args: ParsedArgs) -> BumpType:
     # --bump <axis> maps directly to a BumpKind.
     bump_kind = args.values.get("bump_kind", "") or ""
     if bump_kind:
-        return BumpType(value=BumpKind(bump_kind))
+        normalized = _BUMP_KIND_ALIASES.get(bump_kind, bump_kind)
+        return BumpType(value=BumpKind(normalized))
     # --set has no bump kind, defaults to DEV for release pipeline usage.
     return BumpType(value=BumpKind.DEV)
 

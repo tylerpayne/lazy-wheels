@@ -9,10 +9,9 @@ Run `fix` then `check` after every change. Do not skip this. Do not commit witho
 
 ## Structure
 
-uv workspace with two packages.
+uv workspace with one package.
 
-- `packages/uv-release`. Published to PyPI as `uv-release`, CLI entry point is `uvr`. Uses the State + Intent + Planner architecture.
-- `packages/uvr-diny`. Pure DI reimplementation using the `diny` container. CLI entry point is `uvrd`. Zero glue code. Every type is a `@singleton` with a `@provider`, resolved automatically from `sys.argv` down.
+- `packages/uv-release`. Published to PyPI as `uv-release`, CLI entry point is `uvr`. Pure dependency injection via the `diny` container. Every type is a `@singleton` with a `@provider`, resolved automatically from `sys.argv` down. There is no planner, no Intent protocol, no `provide()` or `resolve()` calls in application code.
 
 ## Commands
 
@@ -49,96 +48,71 @@ team member. If it might qualify, ask the user whether to document it with `/adr
 
 ### Entity-first modeling
 
-The codebase is organized around a fixed set of frozen entity types. Each entity represents a distinct concept in the release pipeline. Adding a new entity is a significant design decision that should be discussed before implementation.
+The codebase is organized around a fixed set of frozen entity types defined in `types/`. Each entity represents a distinct concept in the release pipeline. Adding a new entity is a significant design decision that should be discussed before implementation.
 
-#### Entities (types.py)
+Core entity types currently live in `uv_release/types/`:
 
 | Entity | Role |
 |---|---|
 | Version | PEP 440 version, parsed once into structured fields |
-| VersionState | The 11 distinct forms a version can take |
 | Tag | A git tag tied to a package and version |
 | Package | A package as discovered from pyproject.toml |
-| Config | Workspace-level uvr configuration |
-| Publishing | Index publishing configuration |
-| Hooks | User-provided lifecycle callbacks |
-| Change | A package that changed since its baseline |
+| Pin | A dependency version pin |
+| Job | Base class for named groups of commands (subclasses for DI identity) |
+| Command | Self-executing build/release/publish step (subclasses in commands/) |
+| BumpKind | The version bump strategies (major, minor, patch, post, dev, stable, auto) |
+| PyProject | Pydantic models for pyproject.toml parsing |
+| Dependency | Internal package dependency |
 | Release | A changed package planned for release |
-| Command | A self-executing build/release/publish step (base in types.py, subclasses in commands.py) |
-| Job | A named group of commands in the workflow DAG |
-| Plan | The final pipeline output, everything needed to execute |
-| PlanParams | CLI flags passed through the pipeline (not a State) |
-| MergeResult | Result of a three-way file merge |
-| BumpType | The 9 version bump strategies |
-| Intent | Protocol for all intent types (guard + plan methods) |
-
-#### States (states/)
-
-State types own their I/O via a parse() classmethod. Dependencies are declared as type hints on parse() and resolved recursively by the planner. Adding a new State is straightforward. Adding a new entity is a significant design decision.
-
-| State | Defined in | Dependencies | Role |
-|---|---|---|---|
-| Workspace | states/workspace.py | (none) | Package map and root path, parsed from pyproject.toml |
-| UvrState | states/uvr_state.py | (none) | Config, publishing, runners, editor, uvr version |
-| Worktree | states/worktree.py | GitRepo | Git cleanliness and GitHub remote identity |
-| Changes | states/changes.py | Workspace, PlanParams, GitRepo | Packages that changed since their baselines |
-| ReleaseTags | states/release_tags.py | Workspace, GitRepo | Verified release tags for unchanged packages |
-| LatestReleaseTags | states/github.py | Worktree | Latest release tags per package from GitHub API |
-| WorkflowState | states/workflow.py | (none) | Workflow template, file content, merge base |
-| SkillState | states/skill.py | (none) | Skill templates, merge bases, file existence |
 
 ### Frozen entities
 
 All entities are frozen after construction. No mutation. Builders are internal to pipeline steps and never leak past them. Transformations return new instances.
 
-## uvr-diny Design (packages/uvr-diny)
+### Pure DI via diny
 
-`uvr-diny` is a ground-up reimplementation that replaces the State + Intent + Planner architecture with pure dependency injection via `diny`. There is no planner, no Intent protocol, no `provide()` or `resolve()` calls in application code.
-
-### Architecture
-
-- `parse_args()` IS the `@provider(Params)`. diny resolves CLI args from `sys.argv` automatically.
-- `cli()` is `@inject`. The entire program is one injected function call.
-- Each CLI concern (PackageSelection, DevRelease, BumpType, etc.) is a separate `@singleton` derived from `Params` via its own `@provider`.
-- `Plan` is only for `uvr release` (CI dispatch). Other commands (`build`, `bump`, `status`) resolve their Job or state type directly.
+- `parse_args()` is the `@provider(ParsedArgs)`. diny resolves CLI args from `sys.argv` automatically.
+- Each CLI command in `cli/` is `@inject`. The entire program is one injected function call.
+- Each CLI concern (PackageSelection, DevRelease, BumpType, etc.) is a separate `@singleton` derived from `ParsedArgs` via its own `@provider`.
+- `Plan` is only for `uvr release` (CI dispatch). Other commands (`build`, `bump`, `status`) resolve their Job or singleton type directly.
 
 ### Directory layout
 
 ```
-uvr_diny/
+uv_release/
   types/           # Pure frozen data types, no DI
-    base.py        # Frozen(BaseModel) base class
-    version.py     # Version, VersionState
-    package.py     # Package
-    tag.py         # Tag
-    command.py     # Command subclasses (self-executing)
-    job.py         # Job base class (subclasses for DI identity)
-    pin.py         # Pin (dependency version pin)
-    pyproject.py   # Pydantic models for pyproject.toml parsing
+  commands/        # Self-executing Command subclasses (build, publish, etc.)
   dependencies/
-    shared/        # Cross-command providers (GitRepo, WorkspacePackages, etc.)
+    shared/        # Cross-command providers (GitRepo, WorkspacePackages, BaselineTags, etc.)
     config/        # [tool.uvr.*] settings (UvrConfig, UvrPublishing, UvrRunners)
     params/        # CLI-seeded singletons (one per CLI concern)
     build/         # Build command deps (BuildPackages, PackageDependencies, BuildOrder, BuildJob)
     release/       # Release command deps (ReleaseVersions, ReleaseNotes, Plan, etc.)
     bump/          # Standalone bump deps (BumpVersions, BumpJob)
+    clean/         # uvr clean deps
+    configure/     # uvr configure deps
+    download/      # uvr download deps
+    install/       # uvr install deps
+    skill/         # uvr skill deps
+    workflow/      # uvr workflow deps
   cli/             # @inject entry points, zero wiring
+  ui/              # Console rendering helpers
+  utils/           # Pure helpers (versioning, etc.)
+  templates/       # Workflow and skill templates
   execute.py       # Plan/Job executor
 ```
 
 ### Import direction
 
 ```
-types/             (shared, imported by all)
+types/                (shared, imported by all)
      ↓
 dependencies/shared/  (GitRepo, WorkspacePackages, tags, versioning, graph)
      ↓
 dependencies/config/  (UvrConfig, UvrPublishing, UvrRunners)
 dependencies/params/  (CLI-seeded singletons)
      ↓
-dependencies/build/   (BuildPackages, PackageDependencies, BuildOrder, BuildJob)
-dependencies/release/ (ReleaseVersions, ReleaseJob, Plan, etc.)
-dependencies/bump/    (BumpVersions, BumpJob)
+dependencies/{build,release,bump,clean,configure,download,install,skill,workflow}/
      ↓
 cli/                  (@inject entry points)
      ↓
@@ -147,57 +121,9 @@ execute.py            (runs commands)
 
 No command-axis module imports from another command-axis module. Shared modules never import from command modules.
 
-### State + Intent pipeline (packages/uv-release)
-
-The pipeline isolates reads from writes. States own all I/O via parse() classmethods. Intents are pure functions of state that produce Plans. The planner resolves state dependencies recursively.
-
-#### Verbs
-
-| Verb | Where | I/O profile |
-|---|---|---|
-| parse | State.parse() classmethods | Reads filesystem, git, GitHub API |
-| guard | Intent.guard() | Pure. Validates state, raises ValueError on failure |
-| plan | Intent.plan() | Pure. Builds a Plan from resolved state |
-| execute | execute_plan() | Writes filesystem, runs subprocesses |
-
-Every CLI command produces a Plan. The difference is which jobs have commands. One executor consumes the Plan regardless of how it was built. The planner calls intent.guard() before intent.plan() so hooks can intercept between parse and guard.
-
-#### Dependency injection
-
-Intents declare state dependencies as keyword-only parameters on guard() and plan(). The planner inspects type hints and recursively resolves each State via its parse() classmethod. PlanParams and GitRepo are seeded into the cache. States declare their own dependencies the same way.
-
-```python
-class Changes(State):
-    @classmethod
-    def parse(cls, *, workspace: Workspace, params: PlanParams, git_repo: GitRepo) -> Changes: ...
-
-class BuildIntent(BaseModel):
-    def plan(self, *, workspace: Workspace, changes: Changes, release_tags: ReleaseTags) -> Plan: ...
-```
-
-#### Import direction
-
-Imports follow the pipeline direction. Later steps may import from earlier steps but never the reverse. `types`, `graph`, and `commands` are shared and may be imported by any module. Intents import State types from states/ for type annotations only (never calling I/O directly).
-
-```
-types, graph, commands  (shared, imported by all)
-     ↓
-   git                  (GitRepo singleton, imported by states)
-     ↓
-   states/*             (State types with parse(), owns all I/O)
-     ↓
-   intents/*            (pure functions of state, builds plans, no I/O)
-     ↓
-   planner              (resolves state deps, calls guard + plan)
-     ↓
-   execute              (runs commands)
-```
-
-A module must never import from a later pipeline step. For example, `states` must not import from `intents`. Sibling imports within the same step are fine. State files contain only their State class and private helpers.
-
 ### TDD with parametrized tests
 
-Tests come first. Intent tests construct State objects directly and pass them as kwargs with no mocks. State integration tests use tmp_path fixtures with real git repos. Test matrices are explicit and exhaustive. Each test file covers one module.
+Tests come first. Tests construct singleton dependencies directly and pass them as kwargs with no mocks where possible. Integration tests use tmp_path fixtures with real git repos. Test matrices are explicit and exhaustive. Each test file covers one module.
 
 ### No magic strings
 
@@ -209,7 +135,7 @@ Prefer established libraries over hand-rolled logic. Version parsing delegates t
 
 ### Naming
 
-Function names follow `verb_noun` pattern. Examples: `compute_build_job`, `compute_release_version`, `compute_plan`. State types use `parse` as their classmethod name. Use `get`/`set` for in-memory access, `read`/`write` for disk I/O. No abbreviations.
+Function names follow `verb_noun` pattern. Examples: `compute_build_job`, `compute_release_version`, `compute_bumped_version`. Use `get`/`set` for in-memory access, `read`/`write` for disk I/O. No abbreviations.
 
 ### Typed Python
 
