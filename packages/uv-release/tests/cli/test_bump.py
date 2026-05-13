@@ -116,6 +116,34 @@ class TestVersion:
         assert "pkg-a" in out
         assert "0.1.0.dev0" in out
 
+    def test_pins_build_system_requires(self, build_requires_workspace: Path) -> None:
+        """`--bump stable` pins workspace deps in both [project].dependencies
+        and [build-system].requires. pkg-c build-requires pkg-d (workspace,
+        being released) and pkg-a (workspace, already released). Both should
+        be rewritten to the new pinned form, while non-workspace entries
+        like `hatchling` pass through untouched.
+        """
+        with diny.provide():
+            run_cli(
+                "version",
+                "--all-packages",
+                "--bump",
+                "stable",
+                "--no-commit",
+                "--no-push",
+            )
+        pkg_c = read_toml(
+            build_requires_workspace / "packages" / "pkg-c" / "pyproject.toml"
+        )
+        requires = [str(r) for r in pkg_c["build-system"]["requires"]]
+        # pkg-d (workspace dep) gets the new pinned form with upper bound.
+        assert "pkg-d>=0.1.0,<0.2.0" in requires
+        # pkg-a (already-released workspace dep) also gets the pinned form
+        # at its just-stripped version 1.0.1.
+        assert "pkg-a>=1.0.1,<1.1.0" in requires
+        # hatchling is not a workspace dep — must pass through untouched.
+        assert "hatchling" in requires
+
     def test_release_preserves_pre_release(self, workspace: Path) -> None:
         # Regression: `--bump release` must strip only `.devN`, not the
         # pre-release suffix. `--bump stable` over-strips here and would

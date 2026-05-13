@@ -36,7 +36,12 @@ class SetVersionCommand(Command):
 
 
 class PinDepsCommand(Command):
-    """Pin internal dependency versions in a package's pyproject.toml."""
+    """Pin internal dependency versions in a package's pyproject.toml.
+
+    Rewrites matching entries in both `[project].dependencies` and
+    `[build-system].requires` so a workspace package that build-depends
+    on a sibling stays consistent across the release.
+    """
 
     type: Literal["pin_deps"] = "pin_deps"
     package_path: str
@@ -49,14 +54,27 @@ class PinDepsCommand(Command):
             console.print(f"  {self.label}")
         path = Path(self.package_path) / "pyproject.toml"
         doc = tomlkit.loads(path.read_text())
-        deps = doc["project"].get("dependencies", [])  # type: ignore[union-attr]
-        new_deps: list[Any] = []
-        for dep in deps:
-            name = parse_dep_name(str(dep))
-            if name in self.pins:
-                new_deps.append(self.pins[name])
-            else:
-                new_deps.append(dep)
-        doc["project"]["dependencies"] = new_deps  # type: ignore[index]
+
+        project = doc.get("project")
+        if project is not None:
+            deps = project.get("dependencies", [])
+            project["dependencies"] = _rewrite_pins(deps, self.pins)
+
+        build_system = doc.get("build-system")
+        if build_system is not None:
+            requires = build_system.get("requires", [])
+            build_system["requires"] = _rewrite_pins(requires, self.pins)
+
         path.write_text(tomlkit.dumps(doc))
         return 0
+
+
+def _rewrite_pins(items: list[Any], pins: dict[str, str]) -> list[Any]:
+    rewritten: list[Any] = []
+    for item in items:
+        name = parse_dep_name(str(item))
+        if name in pins:
+            rewritten.append(pins[name])
+        else:
+            rewritten.append(item)
+    return rewritten

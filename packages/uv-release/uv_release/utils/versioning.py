@@ -171,16 +171,22 @@ def compute_dependency_pins(
 ) -> list[Pin]:
     """Compute dependency pins for packages whose deps are being bumped.
 
-    For each package in all_packages, if any of its internal deps are in
-    new_versions, generate a Pin with the new version range. Dev versions
-    are skipped because they are not installable from PyPI without --pre.
+    For each package in all_packages, if any of its internal deps (runtime
+    or build-system) are in new_versions, generate a Pin with the new
+    version range. Build-system.requires entries are pinned too so a
+    workspace package that build-depends on a sibling stays consistent
+    across the release. Dev versions are skipped because they are not
+    installable from PyPI without --pre.
     """
     bumped_names = set(new_versions.keys())
     pins: list[Pin] = []
 
     for pkg in all_packages.values():
         pkg_pins: dict[str, str] = {}
-        for dep in pkg.dep_names:
+        # all_dep_names covers both [project].dependencies and
+        # [build-system].requires. Duplicates between the two lists
+        # collapse naturally because pkg_pins is a dict keyed by name.
+        for dep in pkg.all_dep_names:
             if dep in bumped_names:
                 nv = new_versions[dep]
                 # Never pin to dev versions. They are not installable from PyPI.

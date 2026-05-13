@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- `uvr bump` and `uvr version` now rewrite workspace dependency pins in `[build-system].requires`, not just `[project].dependencies`. A workspace package that build-depends on a sibling no longer drifts out of sync with the rest of the release. The user-facing docs already claimed this behavior; only the code was missing.
+
+## [uv-release v0.37.0] - 2026-05-13
+
 ### Added
 - `uvr version --bump release` strips only the `.devN` suffix, preserving any pre-release or post-release suffix. `1.0.0a0.dev0` becomes `1.0.0a0`; `1.0.0.dev0` becomes `1.0.0`. Mirrors what the release pipeline does when it turns a working-tree dev version into a published version.
 

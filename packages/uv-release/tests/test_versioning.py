@@ -350,3 +350,40 @@ class TestComputeDependencyPins:
         }
         pins = compute_dependency_pins(versions, packages)
         assert len(pins) == 0
+
+    def test_pins_build_system_dep(self) -> None:
+        """A workspace dep in build-system.requires is pinned like a runtime dep."""
+        versions = {"pkg-a": Version.parse("2.0.0")}
+        packages = {
+            "pkg-a": Package(
+                name="pkg-a", path="packages/pkg-a", version=Version.parse("2.0.0")
+            ),
+            "pkg-b": Package(
+                name="pkg-b",
+                path="packages/pkg-b",
+                version=Version.parse("1.0.0"),
+                build_dependencies=[_d("pkg-a")],
+            ),
+        }
+        pins = compute_dependency_pins(versions, packages)
+        assert len(pins) == 1
+        assert "pkg-a>=2.0.0" in pins[0].pins["pkg-a"]
+
+    def test_pin_appears_once_when_dep_in_both_runtime_and_build(self) -> None:
+        """Same dep in both lists collapses to a single pin entry."""
+        versions = {"pkg-a": Version.parse("2.0.0")}
+        packages = {
+            "pkg-a": Package(
+                name="pkg-a", path="packages/pkg-a", version=Version.parse("2.0.0")
+            ),
+            "pkg-b": Package(
+                name="pkg-b",
+                path="packages/pkg-b",
+                version=Version.parse("1.0.0"),
+                dependencies=[_d("pkg-a")],
+                build_dependencies=[_d("pkg-a")],
+            ),
+        }
+        pins = compute_dependency_pins(versions, packages)
+        assert len(pins) == 1
+        assert list(pins[0].pins.keys()) == ["pkg-a"]
