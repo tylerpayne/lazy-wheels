@@ -254,6 +254,22 @@ class TestPublishJobStructure:
         for p in publishes:
             assert p["index"] == "pypi"
 
+    def test_ci_downloads_all_platforms(self, released_workspace: Path) -> None:
+        """CI publish must download every platform's wheel.
+
+        DownloadWheelsCommand defaults to filtering wheels to the host
+        runner's tag set, which would strip every wheel built on a different
+        platform and leave PyPI with a single-platform release.
+        """
+        with diny.provide():
+            plan = get_plan_json("--dev", where="ci")
+        downloads = _commands_of_type(plan, "publish", "download_wheels")
+        assert downloads, "publish job should download wheels in CI mode"
+        for cmd in downloads:
+            assert cmd["all_platforms"] is True, (
+                f"publish download {cmd['tag_name']} must keep all platforms"
+            )
+
 
 class TestBumpJobStructure:
     """Verify post-release bump job structure."""

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [uv-release v0.37.2] - 2026-05-13
+
+### Fixed
+- Publish job no longer strips wheels to the publish runner's host platform before uploading. `DownloadWheelsCommand` now runs with `all_platforms=True` for the publish step, so every wheel attached to the GitHub release lands in `dist/` before `uv publish` runs. Previously the default `packaging.tags.sys_tags()` filter on an `ubuntu-latest` publish runner kept only `manylinux_2_17_x86_64`, and PyPI ended up with a single-platform release. Pure-Python (`py3-none-any`) packages were unaffected.
+
+## [uv-release v0.37.1] - 2026-05-13
+
 ### Fixed
 - `uvr bump` and `uvr version` now rewrite workspace dependency pins in `[build-system].requires`, not just `[project].dependencies`. A workspace package that build-depends on a sibling no longer drifts out of sync with the rest of the release. The user-facing docs already claimed this behavior; only the code was missing.
 
