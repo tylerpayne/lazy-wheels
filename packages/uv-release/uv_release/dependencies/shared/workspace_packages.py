@@ -31,6 +31,59 @@ def provide_workspace_packages() -> WorkspacePackages:
         tomlkit.loads((root / "pyproject.toml").read_text())
     )
 
+    has_root_project = bool(root_doc.project.name)
+    has_workspace = bool(root_doc.tool.uv.workspace.members)
+
+    # A root that is both a package and a workspace root is ambiguous: it
+    # would appear twice (once as itself, once via a glob like `.`), and
+    # uv-release does not yet support that layout. Reject early with a
+    # clear message rather than discovering inconsistent state.
+    if has_root_project and has_workspace:
+        msg = (
+            "Root pyproject.toml has both [project] and [tool.uv.workspace]. "
+            "uv-release does not yet support a workspace root that is also a "
+            "package. Pick one shape (single-package or multi-package workspace)."
+        )
+        raise ValueError(msg)
+
+    packages: dict[str, Package] = {}
+
+    # Single-package layout: the root pyproject IS the only package. Emit it
+    # at path "." so downstream code (git pathspecs, build cwd, etc.) treats
+    # the workspace root as the package root.
+    if has_root_project:
+        packages.update(_packages_from_root(root_doc, root))
+    else:
+        # Multi-package workspace (existing behavior). An empty workspace
+        # block yields an empty dict, which several commands handle.
+        packages.update(_packages_from_members(root_doc, root))
+
+    return WorkspacePackages(items=packages, root=root)
+
+
+def _packages_from_root(root_doc: RootPyProject, root: Path) -> dict[str, Package]:
+    name = canonicalize_name(root_doc.project.name)
+    if not root_doc.project.version:
+        msg = (
+            f"Package {name} (./pyproject.toml) has no [project].version. "
+            "Set a version before running uvr."
+        )
+        raise ValueError(msg)
+    version = Version.parse(root_doc.project.version)
+    deps = [Dependency.parse(d) for d in root_doc.project.dependencies]
+    build_deps = [Dependency.parse(d) for d in root_doc.build_system.requires]
+    return {
+        name: Package(
+            name=name,
+            path=str(root),
+            version=version,
+            dependencies=deps,
+            build_dependencies=build_deps,
+        )
+    }
+
+
+def _packages_from_members(root_doc: RootPyProject, root: Path) -> dict[str, Package]:
     packages: dict[str, Package] = {}
     for pattern in root_doc.tool.uv.workspace.members:
         for pkg_dir in sorted(root.glob(pattern)):
@@ -62,5 +115,4 @@ def provide_workspace_packages() -> WorkspacePackages:
                 dependencies=deps,
                 build_dependencies=build_deps,
             )
-
-    return WorkspacePackages(items=packages, root=root)
+    return packages

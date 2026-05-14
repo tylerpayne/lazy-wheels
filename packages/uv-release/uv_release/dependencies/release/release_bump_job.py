@@ -60,6 +60,7 @@ def provide_release_bump_job(
         commands.append(
             SetVersionCommand(
                 label=f"Bump {name} to {next_version.raw}",
+                package_name=pkg.name,
                 package_path=pkg.path,
                 version=next_version.raw,
             )

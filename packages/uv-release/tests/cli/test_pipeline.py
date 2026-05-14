@@ -818,6 +818,7 @@ class TestRunnerAwareBuild:
 
         cmd = BuildCommand(
             label="Build pkg-a",
+            package_name="pkg-a",
             package_path="packages/pkg-a",
             runners=[["macos-latest"]],
         )
@@ -834,6 +835,7 @@ class TestRunnerAwareBuild:
 
         cmd = BuildCommand(
             label="Build pkg-a",
+            package_name="pkg-a",
             package_path="packages/pkg-a",
             runners=[["ubuntu-latest"], ["macos-latest"]],
         )
@@ -854,6 +856,7 @@ class TestRunnerAwareBuild:
 
         cmd = BuildCommand(
             label="Build pkg-a",
+            package_name="pkg-a",
             package_path="packages/pkg-a",
             runners=[["macos-latest"]],
         )
@@ -874,6 +877,7 @@ class TestRunnerAwareBuild:
 
         cmd = BuildCommand(
             label="Build pkg-a",
+            package_name="pkg-a",
             package_path="packages/pkg-a",
             runners=[],
         )
@@ -925,6 +929,7 @@ class TestRunnerAwareBuild:
 
         cmd = BuildCommand(
             label="Build pkg-b",
+            package_name="pkg-b",
             package_path="packages/pkg-b",
             out_dir="dist",
             runners=[["ubuntu-latest"], ["macos-latest"]],
@@ -939,6 +944,7 @@ class TestRunnerAwareBuild:
 
         cmd = BuildCommand(
             label="Build pkg-b",
+            package_name="pkg-b",
             package_path="packages/pkg-b",
             out_dir="dist",
             runners=[["ubuntu-latest"], ["macos-latest"]],

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from diny import inject, resolve
 
@@ -208,10 +207,7 @@ def _print_job_detail(job: Job, plan: Plan) -> None:
         # SyncLockfile, Commit, CreateTag, Push) are plumbing and don't
         # carry a version worth surfacing.
         bumps = [c for c in job.commands if isinstance(c, SetVersionCommand)]
-        # SetVersionCommand stores the package directory path; the basename
-        # is the package name under the canonical `packages/<name>` layout
-        # this codebase uses (matches SetVersionCommand.execute() itself).
-        rows = [(Path(b.package_path).name, b.version) for b in bumps]
+        rows = [(b.package_name, b.version) for b in bumps]
         name_width = max((len(n) for n, _ in rows), default=0)
         for name, next_v in rows:
             ui.console.print(

@@ -80,6 +80,7 @@ def provide_build_job(
             commands.append(
                 BuildCommand(
                     label=f"Build {item.name}",
+                    package_name=item.name,
                     package_path=item.package.path,
                     out_dir=item.out_dir,
                     runners=effective_runners.get(item.name, []),

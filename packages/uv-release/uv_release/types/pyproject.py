@@ -99,6 +99,17 @@ class ToolTable(Frozen, extra="allow"):
 
 
 class RootPyProject(Frozen, extra="allow"):
-    """The root pyproject.toml structure."""
+    """The root pyproject.toml structure.
 
+    The root may itself be a package (single-package layout: it carries
+    [project] and [build-system] tables and no [tool.uv.workspace]) or
+    only a workspace root (multi-package layout: it carries
+    [tool.uv.workspace] and no [project]). A root that is both is
+    rejected during workspace discovery.
+    """
+
+    project: ProjectTable = Field(default_factory=ProjectTable)
+    build_system: BuildSystemTable = Field(
+        default_factory=BuildSystemTable, alias="build-system"
+    )
     tool: ToolTable = Field(default_factory=ToolTable)

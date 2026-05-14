@@ -210,6 +210,56 @@ def released_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture()
+def single_package_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A single-package layout: root pyproject IS the only package.
+
+    The root has [project] + [build-system] and no [tool.uv.workspace],
+    which is the plain single-package shape that uv natively supports
+    without a workspace block.
+
+    pkg-a  0.1.0.dev0  (no deps, untagged)
+    """
+    root = tmp_path
+
+    (root / "pyproject.toml").write_text(
+        tomlkit.dumps(
+            {
+                "project": {
+                    "name": "pkg-a",
+                    "version": "0.1.0.dev0",
+                    "dependencies": [],
+                },
+                "build-system": {
+                    "requires": ["hatchling"],
+                    "build-backend": "hatchling.build",
+                },
+                "tool": {
+                    "uvr": {
+                        # No `latest` set on purpose: in single-package mode
+                        # uvr defaults it to the only package automatically.
+                        "config": {"python_version": "3.12"},
+                    },
+                },
+            }
+        )
+    )
+    mod = root / "pkg_a"
+    mod.mkdir(exist_ok=True)
+    (mod / "__init__.py").write_text("")
+    _add_workflow(root)
+
+    git(root, "init")
+    git(root, "config", "user.name", "test")
+    git(root, "config", "user.email", "test@test")
+    subprocess.run(["uv", "lock"], cwd=root, check=True, capture_output=True)
+    git(root, "add", ".")
+    git(root, "commit", "-m", "init")
+
+    monkeypatch.chdir(root)
+    return root
+
+
+@pytest.fixture()
 def build_requires_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Four-package workspace where pkg-c has a workspace build-system dep.
 

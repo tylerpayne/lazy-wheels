@@ -18,6 +18,7 @@ class BuildCommand(Command):
     """Build a package with uv build."""
 
     type: Literal["build"] = "build"
+    package_name: str
     package_path: str
     out_dir: str = "dist"
     # All runners this package needs to build on (own + inherited from dependents).
@@ -37,7 +38,9 @@ class BuildCommand(Command):
         # output to deps/ instead of dist/.
         out_dir = self._effective_out_dir()
         # Skip if a wheel for this package already exists in the output dir.
-        dist_name = Path(self.package_path).name.replace("-", "_")
+        # Wheel filenames use the canonical distribution name (dashes
+        # normalized to underscores), which the package name carries.
+        dist_name = self.package_name.replace("-", "_")
         existing = list(Path(out_dir).glob(f"{dist_name}-*.whl"))
         if existing:
             if self.label:

@@ -22,6 +22,7 @@
 * [0016 - Inject State Dependencies Into Intents](0016-inject-state-dependencies-into-intents.md)
 * [0017 - Unify Version Management Under Single Command](0017-unify-version-management-under-single-command.md)
 * [0018 - Replace Cascade Detection With Conditional Pin Updates](0018-replace-cascade-detection-with-conditional-pin-updates.md)
+* [0019 - Support Single-Package Workspaces](0019-support-single-package-workspaces.md)
 
 ## Rejected Records
 

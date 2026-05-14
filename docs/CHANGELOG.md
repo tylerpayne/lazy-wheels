@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Single-package workspace layout. A root `pyproject.toml` carrying `[project]` and `[build-system]` with no `[tool.uv.workspace]` is now discovered as a one-package workspace, with the root itself as the package at path `.`. Users releasing a single library no longer need to scaffold a `packages/<name>/` subdirectory. A root that combines `[project]` and `[tool.uv.workspace]` is rejected with an error because the discovery semantics are ambiguous. See ADR-0019.
+- `[tool.uvr.config].latest` defaults to the sole package's name in single-package workspaces. The marker has no meaning when only one package can be selected, so requiring users to write it would be busywork.
+
+### Changed
+- `SetVersionCommand` and `BuildCommand` carry the package name as an explicit `package_name` field instead of deriving it from the directory portion of `package_path`. Path-derived names returned an empty string for the new single-package layout where `package_path == "."`.
+
+## [uv-release v0.38.0] - 2026-05-14
+
 ### Changed
 - `uvr status` and `uvr release` no longer mark a package as changed because one of its workspace dependencies changed. Change detection is purely file-based: a package is dirty when its own files have moved since its baseline tag, or when it has no baseline. To coordinate a cross-package release, run `uvr version --bump <axis> --packages <pkg>` first. The bump now rewrites the pins on every workspace dependent whose existing specifier rejects the new version's stripped-dev form, so the bump commit produces file changes in the dependents and the next `uvr release` picks them up in the same cycle. Patch-level bumps that stay within an existing pin range no longer cascade. See ADR-0018.
 - `compute_dependency_pins` emits a pin only when the dependent's current `Dependency` specifier does not already accept the new release form. The lower bound uses the stripped-dev form (`compute_release_version`), so `uvr version --bump minor` on `0.1.0.dev0` writes pins referencing `0.2.0` rather than `0.2.0.dev0`. The previous unconditional rewrite tightened every dependent's lower bound on every bump, including patches.

@@ -14,6 +14,7 @@ class SetVersionCommand(Command):
     """Set a package's version in its pyproject.toml."""
 
     type: Literal["set_version"] = "set_version"
+    package_name: str
     package_path: str
     version: str
 
@@ -24,10 +25,11 @@ class SetVersionCommand(Command):
         doc = tomlkit.loads(path.read_text())
         old = str(doc["project"]["version"])  # type: ignore[index]
         # Print our own diff line in the design grammar: package + versions
-        # in cyan (refs the system tracks), arrow in dim (chrome).
-        package_name = path.parent.name
+        # in cyan (refs the system tracks), arrow in dim (chrome). The
+        # package name is passed in rather than derived from the path,
+        # because path="." (single-package layout) has no basename.
         console.print(
-            f"  Updated [uvr.value]{package_name}[/] "
+            f"  Updated [uvr.value]{self.package_name}[/] "
             f"[uvr.value]v{old}[/] [uvr.dim]->[/] [uvr.value]v{self.version}[/]"
         )
         doc["project"]["version"] = self.version  # type: ignore[index]
