@@ -508,6 +508,77 @@ class TestStripDev:
         out = capsys.readouterr().out
         assert "Pipeline" in out
 
+    def test_strip_dev_forwards_packages_filter(
+        self,
+        workspace: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`uvr release --packages X` must pin the strip-dev fix to X.
+
+        Without forwarding, the suggested `uvr version --bump release` would
+        operate over every changed package, not just the one the user
+        actually selected.
+        """
+        # Decline the "Apply fix?" prompt so the test does not actually run
+        # uvr version. We only care about what the rendered Fix block shows.
+        import uv_release.ui as _ui
+
+        monkeypatch.setattr(_ui, "confirm", lambda *a, **k: False)
+        with pytest.raises(SystemExit):
+            with diny.provide():
+                run_cli(
+                    "release",
+                    "--where",
+                    "local",
+                    "--packages",
+                    "pkg-a",
+                )
+        err = capsys.readouterr().err
+        assert "uvr version --bump release" in err
+        assert "--packages pkg-a" in err
+
+    def test_strip_dev_forwards_not_packages_filter(
+        self,
+        workspace: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import uv_release.ui as _ui
+
+        monkeypatch.setattr(_ui, "confirm", lambda *a, **k: False)
+        with pytest.raises(SystemExit):
+            with diny.provide():
+                run_cli(
+                    "release",
+                    "--where",
+                    "local",
+                    "--not-packages",
+                    "pkg-b",
+                )
+        err = capsys.readouterr().err
+        assert "--not-packages pkg-b" in err
+
+    def test_strip_dev_forwards_all_packages_flag(
+        self,
+        workspace: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import uv_release.ui as _ui
+
+        monkeypatch.setattr(_ui, "confirm", lambda *a, **k: False)
+        with pytest.raises(SystemExit):
+            with diny.provide():
+                run_cli(
+                    "release",
+                    "--where",
+                    "local",
+                    "--all-packages",
+                )
+        err = capsys.readouterr().err
+        assert "--all-packages" in err
+
 
 class TestLocalRelease:
     """Test --where local executes commands directly (no CI dispatch)."""

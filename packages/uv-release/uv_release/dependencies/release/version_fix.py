@@ -26,6 +26,7 @@ from ...commands import ShellCommand
 from ...types.job import Job
 from ..build.build_packages import BuildPackages
 from ..params.dev_release import DevRelease
+from ..params.package_selection import PackageSelection
 from ..params.release_target import ReleaseTarget
 from ...utils.versioning import compute_release_version
 
@@ -47,6 +48,7 @@ def provide_strip_dev(
     build_packages: BuildPackages,
     dev_release: DevRelease,
     release_target: ReleaseTarget,
+    package_selection: PackageSelection,
 ) -> StripDev:
     if dev_release.value:
         return StripDev()
@@ -68,6 +70,15 @@ def provide_strip_dev(
     args = ["uvr", "version", "--bump", "release"]
     if release_target.value != "ci":
         args.append("--no-push")
+    # Forward the same package filter the release was invoked with. Without
+    # this, `uvr release --packages X` would strip dev on every changed
+    # package instead of only X, defeating the user's selection.
+    if package_selection.all_packages:
+        args.append("--all-packages")
+    if package_selection.packages:
+        args.extend(["--packages", *sorted(package_selection.packages)])
+    if package_selection.exclude_packages:
+        args.extend(["--not-packages", *sorted(package_selection.exclude_packages)])
 
     cmd = ShellCommand(label="Strip dev versions", args=args)
     return StripDev(job=Job(name="strip-dev", commands=[cmd]))

@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- `uvr release --packages X` now forwards the package filter to the strip-dev fixup. Previously the suggested `uvr version --bump release` ran over every changed package, so accepting the fix on a filtered release stripped dev versions on packages the user had not selected. `--not-packages` and `--all-packages` are forwarded the same way.
+
 ## [uv-release v0.37.2] - 2026-05-13
 
 ### Fixed
