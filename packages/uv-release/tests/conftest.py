@@ -34,12 +34,12 @@ def run_cli(*argv: str) -> None:
     cli()
 
 
-def get_plan_json(*argv: str) -> dict:
+def get_plan_json(*argv: str, where: str = "local") -> dict:
     """Run release --json and return the parsed plan."""
     import sys
     from io import StringIO
 
-    sys.argv = ["uvr", "release", "--json", "--where", "local", *argv]
+    sys.argv = ["uvr", "release", "--json", "--where", where, *argv]
     old_stdout = sys.stdout
     sys.stdout = buf = StringIO()
     try:

@@ -46,6 +46,11 @@ def provide_publish_job(
         for name in publish_packages.items:
             version = release_versions.items[name]
             tag_name = Tag.release_tag_name(name, version)
+            # Publish uploads every platform's wheel to the index, so disable
+            # the host-compatibility filter that DownloadWheelsCommand applies
+            # by default. Without this the publish runner keeps only its own
+            # tag (e.g. manylinux_2_17_x86_64) and PyPI ends up with a single
+            # platform's wheel.
             commands.append(
                 DownloadWheelsCommand(
                     label=f"Download {name} wheels",
@@ -53,6 +58,7 @@ def provide_publish_job(
                     pattern="*.whl",
                     output_dir="dist",
                     repo=github_repo.name,
+                    all_platforms=True,
                 )
             )
 
