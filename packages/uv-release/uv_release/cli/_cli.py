@@ -181,6 +181,24 @@ def parse_args() -> ParsedArgs:
         nargs="*",
         help="Limit the build to these packages.",
     )
+    build_p.add_argument(
+        "--and-build-system-requirements",
+        action="store_true",
+        help=(
+            "Also build workspace packages listed in [build-system].requires "
+            "of the selected packages, instead of downloading their released "
+            "wheels."
+        ),
+    )
+    build_p.add_argument(
+        "--and-dependencies",
+        action="store_true",
+        help=(
+            "Also build workspace packages listed in [project.dependencies] "
+            "of the selected packages, instead of downloading their released "
+            "wheels."
+        ),
+    )
 
     # -- version --
     ver_p = sub.add_parser("version", help="Read, set, or bump package versions.")
@@ -553,6 +571,10 @@ def provide_package_selection(args: ParsedArgs) -> PackageSelection:
         all_packages=args.values.get("all_packages", False) or force,
         packages=frozenset(pkgs),
         exclude_packages=frozenset(not_pkgs),
+        and_build_system_requirements=args.values.get(
+            "and_build_system_requirements", False
+        ),
+        and_dependencies=args.values.get("and_dependencies", False),
     )
 
 

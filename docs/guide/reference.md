@@ -37,12 +37,15 @@ Build changed packages locally.
 
 ```
 uvr build [--all-packages] [--packages PKG [...]]
+          [--and-build-system-requirements] [--and-dependencies]
 ```
 
 | Flag | Description |
 |---|---|
 | `--all-packages` | Build all workspace packages. |
 | `--packages PKG [...]` | Build specific packages. |
+| `--and-build-system-requirements` | Also build workspace packages from `[build-system].requires` of the selection, instead of downloading their released wheels. |
+| `--and-dependencies` | Also build workspace packages from `[project.dependencies]` of the selection, instead of downloading their released wheels. |
 
 ## `uvr version`
 

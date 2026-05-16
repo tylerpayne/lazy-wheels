@@ -42,6 +42,32 @@ def provide_build_packages(
             if name in workspace_packages.items
         }
 
+    # --and-build-system-requirements / --and-dependencies: pull workspace
+    # packages reachable through the selected axes into the target set so
+    # they're built from source into dist/ rather than downloaded as released
+    # wheels. Walk transitively along whichever axes are enabled. Done before
+    # exclusion so explicit excludes still take precedence.
+    if (
+        package_selection.and_build_system_requirements
+        or package_selection.and_dependencies
+    ):
+        queue = list(items.keys())
+        while queue:
+            name = queue.pop(0)
+            pkg = workspace_packages.items.get(name)
+            if pkg is None:
+                continue
+            edges: list[str] = []
+            if package_selection.and_build_system_requirements:
+                edges += pkg.build_dep_names
+            if package_selection.and_dependencies:
+                edges += pkg.dep_names
+            for dep_name in edges:
+                if dep_name in items or dep_name not in workspace_packages.items:
+                    continue
+                items[dep_name] = workspace_packages.items[dep_name]
+                queue.append(dep_name)
+
     # Apply CLI exclusions, then config include/exclude filters.
     if package_selection.exclude_packages:
         items = {
